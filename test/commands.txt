@@ -1,0 +1,3 @@
+./../script/generate_epervier_keypairs.sh ##Generate 10 keypairs in test_keys
+./../script/sign_epervier_message.sh 1 "Message here"  ## Sign message with key 1
+../script/verify_epervier_onchain.sh 1 "Message here"

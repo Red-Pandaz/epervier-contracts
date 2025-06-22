@@ -1,0 +1,12 @@
+{
+  "message": "Hello, ZKNOX Epervier! \ud83e\udd85",
+  "message_hex": "48656c6c6f2c205a4b4e4f582045706572766965722120f09fa685",
+  "recovered_address": "0x000000000000000000000000989a47dd5ceb8e8b",
+  "contract_address": "0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B",
+  "rpc_url": "https://sepolia.optimism.io",
+  "files": {
+    "public_key": "public_key.pem",
+    "private_key": "private_key.pem",
+    "signature": "sig"
+  }
+}
