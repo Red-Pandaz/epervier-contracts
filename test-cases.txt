@@ -1,0 +1,587 @@
+Here’s a comprehensive list of test cases for the submitRegistrationIntent function, organized by category and including both positive and negative paths. This will help you ensure full coverage of the function’s logic and edge cases.
+
+✅ Positive Test Cases (Should Succeed)
+1. Successful Registration Intent Submission
+Valid intentMessage signed by Epervier.
+
+Valid Epervier signature components: salt, cs1, cs2, hint.
+
+Correct publicKey and its hash is not already registered.
+
+ethSignature from correct address.
+
+ethNonce matches ethNonces[ethAddress].
+
+❌ Negative Test Cases (Should Revert or Fail)
+A. Epervier Signature Issues
+epervierVerifier.recover(...) returns address(0):
+
+Revert with "Invalid Epervier signature".
+
+Malformed Epervier signature (e.g., invalid salt length or cs1/cs2 not 32 elements):
+
+If verifier has internal checks, revert in external call.
+
+May return zero address instead.
+
+B. Intent Message Parsing Issues
+parseIntentAddress(intentMessage) returns address(0):
+
+Revert with "Invalid intent address".
+
+Mismatch between caller (msg.sender) and parsed address:
+
+If you want to enforce sender match in future, this would be an added test case.
+
+C. ETH Signature Verification
+ethSignature length != 65:
+
+Revert with "Invalid signature length".
+
+ethNonce mismatch:
+
+Revert with "Invalid ETH nonce".
+
+Invalid signature (i.e., signer != parsed ETH address):
+
+Recover a signer that is not equal to the parsed address.
+
+Revert silently or fail downstream checks.
+
+D. Epervier Key Already Registered
+epervierKeyToAddress[publicKeyHash] != address(0):
+
+Revert with "Epervier key already registered".
+
+E. Parameter Validation (Optional Defensive Tests)
+publicKey[0] == 0 or publicKey[1] == 0:
+
+Not required, but you may want to reject zero public keys.
+
+cs1.length != 32 or cs2.length != 32:
+
+Fail inside epervierVerifier.
+
+salt.length != 40 (optional check):
+
+Could fail inside verifier or upstream if you validate this.
+
+🧪 State/Effect Validation
+After a successful submission:
+
+pendingIntents[ethAddress] should contain the Intent struct.
+
+ethNonces[ethAddress] should increment by 1.
+
+RegistrationIntentSubmitted should emit with correct args.
+
+Ensure other addresses are not affected.
+
+🔍 Debug Logs (Optional Checks in Unit Tests)
+If you're testing logs:
+
+Check that all DebugParseStep and DebugParsedIntentAddress events are emitted with expected values.
+
+⚠️ Edge Case Suggestions
+Try submitting multiple intents from the same address (new public key): confirm overwrite or replacement is handled correctly.
+
+Try submitting a second intent with the same Epervier key from a different ETH address: should fail.
+
+🧰 Recommended Testing Tools
+Hardhat or Foundry for testing Solidity.
+
+Use ethers.utils.signMessage(...) for ECDSA signing.
+
+Use mock/fake epervierVerifier.recover(...) returning preset address or MockVerifier contract.
+
+
+
+Here’s a comprehensive list of test cases for the confirmRegistration function, covering all expected success paths, failure conditions, and edge cases.
+
+✅ Positive Test Case (Should Succeed)
+1. Successful Registration Confirmation
+A valid pendingIntents[ecdsaAddress] exists.
+
+confirmationMessage is correctly signed with ECDSA.
+
+Epervier signature components (salt, cs1, cs2, hint) result in a non-zero recovered address.
+
+The publicKey matches the one in the original intent.
+
+The current pqKeyNonces[publicKeyHash] matches pqNonce.
+
+Expect:
+
+epervierKeyToAddress[publicKeyHash] = ecdsaAddress
+
+addressToEpervierKey[ecdsaAddress] = publicKeyHash
+
+pendingIntents[ecdsaAddress] deleted
+
+pqKeyNonces[publicKeyHash] incremented
+
+RegistrationCompleted event emitted
+
+❌ Negative Test Cases (Should Revert or Fail)
+A. Invalid Epervier Signature
+epervierVerifier.recover(...) returns address(0)
+
+Should revert with: "Invalid Epervier signature"
+
+Epervier signature inputs are malformed (e.g., cs1.length != 32 or invalid salt)
+
+Reverts internally during recover or returns address(0)
+
+B. ECDSA Signature Issues
+ecdsaSignature is not a valid ECDSA signature of confirmationMessage
+
+Fails in ECDSA.recover, reverts or returns wrong address → causes:
+
+No pendingIntents[ecdsaAddress] → "No pending intent"
+
+or fails silent assertion (see below)
+
+C. Missing or Incorrect Pending Intent
+pendingIntents[ecdsaAddress] does not exist (i.e., timestamp == 0)
+
+Should revert with: "No pending intent"
+
+The ecdsaAddress is valid but no intent exists for that address
+
+Revert as above
+
+D. Nonce Issues
+pqNonce doesn’t match pqKeyNonces[publicKeyHash]
+
+Should revert with: "Invalid PQ nonce"
+
+E. Logic Errors / Typos
+🔥 Bug Detected:
+
+solidity
+Copy
+Edit
+require(ecdsaAddress == ecdsaAddress, "ECDSA signer must match intent address");
+This is always true — likely a copy-paste error.
+
+Fix it to:
+
+solidity
+Copy
+Edit
+require(ecdsaAddress == intentAddress, "ECDSA signer must match intent address");
+Or more precisely:
+
+solidity
+Copy
+Edit
+require(ecdsaAddress == msg.sender, "ECDSA signer must match intent address");
+Depending on trust model (likely the first).
+
+✅ Add test to catch this bug — e.g., spoof a signature from an attacker address and ensure it’s not accepted.
+
+🔍 Post-Condition Validations (State/Storage)
+Check:
+
+pendingIntents[ecdsaAddress] is deleted
+
+pqKeyNonces[publicKeyHash] is incremented by 1
+
+Mappings:
+
+addressToEpervierKey[ecdsaAddress] == publicKeyHash
+
+epervierKeyToAddress[publicKeyHash] == ecdsaAddress
+
+🧪 Other Edge Cases
+A. Replay Attack Attempt
+Replay the same valid call after confirmation:
+
+pendingIntents[ecdsaAddress] is gone → revert with "No pending intent"
+
+B. Re-registration of Same PQ Key to Another Address
+Different ETH address tries to register same publicKey:
+
+Not rejected here explicitly, but registry will overwrite epervierKeyToAddress[publicKeyHash].
+
+Add guard if needed:
+
+solidity
+Copy
+Edit
+require(epervierKeyToAddress[publicKeyHash] == address(0), "Already registered");
+🧰 Test Strategy Suggestions
+Use mock verifier for epervierVerifier.recover() to control the return address.
+
+Use ethers.utils.signMessage(...) or signTypedData(...) to simulate ECDSA messages.
+
+Hardcode correct intent setup in the test before calling confirmRegistration.
+
+
+Here is a comprehensive list of test cases for the parseIntentAddress function. This function attempts to extract an Ethereum address from a message that includes a hex-formatted address (e.g., "Register Epervier Key0xABC123...789").
+
+✅ Positive Test Cases (Should Return Correct Address)
+1. Standard Format with Lowercase Address
+Input: bytes("Register Epervier Key0xabcdefabcdefabcdefabcdefabcdefabcdefabcd123")
+
+Expect: Correctly parsed address 0xabcdefabcdefabcdefabcdefabcdefabcdefabcd
+
+2. Uppercase Address
+Input: bytes("Register Epervier Key0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD")
+
+Expect: Address parsed and returned correctly.
+
+3. Mixed Case Address
+Input: bytes("Register Epervier Key0xAbCdEfABcdEFAbcDefaBCDEFAbCdEfABcdEFAB12")
+
+Expect: Successfully parsed mixed-case address.
+
+4. Address Embedded in Middle of Message
+Input: bytes("Some preamble text 0x1234567890abcdef1234567890abcdef12345678 and a suffix")
+
+Expect: Address parsed from middle.
+
+5. Multiple 0x patterns — should parse the first
+Input: bytes("0x1234567890abcdef1234567890abcdef12345678 blah blah 0x9999999999999999999999999999999999999999")
+
+Expect: The first valid address is parsed.
+
+❌ Negative Test Cases (Should Return Zero Address)
+6. Message Too Short (< 42 bytes)
+Input: bytes("0x123")
+
+Expect: address(0) returned.
+
+7. No 0x Prefix Found
+Input: bytes("No Ethereum address here.")
+
+Expect: address(0) returned.
+
+8. Invalid Characters in Address Segment
+Input: bytes("Register Epervier Key0xZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ")
+
+Expect: Address is parsed with invalid hex ignored (likely not what user expected).
+
+NOTE: This is a parsing flaw in current code. It skips invalid characters instead of rejecting them.
+
+9. Multiple 0x Prefixes but None Followed by 40 Hex Characters
+Input: bytes("Blah 0x12g! 0xzabc")
+
+Expect: address(0) (nothing valid).
+
+10. Address at End of Message
+Input: bytes("SomethingSomething0x1234567890123456789012345678901234567890")
+
+Expect: Parsed address, unless it’s truncated or not followed by full 40 hex digits.
+
+11. Nonstandard Placement of 0x
+Input: bytes("0x1234567890123456789012345678901234567890_extra_stuff")
+
+Expect: Address parsed up to 42 characters. If _extra_stuff is beyond 42 chars, it’s fine. Otherwise, must ensure the extracted segment is 42 bytes.
+
+🧪 Post-Parsing Validations
+For each test, you should:
+
+Confirm returned address matches the expected address (address(uint160(uint256(keccak256(...)))))
+
+Listen for the DebugParseStep and DebugParsedIntentAddress logs for debugging (optional in tests)
+
+🧰 Suggested Enhancements
+To avoid silently skipping invalid hex characters:
+
+solidity
+Copy
+Edit
+bool valid = true;
+// inside hex loop:
+else {
+    valid = false;
+    break; // instead of continue
+}
+if (!valid) continue;
+Or better, return address(0) if the segment isn’t a valid hex address.
+
+Here is a comprehensive test case list for the registerEpervierKey function. This function performs both Epervier signature verification and ECDSA signature verification on a combined message, ensuring the public key is properly bound to an Ethereum address.
+
+✅ Positive Test Cases (Should Succeed)
+1. Successful Registration
+Message is correctly formatted:
+abi.encodePacked(DOMAIN_SEPARATOR, "Register Epervier Key", pqNonce, publicKey[0], publicKey[1], recoveredAddress)
+followed by a valid 65-byte ECDSA signature from recoveredAddress.
+
+epervierVerifier.recover(...) returns the same address as ECDSA.recover(...).
+
+Neither the address nor the public key is already registered.
+
+pqKeyNonces[publicKeyHash] == pqNonce.
+
+❌ Negative Test Cases (Should Revert)
+A. Epervier Signature Issues
+epervierVerifier.recover(...) == address(0)
+🔁 Reverts with: "Invalid Epervier signature"
+
+Invalid signature format (bad cs1, cs2, salt, or hint)
+🔁 Reverts inside verifier or returns zero address.
+
+B. Malformed or Too Short Message
+message.length < (32 + 32 + 32 + 65)
+🔁 Reverts with: "Message too short"
+
+C. ECDSA Signature Verification Fails
+Recovered address from ECDSA ≠ epervierVerifier.recover(...)
+🔁 Reverts with: "ECDSA signature must be from same address"
+
+Invalid ECDSA signature (wrong signer, random bytes, etc.)
+🔁 Fails to recover expected signer, causes same revert.
+
+ECDSA signature with incorrect message body (e.g. wrong nonce or mismatched data)
+🔁 Causes hash mismatch and failed ECDSA.recover.
+
+D. Nonce Mismatch or Message Integrity Failure
+keccak256(baseMessage) != keccak256(expectedBaseMessage)
+🔁 Reverts with: "Message must include correct nonce and public key"
+
+E. Key or Address Already Registered
+addressToEpervierKey[recoveredAddress] != bytes32(0)
+🔁 Reverts with: "Address already has registered Epervier key"
+
+epervierKeyToAddress[publicKeyHash] != address(0)
+🔁 Reverts with: "Epervier key already registered"
+
+F. Corrupted or Modified Base Message
+Message structure is valid length but uses a different DOMAIN_SEPARATOR, label, or nonce
+🔁 Reverts due to hash mismatch in the expectedBaseMessage comparison
+
+publicKey in message doesn’t match publicKey parameter
+🔁 Causes hash mismatch with expectedBaseMessage
+
+🔍 Post-State Assertions (After Successful Call)
+pqKeyNonces[publicKeyHash] incremented by 1.
+
+addressToEpervierKey[recoveredAddress] == publicKeyHash.
+
+epervierKeyToAddress[publicKeyHash] == recoveredAddress.
+
+EpervierKeyRegistered event emitted.
+
+🧪 Optional/Edge Cases
+12. Attempt Replay with Same Message
+Reuse the same message and signature after successful registration.
+
+🔁 Fails with one of:
+
+"Address already has registered Epervier key"
+
+"Epervier key already registered"
+
+13. Register Same Key to Different Address
+Try to bind the same publicKey to a new address.
+
+🔁 Fails with: "Epervier key already registered"
+
+🧰 Tips for Writing Tests
+Use a mock epervierVerifier contract that returns a known address when recover is called.
+
+Construct the message using Solidity-like ABI encoding:
+
+js
+Copy
+Edit
+ethers.utils.solidityPack(
+  ['bytes32', 'string', 'uint256', 'uint256', 'uint256', 'address'],
+  [DOMAIN_SEPARATOR, "Register Epervier Key", pqNonce, pk0, pk1, recoveredAddr]
+)
+Sign the hash of that message using wallet.signMessage(...) and append the signature to get the final message.
+
+Here’s a comprehensive test case matrix for the two new functions:
+
+🔁 changeEpervierKey
+✅ Positive Test Case
+Successful Key Change
+
+Old and new Epervier signatures are valid and recover the same address.
+
+Old key is currently registered to the recovered address.
+
+New key is unregistered.
+
+Nonce matches pqKeyNonces[oldPublicKeyHash].
+
+ECDSA signature signs:
+abi.encodePacked(DOMAIN_SEPARATOR, "Change Epervier Key", pqNonce, newPk[0], newPk[1], addr)
+
+✔️ Mappings are updated. Nonces incremented. Old key removed. EpervierKeyChanged event emitted.
+
+❌ Negative Test Cases
+A. Signature Failures
+epervierVerifier.recover(oldMessage, ...) == address(0)
+→ "Invalid old Epervier signature"
+
+epervierVerifier.recover(newMessage, ...) != recoveredAddress
+→ "New signature must recover same address"
+
+Malformed newMessage (too short to extract signature)
+→ "Message too short"
+
+ECDSA signer ≠ recovered address
+→ "ECDSA signature must be from same address"
+
+B. Mapping & State Failures
+addressToEpervierKey[recoveredAddress] == bytes32(0)
+→ "Address has no registered Epervier key"
+
+epervierKeyToAddress[newPublicKeyHash] != address(0)
+→ "New Epervier key already registered"
+
+Nonce mismatch:
+
+expectedNonce = pqKeyNonces[oldPublicKeyHash]
+
+Mismatch with newMessage encoding
+→ "Message must include correct nonce and public key"
+
+C. Replay or Redundant Call
+Call again with the same newPublicKey
+→ "New Epervier key already registered"
+
+Use same oldPublicKey and try to "change" to itself
+→ Technically allowed unless explicitly blocked, but no real state change
+
+Consider adding require(newPublicKeyHash != oldPublicKeyHash) to block this.
+
+🔄 deleteEpervierKey
+✅ Positive Test Case
+Successful Deletion
+
+Epervier signature valid.
+
+ECDSA signer matches recovered address.
+
+Address has a registered key.
+
+Nonce matches pqKeyNonces[publicKeyHash].
+
+Message signs:
+abi.encodePacked(DOMAIN_SEPARATOR, "Delete Epervier Key", pqNonce, addr)
+
+✔️ Mappings cleared. Nonce incremented. EpervierKeyDeleted event emitted.
+
+❌ Negative Test Cases
+A. Signature Failures
+epervierVerifier.recover(...) == address(0)
+→ "Invalid Epervier signature"
+
+Message too short (< 97 bytes)
+→ "Message too short"
+
+ECDSA signer ≠ recovered address
+→ "ECDSA signature must be from same address"
+
+B. Mapping & State Failures
+addressToEpervierKey[recoveredAddress] == bytes32(0)
+→ "Address has no registered Epervier key"
+
+Nonce mismatch between message and pqKeyNonces[publicKeyHash]
+→ "Message must include correct nonce"
+
+C. Replay or Duplicate Call
+Call again after successful deletion
+→ "Address has no registered Epervier key"
+
+🧪 Post-State Assertions (Success Cases)
+changeEpervierKey:
+Old key is removed from epervierKeyToAddress.
+
+New key is mapped to recoveredAddress.
+
+addressToEpervierKey[recoveredAddress] == newKeyHash
+
+pqKeyNonces[oldKey]++, pqKeyNonces[newKey]++
+
+deleteEpervierKey:
+Both epervierKeyToAddress[publicKeyHash] and addressToEpervierKey[recoveredAddress] are cleared.
+
+pqKeyNonces[publicKeyHash]++
+
+🔍 Optional/Edge Suggestions
+Add optional checks to prevent key change to same key.
+
+Add timestamps or delay windows to protect against accidental deletion or race conditions.
+
+Allow admins or recovery processes to re-register deleted keys? Could be useful to test in governance contexts.
+
+Here is a comprehensive list of test cases for the final two functions:
+
+🔐 disablePQSecurity
+✅ Positive Test Case
+Successfully disable PQ security
+
+Epervier signature is valid and recovers a real address.
+
+ECDSA signature matches the same address.
+
+addressToEpervierKey[addr] != 0x0.
+
+baseMessage == abi.encodePacked(DOMAIN_SEPARATOR, "Disable PQ Security", pqNonce).
+
+Result:
+
+addressToEpervierKey[addr] == DISABLED_PQ_KEY
+
+pqKeyNonces[originalKeyHash]++
+
+PQSecurityDisabled event emitted.
+
+❌ Negative Test Cases
+A. Signature Failures
+epervierVerifier.recover(...) == address(0)
+→ "Invalid Epervier signature"
+
+Message too short (< 97 bytes)
+→ "Message too short"
+
+ECDSA signer ≠ recovered address
+→ "ECDSA signature must be from same address"
+
+B. State / Nonce Errors
+addressToEpervierKey[recoveredAddress] == 0x0
+→ "Address has no registered Epervier key"
+
+Nonce mismatch in message:
+
+Incorrect pqNonce included in message.
+
+Message is malformed.
+→ "Message must include correct nonce"
+
+C. Redundant or Duplicate Calls
+Address already set to DISABLED_PQ_KEY, calling again
+→ Still passes if DISABLED_PQ_KEY != 0x0, but state doesn’t change
+🔁 Optional: Add an explicit guard to prevent disabling already-disabled accounts
+
+🧪 Post-State Checks (Success)
+pqKeyNonces[oldKey] incremented by 1.
+
+addressToEpervierKey[addr] == DISABLED_PQ_KEY.
+
+Event emitted with correct address.
+
+🧹 removeIntent
+✅ Positive Test Case
+Successfully remove intent
+
+pendingIntents[msg.sender] exists (timestamp > 0)
+
+Emits IntentRemoved(msg.sender)
+
+Cleans pendingIntents[msg.sender]
+
+❌ Negative Test Case
+No intent exists
+→ Reverts with: "No pending intent to remove"
+
+🧠 Edge/Optional Additions
+You may consider blocking disablePQSecurity if already in DISABLED_PQ_KEY state to save gas.
+
+Consider a function to re-enable PQ (you might already have one elsewhere) — helpful in flow testing.
+

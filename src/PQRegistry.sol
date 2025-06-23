@@ -27,25 +27,51 @@ contract PQRegistry {
     // Nonces for PQ keys (existing)
     mapping(bytes32 => uint256) public pqKeyNonces;
     
-    // Pending intents for two-step registration
+    // Pending intents for two-step registration - ETH address controls their intent
     struct Intent {
+        bytes32 pqFingerprint;
         uint256[2] publicKey;
         bytes intentMessage;
         uint256 timestamp;
-        uint256 nonce;
+        uint256 ethNonce;
     }
     mapping(address => Intent) public pendingIntents;
+    
+    // Pending change ETH address intents - PQ key controls their intent
+    struct ChangeETHAddressIntent {
+        address newETHAddress;
+        bytes pqMessage;
+        uint256 timestamp;
+        uint256 pqNonce;
+    }
+    mapping(bytes32 => ChangeETHAddressIntent) public changeETHAddressIntents;
     
     // Special constant for disabled PQ security
     bytes32 constant public DISABLED_PQ_KEY = bytes32(uint256(1));
     
-    event EpervierKeyRegistered(address indexed owner, bytes32 indexed publicKeyHash);
-    event EpervierKeyChanged(address indexed owner, bytes32 indexed oldPublicKeyHash, bytes32 indexed newPublicKeyHash);
+    struct UnregistrationIntent {
+        uint256[2] publicKey;
+        bytes32 publicKeyHash;
+        bytes pqMessage;
+        uint256 timestamp;
+        uint256 ethNonce;
+    }
+    
+    mapping(address => UnregistrationIntent) public unregistrationIntents;
+    
     event EpervierKeyDeleted(address indexed owner, bytes32 indexed publicKeyHash);
     event PQSecurityDisabled(address indexed owner);
     event PQSecurityEnabled(address indexed owner, bytes32 indexed publicKeyHash);
-    event RegistrationIntentSubmitted(address indexed owner, bytes32 indexed publicKeyHash, uint256 nonce);
-    event RegistrationCompleted(address indexed owner, bytes32 indexed publicKeyHash);
+    event RegistrationIntentSubmitted(address indexed ethAddress, bytes32 indexed pqFingerprint, uint256 ethNonce);
+    event RegistrationConfirmed(address indexed ethAddress, bytes32 indexed pqFingerprint);
+    event RegistrationIntentRemoved(address indexed ethAddress);
+    event IntentRemoved(address indexed owner);
+    event ChangeETHAddressIntentSubmitted(bytes32 indexed pqFingerprint, address indexed newETHAddress, uint256 pqNonce);
+    event ChangeETHAddressConfirmed(bytes32 indexed pqFingerprint, address indexed oldETHAddress, address indexed newETHAddress);
+    event ChangeETHAddressIntentRemoved(bytes32 indexed pqFingerprint);
+    event UnregistrationIntentSubmitted(address indexed ethAddress, bytes32 indexed pqFingerprint, uint256 ethNonce);
+    event UnregistrationConfirmed(address indexed ethAddress, bytes32 indexed pqFingerprint);
+    event UnregistrationIntentRemoved(address indexed ethAddress);
     event DebugParsedIntentAddress(address parsedAddress);
     event DebugParseStep(string step, uint256 value);
     
@@ -55,18 +81,20 @@ contract PQRegistry {
     }
     
     /**
-     * @dev Submit registration intent with Epervier signature
-     * @param intentMessage The standardized intent message signed by Epervier
+     * @dev Submit registration intent with nested signatures
+     * @param pqMessage The PQ message signed by Epervier
+     * @param pqSignature The Epervier signature components
      * @param salt The Epervier signature salt (40 bytes)
      * @param cs1 The Epervier signature s1 component (32 uint256 array)
      * @param cs2 The Epervier signature s2 component (32 uint256 array)
      * @param hint The Epervier signature hint
      * @param publicKey The Epervier public key to be registered
-     * @param ethNonce The nonce for this PQ key operation
-     * @param ethSignature The ETH signature of the intent
+     * @param ethNonce The nonce for this ETH operation
+     * @param ethSignature The ETH signature of the nested message
      */
     function submitRegistrationIntent(
-        bytes calldata intentMessage,
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
         bytes calldata salt,
         uint256[] calldata cs1,
         uint256[] calldata cs2,
@@ -75,25 +103,46 @@ contract PQRegistry {
         uint256 ethNonce,
         bytes calldata ethSignature
     ) external {
-        // Recover fingerprint from Epervier signature
-        address recoveredFingerprint = epervierVerifier.recover(intentMessage, salt, cs1, cs2, hint);
-        emit DebugParseStep("epervier_recover_successful", uint256(uint160(recoveredFingerprint)));
-        require(recoveredFingerprint != address(0), "Invalid Epervier signature");
-
-        // Parse intent message to extract ETH address
-        address intentAddress = parseIntentAddress(intentMessage);
+        // FIRST: Verify the PQ signature and recover the ETH address
+        // This call verifies that (salt, cs1, cs2, hint) is a valid signature of pqMessage
+        address recoveredAddress = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        require(recoveredAddress != address(0), "Invalid Epervier signature");
+        
+        // Parse the ETH address from the PQ message
+        address intentAddress = parseIntentAddress(pqMessage);
         require(intentAddress != address(0), "Invalid intent address");
-
+        
+        // CRITICAL: Verify that the recovered address from PQ signature matches the address in the message
+        require(recoveredAddress == intentAddress, "PQ signature must recover intent address");
+        
         // Verify ETH nonce
         require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
-
-        // Verify ETH signature
-        bytes memory ethIntentMessage = abi.encodePacked(
+        
+        // Verify PQ message format and extract PQ nonce
+        uint256 pqNonce = extractPQNonce(pqMessage);
+        require(pqNonce == 0, "PQ nonce must be 0 for registration intent");
+        
+        // Verify public key hash
+        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
+        require(
+            epervierKeyToAddress[publicKeyHash] == address(0),
+            "Epervier key already registered"
+        );
+        
+        // SECOND: Create and verify the ETH message that includes the PQ message
+        // Note: We don't include the raw PQ signature components in the ETH message
+        // Instead, we include the PQ message that was signed
+        bytes memory ethMessage = abi.encodePacked(
             DOMAIN_SEPARATOR,
             "Intent to pair Epervier Key",
-            ethNonce
+            ethNonce,
+            pqMessage // Include the PQ message that was signed
         );
-        bytes32 ethMessageHash = keccak256(ethIntentMessage);
+        
+        // Debug: Show the ETH message hash being created
+        bytes32 ethMessageHash = keccak256(ethMessage);
+        emit DebugParseStep("contract_eth_message_hash", uint256(ethMessageHash));
+        
         bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
         
         // Debug logging
@@ -114,139 +163,246 @@ contract PQRegistry {
         emit DebugParseStep("recovered_eth_signer", uint256(uint160(ethSigner)));
         emit DebugParsedIntentAddress(ethSigner);
 
-        // Check if this Epervier key is already registered to another address
-        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
-        require(
-            epervierKeyToAddress[publicKeyHash] == address(0),
-            "Epervier key already registered"
-        );
+        // Verify that the ETH signer matches the intent address
+        require(ethSigner == intentAddress, "ETH signature must be from intent address");
         
-        // Store the intent with fingerprint mapped to ETH address
-        pendingIntents[recoveredFingerprint] = Intent({
+        // Store the intent
+        Intent memory newIntent = Intent({
+            pqFingerprint: publicKeyHash,
             publicKey: publicKey,
-            intentMessage: intentMessage,
+            intentMessage: pqMessage, // Store the PQ message
             timestamp: block.timestamp,
-            nonce: ethNonce
+            ethNonce: ethNonce
         });
+        
+        pendingIntents[intentAddress] = newIntent;
         
         // Increment ETH nonce
         ethNonces[intentAddress]++;
         
-        emit RegistrationIntentSubmitted(recoveredFingerprint, publicKeyHash, ethNonce);
+        emit RegistrationIntentSubmitted(intentAddress, publicKeyHash, ethNonce);
     }
     
     /**
-     * @dev Confirm registration with both ECDSA and Epervier signatures
-     * @param confirmationMessage The confirmation message signed by ECDSA
-     * @param ecdsaSignature The ECDSA signature of the confirmation message
+     * @dev Confirm registration with nested signatures
+     * @param pqMessage The PQ message signed by Epervier
+     * @param pqSignature The Epervier signature components
      * @param salt The Epervier signature salt (40 bytes)
      * @param cs1 The Epervier signature s1 component (32 uint256 array)
      * @param cs2 The Epervier signature s2 component (32 uint256 array)
      * @param hint The Epervier signature hint
-     * @param pqNonce The nonce for this PQ key operation
+     * @param publicKey The Epervier public key to be registered
+     * @param ethNonce The nonce for this ETH operation
+     * @param ethSignature The ETH signature of the nested message
      */
     function confirmRegistration(
-        bytes calldata confirmationMessage,
-        bytes calldata ecdsaSignature,
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
         bytes calldata salt,
         uint256[] calldata cs1,
         uint256[] calldata cs2,
         uint256 hint,
-        uint256 pqNonce
+        uint256[2] calldata publicKey,
+        uint256 ethNonce,
+        bytes calldata ethSignature
     ) external {
-        // Recover fingerprint from Epervier signature
-        address epervierFingerprint = epervierVerifier.recover(confirmationMessage, salt, cs1, cs2, hint);
-        require(epervierFingerprint != address(0), "Invalid Epervier signature");
-        
-        // Recover ETH address from ECDSA signature
-        bytes32 messageHash = keccak256(confirmationMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-        address ecdsaAddress = ECDSA.recover(ethSignedMessageHash, ecdsaSignature);
-        
-        // Get the stored intent using the fingerprint
-        Intent memory intent = pendingIntents[epervierFingerprint];
-        require(intent.timestamp > 0, "No pending intent");
-        
-        // Parse intent message to get the ETH address that should be bound to this fingerprint
-        address intentAddress = parseIntentAddress(intent.intentMessage);
+        // First verify the PQ signature and recover the address
+        address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        emit DebugParseStep("epervier_recover_successful", uint256(uint160(recoveredFingerprint)));
+        require(recoveredFingerprint != address(0), "Invalid Epervier signature");
+
+        // Parse PQ message to extract ETH address
+        address intentAddress = parseIntentAddress(pqMessage);
         require(intentAddress != address(0), "Invalid intent address");
+
+        // Check if there's a pending intent first
+        Intent memory intent = pendingIntents[intentAddress];
+        require(intent.timestamp != 0, "No pending intent found");
+
+        // Verify ETH nonce
+        require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
         
-        // Verify that the ECDSA signer matches the intent address
-        require(ecdsaAddress == intentAddress, "ECDSA signer must match intent address");
+        // Verify PQ message format and extract PQ nonce
+        uint256 pqNonce = extractPQNonce(pqMessage);
+        require(pqNonce == 0, "PQ nonce must be 0 for registration confirmation");
         
-        // Verify PQ nonce
-        bytes32 publicKeyHash = keccak256(abi.encodePacked(intent.publicKey[0], intent.publicKey[1]));
-        require(pqKeyNonces[publicKeyHash] == pqNonce, "Invalid PQ nonce");
+        // Verify the intent message matches the current pqMessage
+        require(keccak256(intent.intentMessage) == keccak256(pqMessage), "Intent message mismatch");
+
+        // Create the ETH message that includes the PQ message
+        bytes memory ethMessage = abi.encodePacked(
+            DOMAIN_SEPARATOR,
+            "Confirm registration",
+            ethNonce,
+            pqMessage // Include the PQ message that was signed, not the raw signature components
+        );
+        bytes32 ethMessageHash = keccak256(ethMessage);
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
         
-        // Register the mapping: fingerprint -> ETH address
+        // Debug logging
+        emit DebugParseStep("ethMessageHash", uint256(ethMessageHash));
+        emit DebugParseStep("ethSignedMessageHash", uint256(ethSignedMessageHash));
+        emit DebugParseStep("ethSignature_length", ethSignature.length);
+        
+        // Parse signature components for debugging
+        require(ethSignature.length == 65, "Invalid signature length");
+        bytes32 r = bytes32(ethSignature[:32]);
+        bytes32 s = bytes32(ethSignature[32:64]);
+        uint8 v = uint8(ethSignature[64]);
+        emit DebugParseStep("signature_r", uint256(r));
+        emit DebugParseStep("signature_s", uint256(s));
+        emit DebugParseStep("signature_v", v);
+        
+        address ethSigner = ECDSA.recover(ethSignedMessageHash, ethSignature);
+        emit DebugParseStep("recovered_eth_signer", uint256(uint160(ethSigner)));
+        emit DebugParsedIntentAddress(ethSigner);
+
+        // Verify that the ETH signer matches the intent address
+        require(ethSigner == intentAddress, "ETH signature must be from intent address");
+
+        // Verify the intent matches
+        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
+        require(intent.pqFingerprint == publicKeyHash, "Intent mismatch");
+
+        // Register the key
         epervierKeyToAddress[publicKeyHash] = intentAddress;
         addressToEpervierKey[intentAddress] = publicKeyHash;
+
+        // Clear the pending intent
+        delete pendingIntents[intentAddress];
+
+        // Increment ETH nonce
+        ethNonces[intentAddress]++;
+
+        emit RegistrationConfirmed(intentAddress, publicKeyHash);
+    }
+    
+    /**
+     * @dev Remove a pending registration intent
+     * @param pqMessage The message signed by the PQ key (includes ETH address and nonce)
+     * @param pqSignature The PQ signature of the message
+     * @param salt The signature salt (40 bytes)
+     * @param cs1 The signature s1 component (32 uint256 array)
+     * @param cs2 The signature s2 component (32 uint256 array)
+     * @param hint The signature hint
+     * @param ethNonce The ETH nonce for replay protection
+     */
+    function removeIntent(
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
+        bytes calldata salt,
+        uint256[] calldata cs1,
+        uint256[] calldata cs2,
+        uint256 hint,
+        uint256 ethNonce
+    ) external {
+        // Verify the PQ signature and recover the ETH address
+        address recoveredAddress = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        require(recoveredAddress != address(0), "Invalid Epervier signature");
         
-        // Increment PQ key nonce
-        pqKeyNonces[publicKeyHash]++;
+        // Parse the ETH address from the PQ message
+        address intentAddress = parseIntentAddress(pqMessage);
+        require(intentAddress == recoveredAddress, "PQ signature must recover intent address");
         
-        // Clean up
-        delete pendingIntents[epervierFingerprint];
+        // Check if there's a pending intent
+        Intent storage intent = pendingIntents[intentAddress];
+        require(intent.timestamp != 0, "No pending intent found");
         
-        emit RegistrationCompleted(intentAddress, publicKeyHash);
+        // Verify ETH nonce
+        require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
+        
+        // Clear the intent
+        delete pendingIntents[intentAddress];
+        
+        // Increment ETH nonce
+        ethNonces[intentAddress]++;
+        
+        emit RegistrationIntentRemoved(intentAddress);
     }
     
     /**
      * @dev Parse intent/confirmation message to extract address
-     * Expected format: "Register Epervier Key{address}{nonce}"
+     * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce
      */
     function parseIntentAddress(bytes memory message) public returns (address intentAddress) {
         emit DebugParseStep("message_length", message.length);
         
-        // If message is too short, return zero address
-        if (message.length < 42) { // "0x" + 40 hex chars
+        // Check if message is long enough to contain the pattern + address + nonce
+        if (message.length < 32 + 27 + 20 + 32) { // DOMAIN_SEPARATOR + pattern + address + nonce
             emit DebugParseStep("message_too_short", 0);
             emit DebugParsedIntentAddress(address(0));
             return address(0);
         }
         
-        // Look for the address pattern in the message
-        // The address should be 42 bytes (20 bytes address + "0x" prefix)
-        // We'll search for "0x" followed by 40 hex characters
+        // Create the pattern to search for: "Intent to pair ETH Address "
+        bytes memory keyPattern = new bytes(27);
+        keyPattern[0] = 0x49; // 'I'
+        keyPattern[1] = 0x6e; // 'n'
+        keyPattern[2] = 0x74; // 't'
+        keyPattern[3] = 0x65; // 'e'
+        keyPattern[4] = 0x6e; // 'n'
+        keyPattern[5] = 0x74; // 't'
+        keyPattern[6] = 0x20; // ' '
+        keyPattern[7] = 0x74; // 't'
+        keyPattern[8] = 0x6f; // 'o'
+        keyPattern[9] = 0x20; // ' '
+        keyPattern[10] = 0x70; // 'p'
+        keyPattern[11] = 0x61; // 'a'
+        keyPattern[12] = 0x69; // 'i'
+        keyPattern[13] = 0x72; // 'r'
+        keyPattern[14] = 0x20; // ' '
+        keyPattern[15] = 0x45; // 'E'
+        keyPattern[16] = 0x54; // 'T'
+        keyPattern[17] = 0x48; // 'H'
+        keyPattern[18] = 0x20; // ' '
+        keyPattern[19] = 0x41; // 'A'
+        keyPattern[20] = 0x64; // 'd'
+        keyPattern[21] = 0x64; // 'd'
+        keyPattern[22] = 0x72; // 'r'
+        keyPattern[23] = 0x65; // 'e'
+        keyPattern[24] = 0x73; // 's'
+        keyPattern[25] = 0x73; // 's'
+        keyPattern[26] = 0x20; // ' '
         
-        for (uint i = 0; i <= message.length - 42; i++) {
-            // Check if we found "0x"
-            if (message[i] == 0x30 && message[i + 1] == 0x78) { // "0x" in hex
-                emit DebugParseStep("found_0x_at", i);
+        // Start searching after the DOMAIN_SEPARATOR (offset 32)
+        uint startOffset = 32;
+        uint maxSearchIndex = message.length - 47; // 27 bytes pattern + 20 bytes address + 32 bytes nonce
+        
+        for (uint i = startOffset; i <= maxSearchIndex; i++) {
+            emit DebugParseStep("searching_at", i);
+            bool found = true;
+            for (uint j = 0; j < 27; j++) {
+                if (message[i + j] != keyPattern[j]) {
+                    found = false;
+                    emit DebugParseStep("mismatch_at", j);
+                    emit DebugParseStep("expected", uint256(uint8(keyPattern[j])));
+                    emit DebugParseStep("got", uint256(uint8(message[i + j])));
+                    break;
+                }
+            }
+            
+            if (found) {
+                emit DebugParseStep("found_intent_at", i);
                 
-                // Extract the next 40 bytes as the address
-                bytes memory addressBytes = new bytes(42);
-                for (uint j = 0; j < 42; j++) {
-                    addressBytes[j] = message[i + j];
+                // Extract the next 20 bytes as the address
+                bytes memory addressBytes = new bytes(20);
+                for (uint j = 0; j < 20; j++) {
+                    addressBytes[j] = message[i + 27 + j]; // Skip the "Intent to pair ETH Address " pattern
                 }
                 
-                // Convert hex string to address
-                // This is a simplified conversion - in production you'd want more robust hex parsing
+                // Convert bytes to address - fix the conversion
                 uint256 addr = 0;
-                for (uint j = 2; j < 42; j++) { // Skip "0x"
-                    uint256 digit = 0;
-                    uint8 byteVal = uint8(addressBytes[j]);
-                    if (byteVal >= 0x30 && byteVal <= 0x39) { // 0-9
-                        digit = byteVal - 0x30;
-                    } else if (byteVal >= 0x61 && byteVal <= 0x66) { // a-f
-                        digit = byteVal - 0x61 + 10;
-                    } else if (byteVal >= 0x41 && byteVal <= 0x46) { // A-F
-                        digit = byteVal - 0x41 + 10;
-                    } else {
-                        // Skip invalid characters instead of continuing
-                        continue;
-                    }
-                    addr = addr * 16 + digit;
+                for (uint j = 0; j < 20; j++) {
+                    addr = (addr << 8) | uint8(addressBytes[j]);
                 }
-                
-                emit DebugParseStep("final_addr", addr);
                 address parsed = address(uint160(addr));
+                emit DebugParseStep("final_addr", uint256(uint160(parsed)));
                 emit DebugParsedIntentAddress(parsed);
                 return parsed;
             }
         }
         
-        emit DebugParseStep("no_0x_found", 0);
+        emit DebugParseStep("no_intent_found", 0);
         emit DebugParsedIntentAddress(address(0));
         return address(0);
     }
@@ -306,596 +462,433 @@ contract PQRegistry {
         emit DebugParsedIntentAddress(address(0));
     }
     /**
-     * @dev Register a new Epervier public key for an address
-     * @param salt The signature salt (40 bytes)
-     * @param cs1 The signature s1 component (32 uint256 array)
-     * @param cs2 The signature s2 component (32 uint256 array)
-     * @param hint The signature hint
-     * @param message The message that was signed by Epervier (includes ECDSA signature)
-     * @param publicKey The Epervier public key
+     * @dev Extract fingerprint from PQ message
+     * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce
      */
-    function registerEpervierKey(
+    function extractFingerprintFromMessage(bytes memory message) internal pure returns (bytes32 fingerprint) {
+        // Look for the fingerprint at the end of the message (last 32 bytes)
+        require(message.length >= 32, "Message too short for fingerprint");
+        
+        bytes memory fingerprintBytes = new bytes(32);
+        for (uint i = 0; i < 32; i++) {
+            fingerprintBytes[i] = message[message.length - 32 + i];
+        }
+        
+        return bytes32(fingerprintBytes);
+    }
+    
+    /**
+     * @dev Extract PQ nonce from PQ message
+     * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce
+     */
+    function extractPQNonce(bytes memory message) internal pure returns (uint256 pqNonce) {
+        // Check if message is long enough to contain the pattern + address + nonce
+        require(message.length >= 32 + 27 + 20 + 32, "Message too short for PQ nonce");
+        
+        // Create the pattern to search for: "Intent to pair ETH Address "
+        bytes memory keyPattern = new bytes(27);
+        keyPattern[0] = 0x49; // 'I'
+        keyPattern[1] = 0x6e; // 'n'
+        keyPattern[2] = 0x74; // 't'
+        keyPattern[3] = 0x65; // 'e'
+        keyPattern[4] = 0x6e; // 'n'
+        keyPattern[5] = 0x74; // 't'
+        keyPattern[6] = 0x20; // ' '
+        keyPattern[7] = 0x74; // 't'
+        keyPattern[8] = 0x6f; // 'o'
+        keyPattern[9] = 0x20; // ' '
+        keyPattern[10] = 0x70; // 'p'
+        keyPattern[11] = 0x61; // 'a'
+        keyPattern[12] = 0x69; // 'i'
+        keyPattern[13] = 0x72; // 'r'
+        keyPattern[14] = 0x20; // ' '
+        keyPattern[15] = 0x45; // 'E'
+        keyPattern[16] = 0x54; // 'T'
+        keyPattern[17] = 0x48; // 'H'
+        keyPattern[18] = 0x20; // ' '
+        keyPattern[19] = 0x41; // 'A'
+        keyPattern[20] = 0x64; // 'd'
+        keyPattern[21] = 0x64; // 'd'
+        keyPattern[22] = 0x72; // 'r'
+        keyPattern[23] = 0x65; // 'e'
+        keyPattern[24] = 0x73; // 's'
+        keyPattern[25] = 0x73; // 's'
+        keyPattern[26] = 0x20; // ' '
+        
+        // Start searching after the DOMAIN_SEPARATOR (offset 32)
+        uint startOffset = 32;
+        uint maxSearchIndex = message.length - 47; // 27 bytes pattern + 20 bytes address + 32 bytes nonce
+        
+        for (uint i = startOffset; i <= maxSearchIndex; i++) {
+            bool found = true;
+            for (uint j = 0; j < 27; j++) {
+                if (message[i + j] != keyPattern[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            
+            if (found) {
+                // Extract the last 32 bytes as the PQ nonce
+                bytes memory nonceBytes = new bytes(32);
+                for (uint j = 0; j < 32; j++) {
+                    nonceBytes[j] = message[message.length - 32 + j];
+                }
+                
+                // Convert bytes to uint256
+                uint256 nonce = 0;
+                for (uint j = 0; j < 32; j++) {
+                    nonce = (nonce << 8) | uint8(nonceBytes[j]);
+                }
+                return nonce;
+            }
+        }
+        
+        revert("PQ nonce not found in message");
+    }
+    
+    function submitChangeETHAddressIntent(
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
         bytes calldata salt,
         uint256[] calldata cs1,
         uint256[] calldata cs2,
         uint256 hint,
-        bytes calldata message,
-        uint256[2] calldata publicKey
+        uint256[2] calldata publicKey,
+        address newETHAddress,
+        uint256 pqNonce
     ) external {
-        // First verify the Epervier signature and recover the address
-        address recoveredAddress = epervierVerifier.recover(message, salt, cs1, cs2, hint);
-        require(recoveredAddress != address(0), "Invalid Epervier signature");
+        // Verify the PQ signature and recover the current ETH address
+        address currentETHAddress = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        require(currentETHAddress != address(0), "Invalid Epervier signature");
         
-        // Extract the ECDSA signature from the message
-        // Message format: "Register Epervier Key" + nonce + publicKey[0] + publicKey[1] + ecdsaSignature
-        require(message.length >= 32 + 32 + 32 + 65, "Message too short"); // min length for nonce + pk + ecdsa sig
+        // Parse the new ETH address from the PQ message
+        address intentNewAddress = parseIntentAddress(pqMessage);
+        require(intentNewAddress == newETHAddress, "PQ message must contain new ETH address");
         
-        // Extract the base message (without ECDSA signature)
-        bytes memory baseMessage = new bytes(message.length - 65);
-        for (uint i = 0; i < message.length - 65; i++) {
-            baseMessage[i] = message[i];
-        }
-        
-        // Extract the ECDSA signature (last 65 bytes)
-        bytes memory ecdsaSignature = new bytes(65);
-        for (uint i = 0; i < 65; i++) {
-            ecdsaSignature[i] = message[message.length - 65 + i];
-        }
-        
-        // Verify the ECDSA signature from the same address
-        bytes32 messageHash = keccak256(baseMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-        address ethSigner = ECDSA.recover(ethSignedMessageHash, ecdsaSignature);
-        require(ethSigner == recoveredAddress, "ECDSA signature must be from same address");
-        
-        // Check if this address already has a registered key
-        require(
-            addressToEpervierKey[recoveredAddress] == bytes32(0),
-            "Address already has registered Epervier key"
-        );
-
-        // Check if this Epervier key is already registered to another address
+        // CRITICAL: Verify that the recovered address from PQ signature matches the current registered address
         bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
-        require(
-            epervierKeyToAddress[publicKeyHash] == address(0),
-            "Epervier key already registered"
-        );
-
-        // Verify that the base message includes the correct nonce
-        // The base message should be: abi.encodePacked(DOMAIN_SEPARATOR, "Register Epervier Key", nonce, publicKey[0], publicKey[1], recoveredAddress)
-        uint256 expectedNonce = pqKeyNonces[publicKeyHash];
-        bytes memory expectedBaseMessage = abi.encodePacked(
-            DOMAIN_SEPARATOR,
-            "Register Epervier Key",
-            expectedNonce,
-            publicKey[0],
-            publicKey[1],
-            recoveredAddress
-        );
-        require(
-            keccak256(baseMessage) == keccak256(expectedBaseMessage),
-            "Message must include correct nonce and public key"
-        );
-
-        // Register the mapping
-        epervierKeyToAddress[publicKeyHash] = recoveredAddress;
-        addressToEpervierKey[recoveredAddress] = publicKeyHash;
+        require(epervierKeyToAddress[publicKeyHash] == currentETHAddress, "PQ key not registered to current address");
         
-        // Increment nonce for this address
+        // Verify PQ nonce from message matches provided nonce
+        uint256 extractedPQNonce = extractPQNonce(pqMessage);
+        require(extractedPQNonce == pqNonce, "PQ nonce mismatch");
+        require(pqKeyNonces[publicKeyHash] == pqNonce, "Invalid PQ nonce");
+        
+        // Check if the new ETH address already has a registered PQ key
+        require(addressToEpervierKey[newETHAddress] == bytes32(0), "New ETH address already has registered PQ key");
+        
+        // Store the change intent
+        changeETHAddressIntents[publicKeyHash] = ChangeETHAddressIntent({
+            newETHAddress: newETHAddress,
+            pqMessage: pqMessage,
+            timestamp: block.timestamp,
+            pqNonce: pqNonce
+        });
+        
+        // Increment PQ nonce
         pqKeyNonces[publicKeyHash]++;
-
-        emit EpervierKeyRegistered(recoveredAddress, publicKeyHash);
+        
+        emit ChangeETHAddressIntentSubmitted(publicKeyHash, newETHAddress, pqNonce);
     }
     
-    /**
-     * @dev Change the Epervier public key for an already registered address
-     * @param oldSalt The old signature salt (40 bytes)
-     * @param oldCs1 The old signature s1 component (32 uint256 array)
-     * @param oldCs2 The old signature s2 component (32 uint256 array)
-     * @param oldHint The old signature hint
-     * @param oldMessage The message signed with the old key
-     * @param oldPublicKey The old Epervier public key
-     * @param newSalt The new signature salt (40 bytes)
-     * @param newCs1 The new signature s1 component (32 uint256 array)
-     * @param newCs2 The new signature s2 component (32 uint256 array)
-     * @param newHint The new signature hint
-     * @param newMessage The message signed with the new key (includes ECDSA signature)
-     * @param newPublicKey The new Epervier public key
-     */
-    function changeEpervierKey(
-        bytes calldata oldSalt,
-        uint256[] calldata oldCs1,
-        uint256[] calldata oldCs2,
-        uint256 oldHint,
-        bytes calldata oldMessage,
-        uint256[2] calldata oldPublicKey,
-        bytes calldata newSalt,
-        uint256[] calldata newCs1,
-        uint256[] calldata newCs2,
-        uint256 newHint,
-        bytes calldata newMessage,
-        uint256[2] calldata newPublicKey
-    ) external {
-        // First verify the old Epervier signature
-        address recoveredAddress = epervierVerifier.recover(oldMessage, oldSalt, oldCs1, oldCs2, oldHint);
-        require(recoveredAddress != address(0), "Invalid old Epervier signature");
-        
-        // Then verify the new Epervier signature
-        address newRecoveredAddress = epervierVerifier.recover(newMessage, newSalt, newCs1, newCs2, newHint);
-        require(
-            newRecoveredAddress == recoveredAddress,
-            "New signature must recover same address"
-        );
-        
-        // Extract the ECDSA signature from the new message
-        // Message format: "Change Epervier Key" + nonce + publicKey[0] + publicKey[1] + ecdsaSignature
-        require(newMessage.length >= 32 + 32 + 32 + 65, "Message too short"); // min length for nonce + pk + ecdsa sig
-        
-        // Extract the base message (without ECDSA signature)
-        bytes memory baseMessage = new bytes(newMessage.length - 65);
-        for (uint i = 0; i < newMessage.length - 65; i++) {
-            baseMessage[i] = newMessage[i];
-        }
-        
-        // Extract the ECDSA signature (last 65 bytes)
-        bytes memory ecdsaSignature = new bytes(65);
-        for (uint i = 0; i < 65; i++) {
-            ecdsaSignature[i] = newMessage[newMessage.length - 65 + i];
-        }
-        
-        // Verify the ECDSA signature from the same address
-        bytes32 messageHash = keccak256(baseMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-        address ethSigner = ECDSA.recover(ethSignedMessageHash, ecdsaSignature);
-        require(ethSigner == recoveredAddress, "ECDSA signature must be from same address");
-        
-        // Check if this address has a registered key
-        bytes32 oldPublicKeyHash = addressToEpervierKey[recoveredAddress];
-        require(
-            oldPublicKeyHash != bytes32(0),
-            "Address has no registered Epervier key"
-        );
-
-        // Check if the new Epervier key is already registered to another address
-        bytes32 newPublicKeyHash = keccak256(abi.encodePacked(newPublicKey[0], newPublicKey[1]));
-        require(
-            epervierKeyToAddress[newPublicKeyHash] == address(0),
-            "New Epervier key already registered"
-        );
-
-        // Verify that the base message includes the correct nonce
-        uint256 expectedNonce = pqKeyNonces[oldPublicKeyHash];
-        bytes memory expectedBaseMessage = abi.encodePacked(
-            DOMAIN_SEPARATOR,
-            "Change Epervier Key",
-            expectedNonce,
-            newPublicKey[0],
-            newPublicKey[1],
-            recoveredAddress
-        );
-        require(
-            keccak256(baseMessage) == keccak256(expectedBaseMessage),
-            "Message must include correct nonce and public key"
-        );
-
-        // Update the mappings
-        epervierKeyToAddress[oldPublicKeyHash] = address(0); // Remove old mapping
-        epervierKeyToAddress[newPublicKeyHash] = recoveredAddress;
-        addressToEpervierKey[recoveredAddress] = newPublicKeyHash;
-        
-        // Increment nonce for this address
-        pqKeyNonces[oldPublicKeyHash]++;
-        pqKeyNonces[newPublicKeyHash]++;
-
-        emit EpervierKeyChanged(recoveredAddress, oldPublicKeyHash, newPublicKeyHash);
-    }
-    
-    /**
-     * @dev Delete the Epervier public key for an address
-     * @param salt The signature salt (40 bytes)
-     * @param cs1 The signature s1 component (32 uint256 array)
-     * @param cs2 The signature s2 component (32 uint256 array)
-     * @param hint The signature hint
-     * @param message The message signed by Epervier (includes ECDSA signature)
-     */
-    function deleteEpervierKey(
+    function confirmChangeETHAddress(
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
         bytes calldata salt,
         uint256[] calldata cs1,
         uint256[] calldata cs2,
         uint256 hint,
-        bytes calldata message
-    ) external {
-        // First verify the Epervier signature and recover the address
-        address recoveredAddress = epervierVerifier.recover(message, salt, cs1, cs2, hint);
-        require(recoveredAddress != address(0), "Invalid Epervier signature");
-        
-        // Extract the ECDSA signature from the message
-        // Message format: "Delete Epervier Key" + nonce + ecdsaSignature
-        require(message.length >= 32 + 65, "Message too short"); // min length for nonce + ecdsa sig
-        
-        // Extract the base message (without ECDSA signature)
-        bytes memory baseMessage = new bytes(message.length - 65);
-        for (uint i = 0; i < message.length - 65; i++) {
-            baseMessage[i] = message[i];
-        }
-        
-        // Extract the ECDSA signature (last 65 bytes)
-        bytes memory ecdsaSignature = new bytes(65);
-        for (uint i = 0; i < 65; i++) {
-            ecdsaSignature[i] = message[message.length - 65 + i];
-        }
-        
-        // Verify the ECDSA signature from the same address
-        bytes32 messageHash = keccak256(baseMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-        address ethSigner = ECDSA.recover(ethSignedMessageHash, ecdsaSignature);
-        require(ethSigner == recoveredAddress, "ECDSA signature must be from same address");
-        
-        // Check if this address has a registered key
-        bytes32 publicKeyHash = addressToEpervierKey[recoveredAddress];
-        require(
-            publicKeyHash != bytes32(0),
-            "Address has no registered Epervier key"
-        );
-
-        // Verify that the base message includes the correct nonce
-        uint256 expectedNonce = pqKeyNonces[publicKeyHash];
-        bytes memory expectedBaseMessage = abi.encodePacked(
-            DOMAIN_SEPARATOR,
-            "Delete Epervier Key",
-            expectedNonce,
-            recoveredAddress
-        );
-        require(
-            keccak256(baseMessage) == keccak256(expectedBaseMessage),
-            "Message must include correct nonce"
-        );
-
-        // Delete the mappings
-        epervierKeyToAddress[publicKeyHash] = address(0);
-        addressToEpervierKey[recoveredAddress] = bytes32(0);
-        
-        // Increment nonce for this address
-        pqKeyNonces[publicKeyHash]++;
-
-        emit EpervierKeyDeleted(recoveredAddress, publicKeyHash);
-    }
-    
-    /**
-     * @dev Disable PQ security for an address (set to disabled key)
-     * @param salt The signature salt (40 bytes)
-     * @param cs1 The signature s1 component (32 uint256 array)
-     * @param cs2 The signature s2 component (32 uint256 array)
-     * @param hint The signature hint
-     * @param message The message signed by Epervier (includes ECDSA signature)
-     */
-    function disablePQSecurity(
-        bytes calldata salt,
-        uint256[] calldata cs1,
-        uint256[] calldata cs2,
-        uint256 hint,
-        bytes calldata message
-    ) external {
-        // First verify the Epervier signature and recover the address
-        address recoveredAddress = epervierVerifier.recover(message, salt, cs1, cs2, hint);
-        require(recoveredAddress != address(0), "Invalid Epervier signature");
-        
-        // Extract the ECDSA signature from the message
-        // Message format: "Disable PQ Security" + nonce + ecdsaSignature
-        require(message.length >= 32 + 65, "Message too short"); // min length for nonce + ecdsa sig
-        
-        // Extract the base message (without ECDSA signature)
-        bytes memory baseMessage = new bytes(message.length - 65);
-        for (uint i = 0; i < message.length - 65; i++) {
-            baseMessage[i] = message[i];
-        }
-        
-        // Extract the ECDSA signature (last 65 bytes)
-        bytes memory ecdsaSignature = new bytes(65);
-        for (uint i = 0; i < 65; i++) {
-            ecdsaSignature[i] = message[message.length - 65 + i];
-        }
-        
-        // Verify the ECDSA signature from the same address
-        bytes32 messageHash = keccak256(baseMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-        address ethSigner = ECDSA.recover(ethSignedMessageHash, ecdsaSignature);
-        require(ethSigner == recoveredAddress, "ECDSA signature must be from same address");
-        
-        // Check if this address has a registered key
-        require(
-            addressToEpervierKey[recoveredAddress] != bytes32(0),
-            "Address has no registered Epervier key"
-        );
-
-        // Verify that the base message includes the correct nonce
-        uint256 expectedNonce = pqKeyNonces[addressToEpervierKey[recoveredAddress]];
-        bytes memory expectedBaseMessage = abi.encodePacked(
-            DOMAIN_SEPARATOR,
-            "Disable PQ Security",
-            expectedNonce
-        );
-        require(
-            keccak256(baseMessage) == keccak256(expectedBaseMessage),
-            "Message must include correct nonce"
-        );
-
-        // Store the current public key hash before disabling
-        bytes32 currentPublicKeyHash = addressToEpervierKey[recoveredAddress];
-        
-        // Set to disabled state
-        addressToEpervierKey[recoveredAddress] = DISABLED_PQ_KEY;
-        
-        // Increment nonce for this address
-        pqKeyNonces[currentPublicKeyHash]++;
-
-        emit PQSecurityDisabled(recoveredAddress);
-    }
-    
-    /**
-     * @dev Enable PQ security for an address (register a new key)
-     * @param salt The signature salt (40 bytes)
-     * @param cs1 The signature s1 component (32 uint256 array)
-     * @param cs2 The signature s2 component (32 uint256 array)
-     * @param hint The signature hint
-     * @param message The message signed by Epervier (includes ECDSA signature)
-     * @param publicKey The Epervier public key
-     */
-    function enablePQSecurity(
-        bytes calldata salt,
-        uint256[] calldata cs1,
-        uint256[] calldata cs2,
-        uint256 hint,
-        bytes calldata message,
-        uint256[2] calldata publicKey
-    ) external {
-        // First verify the Epervier signature and recover the address
-        address recoveredAddress = epervierVerifier.recover(message, salt, cs1, cs2, hint);
-        require(recoveredAddress != address(0), "Invalid Epervier signature");
-        
-        // Extract the ECDSA signature from the message
-        // Message format: "Enable PQ Security" + nonce + publicKey[0] + publicKey[1] + ecdsaSignature
-        require(message.length >= 32 + 32 + 32 + 65, "Message too short"); // min length for nonce + pk + ecdsa sig
-        
-        // Extract the base message (without ECDSA signature)
-        bytes memory baseMessage = new bytes(message.length - 65);
-        for (uint i = 0; i < message.length - 65; i++) {
-            baseMessage[i] = message[i];
-        }
-        
-        // Extract the ECDSA signature (last 65 bytes)
-        bytes memory ecdsaSignature = new bytes(65);
-        for (uint i = 0; i < 65; i++) {
-            ecdsaSignature[i] = message[message.length - 65 + i];
-        }
-        
-        // Verify the ECDSA signature from the same address
-        bytes32 messageHash = keccak256(baseMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
-        address ethSigner = ECDSA.recover(ethSignedMessageHash, ecdsaSignature);
-        require(ethSigner == recoveredAddress, "ECDSA signature must be from same address");
-        
-        // Check if this address is currently disabled
-        require(
-            addressToEpervierKey[recoveredAddress] == DISABLED_PQ_KEY,
-            "Address must be in disabled state to enable PQ security"
-        );
-
-        // Check if this Epervier key is already registered to another address
-        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
-        require(
-            epervierKeyToAddress[publicKeyHash] == address(0),
-            "Epervier key already registered"
-        );
-
-        // Verify that the base message includes the correct nonce
-        uint256 expectedNonce = pqKeyNonces[publicKeyHash];
-        bytes memory expectedBaseMessage = abi.encodePacked(
-            DOMAIN_SEPARATOR,
-            "Enable PQ Security",
-            expectedNonce,
-            publicKey[0],
-            publicKey[1]
-        );
-        require(
-            keccak256(baseMessage) == keccak256(expectedBaseMessage),
-            "Message must include correct nonce and public key"
-        );
-
-        // Register the mapping
-        epervierKeyToAddress[publicKeyHash] = recoveredAddress;
-        addressToEpervierKey[recoveredAddress] = publicKeyHash;
-        
-        // Increment nonce for this address
-        pqKeyNonces[publicKeyHash]++;
-
-        emit PQSecurityEnabled(recoveredAddress, publicKeyHash);
-    }
-    
-    /**
-     * @dev Check if PQ security is disabled for an address
-     * @param owner The address to check
-     * @return True if PQ security is disabled
-     */
-    function isPQSecurityDisabled(address owner) external view returns (bool) {
-        return addressToEpervierKey[owner] == DISABLED_PQ_KEY;
-    }
-    
-    /**
-     * @dev Get the current nonce for an address
-     * @param owner The address to get the nonce for
-     * @return The current nonce
-     */
-    function getNonce(address owner) external view returns (uint256) {
-        return pqKeyNonces[addressToEpervierKey[owner]];
-    }
-    
-    /**
-     * @dev Check if an address has a registered Epervier key
-     * @param owner The address to check
-     * @return True if the address has a registered key
-     */
-    function hasEpervierKey(address owner) external view returns (bool) {
-        return addressToEpervierKey[owner] != bytes32(0);
-    }
-    
-    /**
-     * @dev Get the Epervier public key hash for an address
-     * @param owner The address to get the key for
-     * @return The public key hash, or bytes32(0) if not registered
-     */
-    function getEpervierKeyHash(address owner) external view returns (bytes32) {
-        return addressToEpervierKey[owner];
-    }
-    
-    /**
-     * @dev Get the address registered for an Epervier public key hash
-     * @param publicKeyHash The public key hash to look up
-     * @return The registered address, or address(0) if not registered
-     */
-    function getAddressByEpervierKey(bytes32 publicKeyHash) external view returns (address) {
-        return epervierKeyToAddress[publicKeyHash];
-    }
-    
-    /**
-     * @dev Get the current nonce for a PQ key
-     * @param publicKey The public key to get the nonce for
-     * @return The current nonce
-     */
-    function getPQKeyNonce(uint256[2] calldata publicKey) external view returns (uint256) {
-        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
-        return pqKeyNonces[publicKeyHash];
-    }
-    
-    /**
-     * @dev Test function to only verify Epervier signature recovery
-     * @param intentMessage The message that was signed by Epervier
-     * @param salt The Epervier signature salt (40 bytes)
-     * @param cs1 The Epervier signature s1 component (32 uint256 array)
-     * @param cs2 The Epervier signature s2 component (32 uint256 array)
-     * @param hint The Epervier signature hint
-     * @return The recovered address from the Epervier signature
-     */
-    function testEpervierRecovery(
-        bytes calldata intentMessage,
-        bytes calldata salt,
-        uint256[] calldata cs1,
-        uint256[] calldata cs2,
-        uint256 hint
-    ) external returns (address) {
-        // Only call the Epervier verifier's recover function
-        address recoveredAddress = epervierVerifier.recover(intentMessage, salt, cs1, cs2, hint);
-        
-        // Emit debug events
-        emit DebugParseStep("test_epervier_recovery_called", 1);
-        emit DebugParseStep("recovered_address", uint256(uint160(recoveredAddress)));
-        emit DebugParsedIntentAddress(recoveredAddress);
-        
-        return recoveredAddress;
-    }
-    
-    /**
-     * @dev Test function to only verify ETH signature verification
-     * @param intentAddress The address that should have signed the ETH message
-     * @param ethNonce The nonce for this operation
-     * @param ethSignature The ETH signature to verify
-     * @return The recovered ETH signer address
-     */
-    function testETHSignatureVerification(
-        address intentAddress,
+        uint256[2] calldata publicKey,
+        address newETHAddress,
         uint256 ethNonce,
         bytes calldata ethSignature
-    ) external returns (address) {
+    ) external {
+        // Verify the PQ signature and recover the current ETH address
+        address currentETHAddress = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        require(currentETHAddress != address(0), "Invalid Epervier signature");
+        
+        // Parse the new ETH address from the PQ message
+        address intentNewAddress = parseIntentAddress(pqMessage);
+        require(intentNewAddress == newETHAddress, "PQ message must contain new ETH address");
+        
+        // CRITICAL: Verify that the recovered address from PQ signature matches the current registered address
+        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
+        require(epervierKeyToAddress[publicKeyHash] == currentETHAddress, "PQ key not registered to current address");
+        
+        // Check if there's a pending change intent
+        ChangeETHAddressIntent storage intent = changeETHAddressIntents[publicKeyHash];
+        require(intent.timestamp != 0, "No pending change intent found");
+        
+        // Verify the new ETH address matches the intent
+        require(intent.newETHAddress == newETHAddress, "ETH address mismatch");
+        
+        // Verify PQ nonce from message matches intent nonce
+        uint256 extractedPQNonce = extractPQNonce(pqMessage);
+        require(extractedPQNonce == intent.pqNonce, "PQ nonce mismatch");
+        
+        // Verify intent message consistency
+        require(keccak256(intent.pqMessage) == keccak256(pqMessage), "Intent message mismatch");
+        
+        // Create the ETH message that includes the PQ message
+        bytes memory ethMessage = abi.encodePacked(
+            DOMAIN_SEPARATOR,
+            "Confirm change ETH Address",
+            ethNonce,
+            pqMessage // Include the PQ message that was signed
+        );
+        bytes32 ethMessageHash = keccak256(ethMessage);
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
+        
+        // Verify the ETH signature from the new address
+        require(ethSignature.length == 65, "Invalid ETH signature length");
+        address ethSigner = ECDSA.recover(ethSignedMessageHash, ethSignature);
+        require(ethSigner == newETHAddress, "ETH signature must be from new address");
+        
+        // Verify ETH nonce
+        require(ethNonces[newETHAddress] == ethNonce, "Invalid ETH nonce");
+        
+        // Update the mappings
+        epervierKeyToAddress[publicKeyHash] = newETHAddress;
+        addressToEpervierKey[currentETHAddress] = bytes32(0); // Remove old mapping
+        addressToEpervierKey[newETHAddress] = publicKeyHash;
+        
+        // Increment nonces
+        ethNonces[newETHAddress]++;
+        pqKeyNonces[publicKeyHash]++;
+
+        // Clear the intent
+        delete changeETHAddressIntents[publicKeyHash];
+        
+        emit ChangeETHAddressConfirmed(publicKeyHash, currentETHAddress, newETHAddress);
+    }
+    
+    function removeChangeETHAddressIntent(
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
+        bytes calldata salt,
+        uint256[] calldata cs1,
+        uint256[] calldata cs2,
+        uint256 hint,
+        uint256[2] calldata publicKey,
+        uint256 pqNonce
+    ) external {
+        // Verify the PQ signature and recover the current ETH address
+        address currentETHAddress = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        require(currentETHAddress != address(0), "Invalid Epervier signature");
+        
+        // Check if this PQ key is currently registered
+        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
+        require(epervierKeyToAddress[publicKeyHash] == currentETHAddress, "PQ key not registered to current address");
+        
+        // Check if there's a pending change intent
+        ChangeETHAddressIntent storage intent = changeETHAddressIntents[publicKeyHash];
+        require(intent.timestamp != 0, "No pending change intent found");
+        
+        // Verify PQ nonce
+        require(pqKeyNonces[publicKeyHash] == pqNonce, "Invalid PQ nonce");
+        
+        // Clear the intent
+        delete changeETHAddressIntents[publicKeyHash];
+        
+        // Increment PQ nonce
+        pqKeyNonces[publicKeyHash]++;
+
+        emit ChangeETHAddressIntentRemoved(publicKeyHash);
+    }
+    
+    /**
+     * @dev Submit unregistration intent with nested signatures
+     * @param pqMessage The PQ message signed by Epervier (includes ETH address and nonce)
+     * @param pqSignature The PQ signature of the message
+     * @param salt The signature salt (40 bytes)
+     * @param cs1 The signature s1 component (32 uint256 array)
+     * @param cs2 The signature s2 component (32 uint256 array)
+     * @param hint The signature hint
+     * @param publicKey The Epervier public key to be unregistered
+     * @param ethNonce The ETH nonce for replay protection
+     * @param ethSignature The ETH signature of the nested message
+     */
+    function submitUnregistrationIntent(
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
+        bytes calldata salt,
+        uint256[] calldata cs1,
+        uint256[] calldata cs2,
+        uint256 hint,
+        uint256[2] calldata publicKey,
+        uint256 ethNonce,
+        bytes calldata ethSignature
+    ) external {
+        // Verify the PQ signature and recover the ETH address
+        address recoveredAddress = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        require(recoveredAddress != address(0), "Invalid Epervier signature");
+        
+        // Parse the ETH address from the PQ message
+        address intentAddress = parseIntentAddress(pqMessage);
+        require(intentAddress == recoveredAddress, "PQ signature must recover intent address");
+        
         // Verify ETH nonce
         require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
         
-        // Verify ETH signature
-        bytes memory ethIntentMessage = abi.encodePacked(
+        // Verify PQ nonce from message
+        uint256 pqNonce = extractPQNonce(pqMessage);
+        require(pqNonce == 0, "PQ nonce must be 0 for unregistration intent");
+        
+        // Check if this address has a registered key
+        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
+        require(addressToEpervierKey[intentAddress] == publicKeyHash, "Address has no registered Epervier key");
+        
+        // Create the ETH message that includes the PQ message
+        bytes memory ethMessage = abi.encodePacked(
             DOMAIN_SEPARATOR,
-            "Intent to pair Epervier Key",
-            ethNonce
+            "Intent to unregister from PQ fingerprint",
+            ethNonce,
+            pqMessage // Include the PQ message that was signed
         );
-        bytes32 ethMessageHash = keccak256(ethIntentMessage);
+        bytes32 ethMessageHash = keccak256(ethMessage);
         bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
         
-        // Debug logging
-        emit DebugParseStep("ethMessageHash", uint256(ethMessageHash));
-        emit DebugParseStep("ethSignedMessageHash", uint256(ethSignedMessageHash));
-        emit DebugParseStep("ethSignature_length", ethSignature.length);
-        
-        // Parse signature components for debugging
-        require(ethSignature.length == 65, "Invalid signature length");
-        bytes32 r = bytes32(ethSignature[:32]);
-        bytes32 s = bytes32(ethSignature[32:64]);
-        uint8 v = uint8(ethSignature[64]);
-        emit DebugParseStep("signature_r", uint256(r));
-        emit DebugParseStep("signature_s", uint256(s));
-        emit DebugParseStep("signature_v", v);
-        
+        // Verify the ETH signature
+        require(ethSignature.length == 65, "Invalid ETH signature length");
         address ethSigner = ECDSA.recover(ethSignedMessageHash, ethSignature);
-        emit DebugParseStep("recovered_eth_signer", uint256(uint160(ethSigner)));
-        emit DebugParsedIntentAddress(ethSigner);
+        require(ethSigner == intentAddress, "ETH signature must be from intent address");
         
-        // Don't require addresses to match for debugging
-        // require(ethSigner == intentAddress, "ETH signature must be from intent address");
+        // Store the unregistration intent
+        UnregistrationIntent memory newIntent = UnregistrationIntent({
+            publicKey: publicKey,
+            publicKeyHash: publicKeyHash,
+            pqMessage: pqMessage,
+            timestamp: block.timestamp,
+            ethNonce: ethNonce
+        });
         
-        return ethSigner;
+        unregistrationIntents[intentAddress] = newIntent;
+        
+        // Increment ETH nonce
+        ethNonces[intentAddress]++;
+        
+        emit UnregistrationIntentSubmitted(intentAddress, publicKeyHash, ethNonce);
     }
-
+    
     /**
-     * @dev Test function to debug Epervier signature verification
+     * @dev Confirm unregistration with nested signatures
+     * @param pqMessage The PQ message signed by Epervier (includes ETH address and nonce)
+     * @param pqSignature The PQ signature of the message
+     * @param salt The signature salt (40 bytes)
+     * @param cs1 The signature s1 component (32 uint256 array)
+     * @param cs2 The signature s2 component (32 uint256 array)
+     * @param hint The signature hint
+     * @param publicKey The Epervier public key to be unregistered
+     * @param ethNonce The ETH nonce for replay protection
+     * @param ethSignature The ETH signature of the nested message
      */
-    function testEpervierSignatureDebug(
-        bytes calldata intentMessage,
+    function confirmUnregistration(
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
         bytes calldata salt,
         uint256[] calldata cs1,
         uint256[] calldata cs2,
-        uint256 hint
-    ) external returns (address) {
-        emit DebugParseStep("test_epervier_start", 0);
-        
-        // Recover fingerprint from Epervier signature
-        address recoveredFingerprint = epervierVerifier.recover(intentMessage, salt, cs1, cs2, hint);
-        emit DebugParseStep("epervier_recover_result", uint256(uint160(recoveredFingerprint)));
-        
-        return recoveredFingerprint;
-    }
-
-    /**
-     * @dev Test function to debug ETH signature verification
-     */
-    function testETHSignatureDebug(
+        uint256 hint,
+        uint256[2] calldata publicKey,
         uint256 ethNonce,
         bytes calldata ethSignature
-    ) external returns (address) {
-        emit DebugParseStep("test_eth_start", 0);
+    ) external {
+        // Verify the PQ signature and recover the ETH address
+        address recoveredAddress = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        require(recoveredAddress != address(0), "Invalid Epervier signature");
         
-        // Verify ETH signature
-        bytes memory ethIntentMessage = abi.encodePacked(
+        // Parse the ETH address from the PQ message
+        address intentAddress = parseIntentAddress(pqMessage);
+        require(intentAddress == recoveredAddress, "PQ signature must recover intent address");
+        
+        // Verify ETH nonce
+        require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
+        
+        // Verify PQ nonce from message
+        uint256 pqNonce = extractPQNonce(pqMessage);
+        require(pqNonce == 0, "PQ nonce must be 0 for unregistration confirmation");
+        
+        // Check if there's a pending unregistration intent
+        UnregistrationIntent storage intent = unregistrationIntents[intentAddress];
+        require(intent.timestamp != 0, "No pending unregistration intent found");
+        
+        // Verify the public key matches the intent
+        bytes32 publicKeyHash = keccak256(abi.encodePacked(publicKey[0], publicKey[1]));
+        require(intent.publicKeyHash == publicKeyHash, "Public key mismatch");
+        
+        // Verify intent message consistency
+        require(keccak256(intent.pqMessage) == keccak256(pqMessage), "Intent message mismatch");
+        
+        // Create the ETH message that includes the PQ message
+        bytes memory ethMessage = abi.encodePacked(
             DOMAIN_SEPARATOR,
-            "Intent to pair Epervier Key",
-            ethNonce
+            "Confirm unregistration from PQ fingerprint",
+            ethNonce,
+            pqMessage // Include the PQ message that was signed
         );
-        bytes32 ethMessageHash = keccak256(ethIntentMessage);
+        bytes32 ethMessageHash = keccak256(ethMessage);
         bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
         
-        // Debug logging
-        emit DebugParseStep("ethMessageHash", uint256(ethMessageHash));
-        emit DebugParseStep("ethSignedMessageHash", uint256(ethSignedMessageHash));
-        emit DebugParseStep("ethSignature_length", ethSignature.length);
-        
-        // Parse signature components for debugging
-        require(ethSignature.length == 65, "Invalid signature length");
-        bytes32 r = bytes32(ethSignature[:32]);
-        bytes32 s = bytes32(ethSignature[32:64]);
-        uint8 v = uint8(ethSignature[64]);
-        emit DebugParseStep("signature_r", uint256(r));
-        emit DebugParseStep("signature_s", uint256(s));
-        emit DebugParseStep("signature_v", v);
-        
+        // Verify the ETH signature
+        require(ethSignature.length == 65, "Invalid ETH signature length");
         address ethSigner = ECDSA.recover(ethSignedMessageHash, ethSignature);
-        emit DebugParseStep("recovered_eth_signer", uint256(uint160(ethSigner)));
+        require(ethSigner == intentAddress, "ETH signature must be from intent address");
         
-        return ethSigner;
+        // Remove the mappings
+        epervierKeyToAddress[publicKeyHash] = address(0);
+        addressToEpervierKey[intentAddress] = bytes32(0);
+        
+        // Clear the intent
+        delete unregistrationIntents[intentAddress];
+        
+        // Increment nonces
+        ethNonces[intentAddress]++;
+        pqKeyNonces[publicKeyHash]++;
+
+        emit UnregistrationConfirmed(intentAddress, publicKeyHash);
+    }
+    
+    /**
+     * @dev Remove a pending unregistration intent
+     * @param pqMessage The message signed by the PQ key (includes ETH address and nonce)
+     * @param pqSignature The PQ signature of the message
+     * @param salt The signature salt (40 bytes)
+     * @param cs1 The signature s1 component (32 uint256 array)
+     * @param cs2 The signature s2 component (32 uint256 array)
+     * @param hint The signature hint
+     * @param ethNonce The ETH nonce for replay protection
+     */
+    function removeUnregistrationIntent(
+        bytes calldata pqMessage,
+        bytes calldata pqSignature,
+        bytes calldata salt,
+        uint256[] calldata cs1,
+        uint256[] calldata cs2,
+        uint256 hint,
+        uint256 ethNonce
+    ) external {
+        // Verify the PQ signature and recover the ETH address
+        address recoveredAddress = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        require(recoveredAddress != address(0), "Invalid Epervier signature");
+        
+        // Parse the ETH address from the PQ message
+        address intentAddress = parseIntentAddress(pqMessage);
+        require(intentAddress == recoveredAddress, "PQ signature must recover intent address");
+        
+        // Check if there's a pending unregistration intent
+        UnregistrationIntent storage intent = unregistrationIntents[intentAddress];
+        require(intent.timestamp != 0, "No pending unregistration intent found");
+        
+        // Verify ETH nonce
+        require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
+        
+        // Clear the intent
+        delete unregistrationIntents[intentAddress];
+        
+        // Increment ETH nonce
+        ethNonces[intentAddress]++;
+        
+        emit UnregistrationIntentRemoved(intentAddress);
     }
 } 

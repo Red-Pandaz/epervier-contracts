@@ -19,7 +19,10 @@ sign_cli_path = os.path.join(project_root, 'ETHFALCON/python-ref/sign_cli.py')
 privkey_path = os.path.join(project_root, 'ETHFALCON/python-ref/private_key.pem')
 
 # Contract address (update this after deployment)
-CONTRACT_ADDRESS = "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d"
+CONTRACT_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
+
+# RPC URL for Supersim L2
+RPC_URL = "http://127.0.0.1:9545"
 
 def parse_signature_like_cli(sig_path):
     with open(sig_path, 'r') as f:
@@ -55,21 +58,15 @@ def get_public_key():
     return None
 
 def main():
-    # Print the Ethereum address from the private key
-    eth_private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"  # Default Anvil key 0
-    acct = Account.from_key(eth_private_key)
-    print(f"ETH private key address: {acct.address}")
-
-    # Use the default Foundry/Anvil private key
-    eth_private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-    eth_account = Account.from_key(eth_private_key)
-    eth_address = eth_account.address
-
+    # ETH account setup
+    eth_private_key = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"  # Different private key
+    eth_address = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"  # Different address
+    print(f"ETH private key address: {eth_address}")
     print(f"Ethereum address: {eth_address}")
 
     # Step 1: Create and sign ETH intent message
     print("\nStep 1: Creating ETH intent message...")
-    eth_nonce = 0  # Use nonce 0 as the current value in the contract is 0
+    eth_nonce = 0  # Use nonce 0 for the new ETH address
     
     # Domain separator from contract
     DOMAIN_SEPARATOR = keccak(b"PQRegistry")
@@ -89,7 +86,7 @@ def main():
 
     # Sign the message
     message = encode_defunct(ethMessageHash)
-    signed_message = eth_account.sign_message(message)
+    signed_message = Account.from_key(eth_private_key).sign_message(message)
     eth_signature = signed_message.signature
     print(f"ETH signature: {eth_signature.hex()}")
     print(f"r: 0x{signed_message.r:064x}")
@@ -159,7 +156,6 @@ def main():
             
             # Step 4: Submit to registry contract
             print("\nStep 4: Submitting to registry contract...")
-            rpc_url = "http://127.0.0.1:9545"  # Updated for Supersim L2 901
             command = [
                 "cast", "send", CONTRACT_ADDRESS,
                 "submitRegistrationIntent(bytes,bytes,uint256[],uint256[],uint256,uint256[2],uint256,bytes)",
@@ -171,7 +167,7 @@ def main():
                 f"[{get_public_key()[0]}, {get_public_key()[1]}]",
                 str(eth_nonce),
                 eth_signature.hex(),
-                "--rpc-url", rpc_url,
+                "--rpc-url", RPC_URL,
                 "--private-key", eth_private_key,
                 "--gas-limit", "25000000"
             ]
