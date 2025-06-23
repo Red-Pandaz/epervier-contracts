@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+import subprocess
+import os
+import sys
+
+# Add the python-ref directory to the path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../ETHFALCON/python-ref')))
+
+from falcon_epervier import HEAD_LEN, SALT_LEN, decompress
+from common import falcon_compact, q
+from polyntt.poly import Poly
+
+def parse_signature_like_cli(sig_path):
+    """Parse signature exactly like the CLI does"""
+    
+    # Read signature file
+    with open(sig_path, 'r') as f:
+        sig_hex = f.read().strip()
+    sig = bytes.fromhex(sig_hex)
+    
+    # Extract components exactly like CLI
+    salt = sig[HEAD_LEN:HEAD_LEN + SALT_LEN]
+    enc_s = sig[HEAD_LEN + SALT_LEN:-512*3]
+    
+    s = decompress(enc_s, 666*2 - HEAD_LEN - SALT_LEN, 512*2)
+    mid = len(s) // 2
+    s = [elt % q for elt in s]
+    s1, s2 = s[:mid], s[mid:]
+    
+    # Convert to compact format
+    s1_compact = falcon_compact(s1)
+    s2_compact = falcon_compact(s2)
+    
+    # Calculate hint like CLI
+    s2_inv_ntt = Poly(s2, q).inverse().ntt()
+    hint = 1
+    for elt in s2_inv_ntt:
+        hint = (hint * elt) % q
+    
+    return {
+        'salt': salt.hex(),
+        'cs1': s1_compact,
+        'cs2': s2_compact,
+        'hint': hint
+    }
+
+def get_public_key():
+    """Get public key from the generated file"""
+    with open('../../ETHFALCON/python-ref/public_key.pem', 'r') as f:
+        content = f.read()
+        import re
+        match = re.search(r'pk\s*=\s*(\d+)', content)
+        if match:
+            pk_value = int(match.group(1))
+            return [pk_value, 0]  # Return as uint256[2]
+    return None
+
+def main():
+    print("=== Testing Registry with CLI Parsing ===")
+    
+    # Parse signature using CLI logic
+    sig_components = parse_signature_like_cli('../../ETHFALCON/python-ref/sig')
+    public_key = get_public_key()
+    
+    if not public_key:
+        print("Failed to get public key")
+        return
+    
+    print(f"Public key: {public_key}")
+    print(f"Salt: {sig_components['salt']}")
+    print(f"Hint: {sig_components['hint']}")
+    
+    # Create the intent message
+    intent_message = b"Register Epervier Key0x70997970C51812dc3A010C7d01b50e0d17dc79C80"
+    nonce = 0
+    
+    # Call the registry contract
+    registry_address = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
+    rpc_url = "http://localhost:8545"
+    private_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    
+    # Build the cast command
+    command = [
+        "cast", "send", registry_address,
+        "submitRegistrationIntent(bytes,bytes,uint256[],uint256[],uint256,uint256[2],uint256)",
+        f"0x{intent_message.hex()}",
+        f"0x{sig_components['salt']}",
+        str(sig_components['cs1']),
+        str(sig_components['cs2']),
+        str(sig_components['hint']),
+        str(public_key),
+        str(nonce),
+        "--rpc-url", rpc_url,
+        "--private-key", private_key
+    ]
+    
+    print(f"\nExecuting command:")
+    print(" ".join(command))
+    
+    # Execute the command
+    result = subprocess.run(command, capture_output=True, text=True)
+    
+    print(f"\nReturn code: {result.returncode}")
+    if result.stdout:
+        print(f"STDOUT: {result.stdout}")
+    if result.stderr:
+        print(f"STDERR: {result.stderr}")
+
+if __name__ == "__main__":
+    main() 

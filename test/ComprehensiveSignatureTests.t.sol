@@ -30,7 +30,7 @@ contract ComprehensiveSignatureTests is Test {
         // The actual signature data is available in the extracted files
         
         assertTrue(true, "Test framework ready for signature verification");
-        console.log("✅ Same key, different messages test framework ready");
+        console.log("Same key, different messages test framework ready");
     }
 
     function testDifferentKeysSameMessage() public {
@@ -45,7 +45,7 @@ contract ComprehensiveSignatureTests is Test {
         // They should give different recovered addresses
         
         assertTrue(true, "Test framework ready for signature verification");
-        console.log("✅ Different keys, same message test framework ready");
+        console.log("Different keys, same message test framework ready");
     }
 
     function testMessageTampering() public {
@@ -56,7 +56,7 @@ contract ComprehensiveSignatureTests is Test {
         // The recovered address should be different
         
         assertTrue(true, "Test framework ready for signature verification");
-        console.log("✅ Message tampering test framework ready");
+        console.log("Message tampering test framework ready");
     }
 
     function testRealSignatureVerification() public {
@@ -89,6 +89,6 @@ contract ComprehensiveSignatureTests is Test {
             // This is expected - the signature is not valid but norm check passed
         }
         
-        console.log("✅ Real signature verification test completed");
+        console.log("Real signature verification test completed");
     }
 } 

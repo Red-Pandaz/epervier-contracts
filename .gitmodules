@@ -7,3 +7,9 @@
 [submodule "ETHFALCON"]
 	path = ETHFALCON
 	url = https://github.com/ZKNoxHQ/ETHFALCON.git
+[submodule "optimism"]
+	path = optimism
+	url = https://github.com/ethereum-optimism/optimism.git
+[submodule "supersim"]
+	path = supersim
+	url = https://github.com/ethereum-optimism/supersim.git
