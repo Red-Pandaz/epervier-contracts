@@ -8,6 +8,12 @@ from eth_account import Account
 from eth_account.messages import encode_defunct
 from web3 import Web3
 
+# Import the necessary modules for signature parsing
+sys.path.append('../ETHFALCON/python-ref')
+from common import falcon_compact, q
+from encoding import decompress
+from polyntt.poly import Poly
+
 # Foundry default private keys (first 5)
 ETH_PRIVATE_KEYS = [
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
@@ -18,24 +24,44 @@ ETH_PRIVATE_KEYS = [
 ]
 
 # PQ Registry domain separator
-DOMAIN_SEPARATOR = "0x" + "PQRegistry".encode().hex()
+DOMAIN_SEPARATOR = Web3.keccak(text="PQRegistry")
+
+# Constants from the CLI code
+HEAD_LEN = 1
+SALT_LEN = 40
 
 def abi_encode_packed(*args):
-    """Simple ABI encodePacked implementation"""
-    result = b""
+    """Concatenate arguments without padding (like Solidity's abi.encodePacked)"""
+    result = b''
     for arg in args:
         if isinstance(arg, str):
-            if arg.startswith("0x"):
-                result += bytes.fromhex(arg[2:])
-            else:
-                result += arg.encode()
-        elif isinstance(arg, int):
-            result += arg.to_bytes(32, 'big')
+            result += arg.encode('utf-8')
         elif isinstance(arg, bytes):
             result += arg
+        elif isinstance(arg, int):
+            # Convert to 32-byte big-endian
+            result += arg.to_bytes(32, 'big')
+        elif isinstance(arg, list):
+            # For arrays, convert each element to 32-byte big-endian
+            for item in arg:
+                result += item.to_bytes(32, 'big')
         else:
-            result += str(arg).encode()
+            raise ValueError(f"Unsupported type: {type(arg)}")
     return result
+
+def abi_encode(data):
+    """Encode data like Solidity's abi.encode (with length prefixes for arrays)"""
+    if isinstance(data, list):
+        # For arrays, add length prefix and pad each element
+        result = len(data).to_bytes(32, 'big')  # Length prefix
+        for item in data:
+            result += item.to_bytes(32, 'big')  # Padded element
+        return result
+    elif isinstance(data, int):
+        # For integers, just pad to 32 bytes
+        return data.to_bytes(32, 'big')
+    else:
+        raise ValueError(f"Unsupported type for abi_encode: {type(data)}")
 
 def get_pq_public_keys():
     """Get PQ public keys from test_keys directory"""
@@ -72,7 +98,7 @@ def get_pq_public_keys():
     return pq_keys
 
 def parse_signature_file(sig_file_path):
-    """Parse the signature file to extract salt, cs1, cs2, hint"""
+    """Parse the signature file to extract salt, cs1, cs2, hint using the same logic as the CLI"""
     try:
         with open(sig_file_path, 'r') as f:
             sig_hex = f.read().strip()
@@ -80,25 +106,33 @@ def parse_signature_file(sig_file_path):
         # Convert hex to bytes
         sig_bytes = bytes.fromhex(sig_hex)
         
-        # Constants from the CLI code
-        HEAD_LEN = 1
-        SALT_LEN = 40
-        
         # Extract salt (first 40 bytes after header)
         salt = sig_bytes[HEAD_LEN:HEAD_LEN + SALT_LEN]
         
         # Extract the encoded signature part (everything after salt, except last 512*3 bytes)
         enc_s = sig_bytes[HEAD_LEN + SALT_LEN:-512*3]
         
-        # For now, we'll use the raw signature and let the contract parse it
-        # The contract's epervierVerifier.recover() function will handle the parsing
-        # We'll store the raw signature and let the tests use it directly
+        # Decompress the signature components
+        s = decompress(enc_s, 666*2 - HEAD_LEN - SALT_LEN, 512*2)
+        mid = len(s)//2
+        s = [elt % q for elt in s]
+        s1, s2 = s[:mid], s[mid:]
+        
+        # Convert to compact format
+        s1_compact = falcon_compact(s1)
+        s2_compact = falcon_compact(s2)
+        
+        # Calculate hint
+        s2_inv_ntt = Poly(s2, q).inverse().ntt()
+        hint = 1
+        for elt in s2_inv_ntt:
+            hint = (hint * elt) % q
         
         return {
             "salt": "0x" + salt.hex(),
-            "cs1": [0] * 32,  # Will be parsed by the verifier
-            "cs2": [0] * 32,  # Will be parsed by the verifier  
-            "hint": 123,      # Will be parsed by the verifier
+            "cs1": s1_compact,
+            "cs2": s2_compact,
+            "hint": hint,
             "raw_signature": sig_hex
         }
         
@@ -189,51 +223,61 @@ def generate_test_vectors():
         pq_pubkey_bytes = pq_key[0].to_bytes(32, 'big') + pq_key[1].to_bytes(32, 'big')
         pq_pubkey_hash = "0x" + pq_pubkey_bytes.hex()
         
-        # Create PQ message (signed by PQ key)
-        # Format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce
-        pq_message = abi_encode_packed(
+        # Create base PQ message (without ETH signature)
+        # Format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce (32 bytes)
+        eth_address_bytes = bytes.fromhex(eth_address[2:])  # Remove "0x" prefix and convert to bytes
+        
+        base_pq_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Intent to pair ETH Address ",
-            eth_address,
-            0  # pqNonce
+            eth_address_bytes,  # Use raw 20-byte address
+            (0).to_bytes(32, 'big')  # pqNonce as 32-byte value
         )
         
-        # Generate Epervier signature for PQ message
+        # Generate Epervier signature for the base PQ message (without ETH signature)
         print(f"  Generating Epervier signature for key {i+1}...")
-        epervier_sig = generate_epervier_signature(pq_message, i)
+        epervier_sig = generate_epervier_signature(base_pq_message, i)
         
-        # Create ETH message for submitRegistrationIntent (nested signature)
-        # Format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ethNonce + pqSignature + pqMessage
+        # Create ETH message for intent (without PQ signature)
+        # Format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ethNonce + base_pq_message
         eth_intent_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Intent to pair Epervier Key",
-            0,  # ethNonce
-            bytes.fromhex(epervier_sig["raw_signature"]),  # pqSignature
-            pq_message  # pqMessage
+            (0).to_bytes(32, 'big'),  # ethNonce as 32-byte value (matching contract's abi.encodePacked)
+            base_pq_message  # Base PQ message without ETH signature
         )
+        print(f"ETH intent message hex: {eth_intent_message.hex()}")
         eth_message_hash = encode_defunct(eth_intent_message)
         eth_signature = account.sign_message(eth_message_hash)
         
-        # Create ETH message for confirmRegistration (nested signature)
-        # Format: DOMAIN_SEPARATOR + "Confirm registration" + ethNonce + pqSignature + pqMessage
+        # Create full PQ message for intent (ETH signature nested in PQ message)
+        # Format: base_pq_message + eth_signature (last 65 bytes)
+        full_pq_message = abi_encode_packed(
+            base_pq_message,
+            eth_signature.signature  # Include ETH signature in PQ message
+        )
+        
+        # Create ETH message for confirmRegistration (PQ signature nested in ETH message)
+        # Format: DOMAIN_SEPARATOR + "Confirm registration" + ethNonce + salt + abi.encode(cs1) + abi.encode(cs2) + abi.encode(hint) + base_pq_message
         eth_confirm_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Confirm registration",
-            0,  # ethNonce
-            bytes.fromhex(epervier_sig["raw_signature"]),  # pqSignature
-            pq_message  # pqMessage
+            (0).to_bytes(32, 'big'),  # ethNonce as 32-byte value (matching contract's abi.encodePacked)
+            bytes.fromhex(epervier_sig["salt"][2:]),  # salt without 0x prefix
+            abi_encode(epervier_sig["cs1"]),  # cs1 array with abi.encode
+            abi_encode(epervier_sig["cs2"]),  # cs2 array with abi.encode
+            abi_encode(epervier_sig["hint"]),  # hint with abi.encode
+            base_pq_message  # Base PQ message (without ETH signature)
         )
         eth_confirm_hash = encode_defunct(eth_confirm_message)
         eth_confirm_signature = account.sign_message(eth_confirm_hash)
         
-        # Create ETH message for removeIntent (nested signature)
-        # Format: DOMAIN_SEPARATOR + "Unpair from fingerprint" + ethNonce + pqSignature + pqMessage
+        # Create ETH message for removeIntent (similar to intent)
         eth_remove_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Unpair from fingerprint",
-            0,  # ethNonce
-            bytes.fromhex(epervier_sig["raw_signature"]),  # pqSignature
-            pq_message  # pqMessage
+            (0).to_bytes(32, 'big'),  # ethNonce as 32-byte value (matching contract's abi.encodePacked)
+            base_pq_message  # Base PQ message without ETH signature
         )
         eth_remove_hash = encode_defunct(eth_remove_message)
         eth_remove_signature = account.sign_message(eth_remove_hash)
@@ -244,7 +288,8 @@ def generate_test_vectors():
             "pq_public_key_hash": pq_pubkey_hash,
             "eth_address": eth_address,
             "eth_private_key": eth_priv_key,
-            "pq_message": pq_message.hex(),
+            "base_pq_message": base_pq_message.hex(),
+            "full_pq_message": full_pq_message.hex(),
             "eth_intent_message": eth_intent_message.hex(),
             "eth_confirm_message": eth_confirm_message.hex(),
             "eth_remove_message": eth_remove_message.hex(),
@@ -263,7 +308,7 @@ def generate_test_vectors():
         print(f"  Saved to {output_file}")
     
     print(f"\nGenerated {len(ETH_PRIVATE_KEYS)} test vectors in {test_vectors_dir}/")
-    print("Note: Test vectors now use nested signature structure.")
+    print("Note: Test vectors now use proper nested signatures with real PQ signatures.")
 
 if __name__ == "__main__":
     generate_test_vectors() 

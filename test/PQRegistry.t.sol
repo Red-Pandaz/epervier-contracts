@@ -1200,4 +1200,207 @@ contract PQRegistryComprehensiveTest is Test {
             ethSignature
         );
     }
+    
+    // ============================================================================
+    // REAL TEST VECTOR TESTS
+    // ============================================================================
+    
+    function testRealTestVectorRegistration() public {
+        // Load test vector 1 data
+        string memory testVectorJson = vm.readFile("test/test_vectors/test_vector_1.json");
+        
+        // Extract the full PQ message (which includes the ETH signature)
+        string memory fullPqMessageHex = extractJsonValue(testVectorJson, "full_pq_message");
+        bytes memory fullPqMessage = vm.parseBytes(fullPqMessageHex);
+        
+        // Extract the ETH signature
+        string memory ethSignatureHex = extractJsonValue(testVectorJson, "eth_intent_signature");
+        bytes memory ethSignature = vm.parseBytes(ethSignatureHex);
+        
+        // Extract the public key
+        string memory publicKey0Hex = extractJsonValue(testVectorJson, "pq_public_key");
+        uint256 publicKey0 = extractFirstArrayElement(publicKey0Hex);
+        uint256[2] memory publicKey = [publicKey0, uint256(0)];
+        
+        // Extract the ETH address
+        string memory ethAddressHex = extractJsonValue(testVectorJson, "eth_address");
+        address ethAddress = vm.parseAddress(ethAddressHex);
+        
+        // Extract signature components
+        string memory saltHex = extractJsonValue(testVectorJson, "salt");
+        bytes memory salt = vm.parseBytes(saltHex);
+        
+        uint256[] memory cs1 = new uint256[](32);
+        uint256[] memory cs2 = new uint256[](32);
+        uint256 hint = 687; // From the test vector
+        
+        // Log the ETH address from the test vector
+        emit log_named_address("ETH address from test vector", ethAddress);
+        
+        // Parse the intent address from the PQ message using the contract logic
+        address parsedIntentAddress = registry.parseIntentAddress(fullPqMessage);
+        emit log_named_address("Address parsed from PQ message", parsedIntentAddress);
+        
+        // Mock the Epervier verifier to return the correct address
+        vm.mockCall(
+            address(epervierVerifier),
+            abi.encodeWithSelector(epervierVerifier.recover.selector),
+            abi.encode(ethAddress)
+        );
+        
+        // Submit registration intent using the real test vector data
+        registry.submitRegistrationIntent(
+            fullPqMessage, // Full PQ message with ETH signature nested
+            salt, // pqSignature
+            salt, // salt
+            cs1,
+            cs2,
+            hint,
+            publicKey,
+            0, // ethNonce
+            ethSignature
+        );
+        
+        // Verify the intent was stored
+        assertEq(registry.ethNonces(ethAddress), 1);
+    }
+    
+    function extractJsonValue(string memory json, string memory key) internal pure returns (string memory) {
+        // Simple JSON value extraction - looks for "key": value pattern
+        string memory searchPattern = string(abi.encodePacked('"', key, '": '));
+        uint256 startIndex = findString(json, searchPattern);
+        require(startIndex != type(uint256).max, "Key not found in JSON");
+        
+        startIndex += bytes(searchPattern).length;
+        uint256 endIndex = startIndex;
+        
+        // Find the end of the value based on its type
+        if (startIndex < bytes(json).length && bytes(json)[startIndex] == '"') {
+            // String value - find closing quote
+            startIndex += 1; // Skip opening quote
+            endIndex = startIndex;
+            while (endIndex < bytes(json).length) {
+                if (bytes(json)[endIndex] == '"') {
+                    break;
+                }
+                endIndex++;
+            }
+        } else if (startIndex < bytes(json).length && bytes(json)[startIndex] == '[') {
+            // Array value - find closing bracket
+            endIndex = startIndex;
+            uint256 bracketCount = 0;
+            while (endIndex < bytes(json).length) {
+                if (bytes(json)[endIndex] == '[') {
+                    bracketCount++;
+                } else if (bytes(json)[endIndex] == ']') {
+                    bracketCount--;
+                    if (bracketCount == 0) {
+                        endIndex++;
+                        break;
+                    }
+                }
+                endIndex++;
+            }
+        } else {
+            // Number or other value - find comma or closing brace/bracket
+            endIndex = startIndex;
+            while (endIndex < bytes(json).length) {
+                if (bytes(json)[endIndex] == ',' || 
+                    bytes(json)[endIndex] == '}' || 
+                    bytes(json)[endIndex] == ']') {
+                    break;
+                }
+                endIndex++;
+            }
+        }
+        
+        require(endIndex <= bytes(json).length, "Malformed JSON value");
+        
+        bytes memory result = new bytes(endIndex - startIndex);
+        for (uint256 i = 0; i < result.length; i++) {
+            result[i] = bytes(json)[startIndex + i];
+        }
+        
+        return string(result);
+    }
+    
+    function findString(string memory haystack, string memory needle) internal pure returns (uint256) {
+        bytes memory haystackBytes = bytes(haystack);
+        bytes memory needleBytes = bytes(needle);
+        
+        for (uint256 i = 0; i <= haystackBytes.length - needleBytes.length; i++) {
+            bool found = true;
+            for (uint256 j = 0; j < needleBytes.length; j++) {
+                if (haystackBytes[i + j] != needleBytes[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                return i;
+            }
+        }
+        return type(uint256).max;
+    }
+    
+    function extractFirstArrayElement(string memory arrayStr) internal pure returns (uint256) {
+        // Extract first number from "[number, 0]" format
+        uint256 startIndex = findString(arrayStr, "[");
+        require(startIndex != type(uint256).max, "Array not found");
+        
+        startIndex += 1; // Skip the opening bracket
+        uint256 endIndex = startIndex;
+        
+        // Find the comma
+        while (endIndex < bytes(arrayStr).length) {
+            if (bytes(arrayStr)[endIndex] == ',') {
+                break;
+            }
+            endIndex++;
+        }
+        
+        require(endIndex < bytes(arrayStr).length, "Malformed array");
+        
+        bytes memory numberBytes = new bytes(endIndex - startIndex);
+        for (uint256 i = 0; i < numberBytes.length; i++) {
+            numberBytes[i] = bytes(arrayStr)[startIndex + i];
+        }
+        
+        // Trim whitespace and newlines
+        string memory trimmedNumber = trimWhitespace(string(numberBytes));
+        
+        return vm.parseUint(trimmedNumber);
+    }
+    
+    function trimWhitespace(string memory str) internal pure returns (string memory) {
+        bytes memory strBytes = bytes(str);
+        uint256 start = 0;
+        uint256 end = strBytes.length;
+        
+        // Find first non-whitespace character
+        while (start < end && isWhitespace(strBytes[start])) {
+            start++;
+        }
+        
+        // Find last non-whitespace character
+        while (end > start && isWhitespace(strBytes[end - 1])) {
+            end--;
+        }
+        
+        // Extract trimmed string
+        bytes memory result = new bytes(end - start);
+        for (uint256 i = 0; i < result.length; i++) {
+            result[i] = strBytes[start + i];
+        }
+        
+        return string(result);
+    }
+    
+    function isWhitespace(bytes1 char) internal pure returns (bool) {
+        return char == 0x20 || // space
+               char == 0x09 || // tab
+               char == 0x0A || // newline
+               char == 0x0D || // carriage return
+               char == 0x0C;   // form feed
+    }
 } 

@@ -4,8 +4,11 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 import "../src/PQRegistry.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract PQRegistryIntegrationTest is Test {
+    using ECDSA for bytes32;
+    
     PQRegistry public registry;
     ZKNOX_epervier public epervierVerifier;
     
@@ -79,6 +82,50 @@ contract PQRegistryIntegrationTest is Test {
         );
         
         assertEq(recovered, realRecoveredAddress, "Signature should recover correct address");
+    }
+    
+    function testETHSignatureVerificationWithOpenZeppelin() public {
+        // Load test vector data
+        string memory jsonData = vm.readFile("test/test_vectors/test_vector_1.json");
+        
+        // Parse the data
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".eth_intent_message"));
+        bytes memory ethConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".eth_confirm_message"));
+        bytes memory ethIntentSignature = vm.parseBytes(vm.parseJsonString(jsonData, ".eth_intent_signature"));
+        bytes memory ethConfirmSignature = vm.parseBytes(vm.parseJsonString(jsonData, ".eth_confirm_signature"));
+        address expectedAddress = vm.parseAddress(vm.parseJsonString(jsonData, ".eth_address"));
+        
+        console.log("Expected ETH address:", expectedAddress);
+        console.log("ETH intent message length:", ethIntentMessage.length);
+        console.log("ETH confirm message length:", ethConfirmMessage.length);
+        console.log("ETH intent signature length:", ethIntentSignature.length);
+        console.log("ETH confirm signature length:", ethConfirmSignature.length);
+        
+        // Verify intent signature with OpenZeppelin ECDSA
+        bytes32 intentMessageHash = keccak256(ethIntentMessage);
+        // Match Python library format: "Ethereum Signed Message:\n" + length + message
+        bytes32 intentSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethIntentMessage));
+        address recoveredIntentAddress = intentSignedMessageHash.recover(ethIntentSignature);
+        
+        console.log("Recovered intent address:", recoveredIntentAddress);
+        console.log("Intent message hash:", uint256(intentMessageHash));
+        console.log("Intent signed message hash:", uint256(intentSignedMessageHash));
+        
+        // Verify confirm signature with OpenZeppelin ECDSA
+        bytes32 confirmMessageHash = keccak256(ethConfirmMessage);
+        // Match Python library format: "Ethereum Signed Message:\n" + length + message
+        bytes32 confirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n2379", ethConfirmMessage));
+        address recoveredConfirmAddress = confirmSignedMessageHash.recover(ethConfirmSignature);
+        
+        console.log("Recovered confirm address:", recoveredConfirmAddress);
+        console.log("Confirm message hash:", uint256(confirmMessageHash));
+        console.log("Confirm signed message hash:", uint256(confirmSignedMessageHash));
+        
+        // Check if signatures are valid
+        assertEq(recoveredIntentAddress, expectedAddress, "Intent signature should recover correct address");
+        assertEq(recoveredConfirmAddress, expectedAddress, "Confirm signature should recover correct address");
+        
+        console.log("Both ETH signatures verified correctly with OpenZeppelin ECDSA!");
     }
     
     function testRealRegistryRegistration() public {
