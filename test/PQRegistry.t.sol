@@ -853,6 +853,14 @@ contract PQRegistryComprehensiveTest is Test {
     // HELPER FUNCTIONS
     // ============================================================================
     
+    function mockEpervierVerifier(address expectedAddress) internal {
+        vm.mockCall(
+            address(epervierVerifier),
+            abi.encodeWithSelector(epervierVerifier.recover.selector),
+            abi.encode(expectedAddress)
+        );
+    }
+    
     function createValidETHSignature(address signer, uint256 privateKey, uint256 nonce) internal view returns (bytes memory) {
         bytes memory ethIntentMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
@@ -882,15 +890,11 @@ contract PQRegistryComprehensiveTest is Test {
     // ============================================================================
     
     function testChangeETHAddress_CompleteFlow() public {
-        // First register a key
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice)
-        );
-        
         address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
         address testBob = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+        
+        // Mock Epervier verifier to return the expected addresses
+        mockEpervierVerifier(testAlice);
         
         // Register first
         bytes memory pqMessage = abi.encodePacked(
@@ -950,7 +954,9 @@ contract PQRegistryComprehensiveTest is Test {
             ethConfirmSignature
         );
         
-        // Now submit change ETH address intent
+        // Now submit change ETH address intent - mock for Bob's address
+        mockEpervierVerifier(testBob);
+        
         bytes memory pqChangeMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair ETH Address ",
