@@ -17,8 +17,8 @@ contract PQRegistryComprehensiveTest is Test {
     // Test keys
     uint256[2] public testPublicKey = [uint256(123), uint256(456)];
     uint256[2] public testPublicKey2 = [uint256(789), uint256(101)];
-    bytes32 public testPublicKeyHash;
-    bytes32 public testPublicKeyHash2;
+    address public testPublicKeyHash;
+    address public testPublicKeyHash2;
     
     // Test signature components (mock data)
     bytes public testSalt;
@@ -36,8 +36,10 @@ contract PQRegistryComprehensiveTest is Test {
         registry = new PQRegistry(address(epervierVerifier));
         
         // Calculate public key hashes
-        testPublicKeyHash = keccak256(abi.encodePacked(testPublicKey[0], testPublicKey[1]));
-        testPublicKeyHash2 = keccak256(abi.encodePacked(testPublicKey2[0], testPublicKey2[1]));
+        bytes32 hash1 = keccak256(abi.encodePacked(testPublicKey[0], testPublicKey[1]));
+        bytes32 hash2 = keccak256(abi.encodePacked(testPublicKey2[0], testPublicKey2[1]));
+        testPublicKeyHash = address(uint160(uint256(hash1)));
+        testPublicKeyHash2 = address(uint160(uint256(hash2)));
         
         // Setup mock signature components
         testSalt = new bytes(40);
@@ -60,7 +62,7 @@ contract PQRegistryComprehensiveTest is Test {
     function testConstructor() public {
         assertEq(address(registry.epervierVerifier()), address(epervierVerifier));
         assertEq(registry.DOMAIN_SEPARATOR(), keccak256("PQRegistry"));
-        assertEq(registry.DISABLED_PQ_KEY(), bytes32(uint256(1)));
+        assertEq(registry.DISABLED_PQ_KEY(), address(1));
     }
     
     function testInitialState() public {
@@ -70,7 +72,7 @@ contract PQRegistryComprehensiveTest is Test {
         
         // Check no keys registered
         assertEq(registry.epervierKeyToAddress(testPublicKeyHash), address(0));
-        assertEq(registry.addressToEpervierKey(alice), bytes32(0));
+        assertEq(registry.addressToEpervierKey(alice), address(0));
         
         // Check no pending intents - just check if timestamp is 0
         // We'll access the mapping directly without destructuring for now
@@ -83,42 +85,46 @@ contract PQRegistryComprehensiveTest is Test {
     // ============================================================================
     
     function testSubmitRegistrationIntent_Success() public {
-        address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
-        uint256[2] memory testPublicKeyVector = [uint256(703309690834788033648158452166570983886945531899), uint256(0)];
-        bytes32 testPublicKeyHashVector = keccak256(abi.encodePacked(testPublicKeyVector[0], testPublicKeyVector[1]));
+        // Load real test vector data
+        string memory json = vm.readFile("test/test_vectors/comprehensive_vector_1.json");
+        
+        // Extract the registration object
+        string memory registrationJson = extractJsonValue(json, "registration");
+        // Parse the real signature components for the intent (base PQ message)
+        bytes memory salt = vm.parseBytes(extractJsonValue(registrationJson, "intent_epervier_salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(registrationJson, "intent_epervier_cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(registrationJson, "intent_epervier_cs2");
+        uint256 hint = vm.parseUint(extractJsonValue(registrationJson, "intent_epervier_hint"));
+        // Parse the base PQ message
+        bytes memory basePQMessage = vm.parseBytes(extractJsonValue(registrationJson, "base_pq_message"));
+        // Parse the ETH intent message and signature
+        bytes memory ethIntentMessage = vm.parseBytes(extractJsonValue(registrationJson, "eth_intent_message"));
+        bytes memory ethIntentSignature = vm.parseBytes(extractJsonValue(registrationJson, "eth_intent_signature"));
+        
+        // Parse the ETH signature components
+        (uint8 v, bytes32 r, bytes32 s) = parseSignature(ethIntentSignature);
+        
+        // Mock the Epervier verifier to return the correct address
         vm.mockCall(
             address(epervierVerifier),
             abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(testAlice)
+            abi.encode(alice)
         );
-        // PQ message
-        bytes memory pqMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Intent to pair ETH Address ",
-            abi.encodePacked(testAlice),
-            uint256(0)
-        );
-        // ETH message (nested)
-        bytes memory ethMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Intent to pair Epervier Key",
-            uint256(0),
-            testSalt,
-            testCs1,
-            testCs2,
-            abi.encode(testHint),
-            pqMessage
-        );
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethMessage));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
+        
+        // Submit registration intent with real data
         registry.submitRegistrationIntent(
-            ethMessage,
+            ethIntentMessage,
             v,
             r,
             s
         );
-        assertEq(registry.ethNonces(testAlice), 1);
-        assertEq(registry.pqKeyNonces(testPublicKeyHashVector), 0);
+        
+        // Verify the intent was created
+        assertEq(registry.ethNonces(alice), 1);
+        
+        // Verify the PQ nonce was incremented
+        address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
+        assertEq(registry.pqKeyNonces(recoveredFingerprint), 1);
     }
     
     function testSubmitRegistrationIntent_RevertOnInvalidEpervierSignature() public {
@@ -278,7 +284,8 @@ contract PQRegistryComprehensiveTest is Test {
         // Test vector 1 values
         address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
         uint256[2] memory testPublicKeyVector = [uint256(703309690834788033648158452166570983886945531899), uint256(0)];
-        bytes32 testPublicKeyHashVector = keccak256(abi.encodePacked(testPublicKeyVector[0], testPublicKeyVector[1]));
+        bytes32 hashVector = keccak256(abi.encodePacked(testPublicKeyVector[0], testPublicKeyVector[1]));
+        address testPublicKeyHashVector = address(uint160(uint256(hashVector)));
         
         // First submit an intent
         vm.mockCall(
@@ -869,7 +876,7 @@ contract PQRegistryComprehensiveTest is Test {
         // Verify the change
         assertEq(registry.epervierKeyToAddress(testPublicKeyHash), testBob);
         assertEq(registry.addressToEpervierKey(testBob), testPublicKeyHash);
-        assertEq(registry.addressToEpervierKey(testAlice), bytes32(0)); // Old mapping cleared
+        assertEq(registry.addressToEpervierKey(testAlice), address(0)); // Old mapping cleared
     }
     
     function testUnregistration_CompleteFlow() public {
@@ -985,7 +992,7 @@ contract PQRegistryComprehensiveTest is Test {
         
         // Verify unregistration
         assertEq(registry.epervierKeyToAddress(testPublicKeyHash), address(0));
-        assertEq(registry.addressToEpervierKey(testAlice), bytes32(0));
+        assertEq(registry.addressToEpervierKey(testAlice), address(0));
     }
     
     function testRemoveIntent_AllTypes() public {
@@ -1253,5 +1260,21 @@ contract PQRegistryComprehensiveTest is Test {
                char == 0x0A || // newline
                char == 0x0D || // carriage return
                char == 0x0C;   // form feed
+    }
+    
+    // Helper function to parse signature components from bytes
+    function parseSignature(bytes memory signature) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
+        require(signature.length == 65, "Invalid signature length");
+        
+        assembly {
+            r := mload(add(signature, 32))
+            s := mload(add(signature, 64))
+            v := byte(0, mload(add(signature, 96)))
+        }
+        
+        // Adjust v for Ethereum signature format
+        if (v < 27) {
+            v += 27;
+        }
     }
 } 

@@ -272,16 +272,19 @@ def generate_comprehensive_test_vectors():
         # 0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb
         # We'll use this as mock data since we know exactly what the contract will recover
         recovered_fingerprint = bytes.fromhex("7b317f4d231cbc63de7c6c690ef4ba9c653437fb")
-        pq_fingerprint = b'\x00' * 12 + recovered_fingerprint  # Left-pad with 12 zero bytes
+        # For address format, we need 20 bytes (not 32 bytes like bytes32)
+        pq_fingerprint = recovered_fingerprint  # 20 bytes for address
         
         # Debug: Print the fingerprint to verify it matches what the contract expects
         print(f"  Generated fingerprint: 0x{pq_fingerprint.hex()}")
-        print(f"  Expected fingerprint: 0x0000000000000000000000007b317f4d231cbc63de7c6c690ef4ba9c653437fb")
+        print(f"  Expected fingerprint: 0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb")
+        
+        print(f"ETH confirmation fingerprint (should match contract): 0x{pq_fingerprint.hex()}")
         
         eth_confirm_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             b"Confirm bonding to epervier fingerprint ",
-            pq_fingerprint,
+            pq_fingerprint,  # 20 bytes address
             (1).to_bytes(32, 'big')  # ethNonce (incremented after intent)
         )
         
@@ -312,12 +315,12 @@ def generate_comprehensive_test_vectors():
         # ============================================================================
         
         # Create remove intent message with new format: DOMAIN_SEPARATOR + "Remove registration intent" + ethNonce + fingerprint
-        # The fingerprint is the bytes32 representation of the recovered PQ address
+        # The fingerprint is the address representation of the recovered PQ address
         remove_intent_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Remove registration intent",
             (1).to_bytes(32, 'big'),  # ethNonce (incremented after intent submission)
-            pq_fingerprint  # fingerprint (bytes32)
+            pq_fingerprint  # fingerprint (20 bytes address)
         )
         
         # Debug: Print the exact bytes and offsets
@@ -346,8 +349,8 @@ def generate_comprehensive_test_vectors():
         else:
             print(f"  ERROR: Message too short for nonce extraction")
             
-        if len(remove_intent_message) >= expected_fingerprint_offset + 32:
-            fingerprint_bytes = remove_intent_message[expected_fingerprint_offset:expected_fingerprint_offset + 32]
+        if len(remove_intent_message) >= expected_fingerprint_offset + 20:
+            fingerprint_bytes = remove_intent_message[expected_fingerprint_offset:expected_fingerprint_offset + 20]
             print(f"  Fingerprint bytes at offset {expected_fingerprint_offset}: {fingerprint_bytes.hex()}")
         else:
             print(f"  ERROR: Message too short for fingerprint extraction")

@@ -241,11 +241,9 @@ contract PQRegistryIntegrationTest is Test {
         assertEq(registry.ethNonces(ethAddress), 1, "ETH nonce should be incremented");
         
         // Verify the PQ nonce was incremented - use the same logic as the contract
-        address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
-        bytes32 publicKeyHash = bytes32(uint256(uint160(recoveredFingerprint)));
-        console.log("Recovered fingerprint:", recoveredFingerprint);
-        console.log("Public key hash:", uint256(publicKeyHash));
-        assertEq(registry.pqKeyNonces(publicKeyHash), 1, "PQ nonce should be incremented");
+        address publicKeyAddress = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
+        console.log("Recovered fingerprint:", publicKeyAddress);
+        assertEq(registry.pqKeyNonces(publicKeyAddress), 1, "PQ nonce should be incremented");
         
         console.log("=== DEBUG: Calling confirmRegistration ===");
         console.log("About to call confirmRegistration with:");
@@ -295,8 +293,8 @@ contract PQRegistryIntegrationTest is Test {
         );
         
         // Verify registration is complete
-        assertEq(registry.epervierKeyToAddress(publicKeyHash), ethAddress, "epervierKeyToAddress mapping should be set");
-        assertEq(registry.addressToEpervierKey(ethAddress), publicKeyHash, "addressToEpervierKey mapping should be set");
+        assertEq(registry.epervierKeyToAddress(publicKeyAddress), ethAddress, "epervierKeyToAddress mapping should be set");
+        assertEq(registry.addressToEpervierKey(ethAddress), publicKeyAddress, "addressToEpervierKey mapping should be set");
         
         // Verify the intent was cleared (nonce incremented again)
         assertEq(registry.ethNonces(ethAddress), 2, "ETH nonce should be incremented twice");
