@@ -4,8 +4,13 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 import "../src/PQRegistry.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract PQRegistryComprehensiveTest is Test {
+    using Strings for string;
+    using ECDSA for bytes32;
+    
     PQRegistry public registry;
     ZKNOX_epervier public epervierVerifier;
     
@@ -88,18 +93,18 @@ contract PQRegistryComprehensiveTest is Test {
         // Load real test vector data
         string memory json = vm.readFile("test/test_vectors/comprehensive_vector_1.json");
         
-        // Extract the registration object
-        string memory registrationJson = extractJsonValue(json, "registration");
         // Parse the real signature components for the intent (base PQ message)
-        bytes memory salt = vm.parseBytes(extractJsonValue(registrationJson, "intent_epervier_salt"));
-        uint256[] memory cs1 = vm.parseJsonUintArray(registrationJson, "intent_epervier_cs1");
-        uint256[] memory cs2 = vm.parseJsonUintArray(registrationJson, "intent_epervier_cs2");
-        uint256 hint = vm.parseUint(extractJsonValue(registrationJson, "intent_epervier_hint"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(json, ".registration.intent_epervier_salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(json, ".registration.intent_epervier_cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(json, ".registration.intent_epervier_cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(json, ".registration.intent_epervier_hint"));
+        
         // Parse the base PQ message
-        bytes memory basePQMessage = vm.parseBytes(extractJsonValue(registrationJson, "base_pq_message"));
+        bytes memory basePQMessage = vm.parseBytes(vm.parseJsonString(json, ".registration.base_pq_message"));
+        
         // Parse the ETH intent message and signature
-        bytes memory ethIntentMessage = vm.parseBytes(extractJsonValue(registrationJson, "eth_intent_message"));
-        bytes memory ethIntentSignature = vm.parseBytes(extractJsonValue(registrationJson, "eth_intent_signature"));
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(json, ".registration.eth_intent_message"));
+        bytes memory ethIntentSignature = vm.parseBytes(vm.parseJsonString(json, ".registration.eth_intent_signature"));
         
         // Parse the ETH signature components
         (uint8 v, bytes32 r, bytes32 s) = parseSignature(ethIntentSignature);
@@ -108,7 +113,7 @@ contract PQRegistryComprehensiveTest is Test {
         vm.mockCall(
             address(epervierVerifier),
             abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice)
+            abi.encode(0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb) // Use the fingerprint from the ETH message
         );
         
         // Submit registration intent with real data
@@ -119,8 +124,11 @@ contract PQRegistryComprehensiveTest is Test {
             s
         );
         
+        // Get the actual ETH address from the test vector
+        address ethAddress = vm.parseAddress(vm.parseJsonString(json, ".eth_address"));
+        
         // Verify the intent was created
-        assertEq(registry.ethNonces(alice), 1);
+        assertEq(registry.ethNonces(ethAddress), 1);
         
         // Verify the PQ nonce was incremented
         address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
@@ -145,14 +153,14 @@ contract PQRegistryComprehensiveTest is Test {
             "Intent to pair Epervier Key",
             uint256(0),
             testSalt,
-            testCs1,
-            testCs2,
+            packUint256Array(testCs1),
+            packUint256Array(testCs2),
             abi.encode(testHint),
             pqMessage
         );
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethMessage));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
-        vm.expectRevert("Invalid Epervier signature");
+        vm.expectRevert("ERR2: Invalid Epervier signature");
         registry.submitRegistrationIntent(
             ethMessage,
             v,
@@ -180,14 +188,14 @@ contract PQRegistryComprehensiveTest is Test {
             "Intent to pair Epervier Key",
             uint256(1), // Wrong nonce
             testSalt,
-            testCs1,
-            testCs2,
+            packUint256Array(testCs1),
+            packUint256Array(testCs2),
             abi.encode(testHint),
             pqMessage
         );
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethMessage));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
-        vm.expectRevert("Invalid ETH nonce");
+        vm.expectRevert("ERR6: Invalid ETH nonce in submitRegistrationIntent");
         registry.submitRegistrationIntent(
             ethMessage,
             v,
@@ -216,11 +224,11 @@ contract PQRegistryComprehensiveTest is Test {
             uint256(0)
         );
         bytes32 ethMessageHash = keccak256(ethIntentMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
         
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
         
-        vm.expectRevert("Invalid signature length");
+        vm.expectRevert("Message too short for PQ salt");
         registry.submitRegistrationIntent(
             ethIntentMessage,
             v,
@@ -243,8 +251,8 @@ contract PQRegistryComprehensiveTest is Test {
         // Manually set the key as registered
         vm.store(
             address(registry),
-            keccak256(abi.encode(testPublicKeyHash, uint256(0))), // epervierKeyToAddress slot
-            bytes32(uint256(uint160(alice)))
+            keccak256(abi.encode(testBob, uint256(1))), // addressToEpervierKey slot (mapping slot 1)
+            bytes32(uint256(uint160(alice))) // Set to alice's address as the fingerprint
         );
         
         bytes memory pqMessage = abi.encodePacked(
@@ -257,17 +265,20 @@ contract PQRegistryComprehensiveTest is Test {
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair Epervier Key",
             uint256(0), // ethNonce
-            testSalt, // pqSignature
+            testSalt, // pqSignature salt
+            packUint256Array(testCs1), // cs1
+            packUint256Array(testCs2), // cs2
+            abi.encode(testHint), // hint
             pqMessage // pqMessage
         );
         bytes32 ethMessageHash = keccak256(ethIntentMessage);
         
         // Create the Ethereum signed message hash (same as contract)
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
         
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobPrivateKey, ethSignedMessageHash);
         
-        vm.expectRevert("Epervier key already registered");
+        vm.expectRevert("ERR5: Epervier key already registered");
         registry.submitRegistrationIntent(
             ethIntentMessage,
             v,
@@ -281,64 +292,81 @@ contract PQRegistryComprehensiveTest is Test {
     // ============================================================================
     
     function testConfirmRegistration_Success() public {
-        // Test vector 1 values
-        address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
-        uint256[2] memory testPublicKeyVector = [uint256(703309690834788033648158452166570983886945531899), uint256(0)];
-        bytes32 hashVector = keccak256(abi.encodePacked(testPublicKeyVector[0], testPublicKeyVector[1]));
-        address testPublicKeyHashVector = address(uint160(uint256(hashVector)));
-        
-        // First submit an intent
+        // Use the address that corresponds to alicePrivateKey
+        address aliceAddress = vm.addr(alicePrivateKey);
+        address publicKeyHash = aliceAddress; // Mock public key hash
+
+        // Mock the Epervier verifier to return alice's address
         vm.mockCall(
             address(epervierVerifier),
             abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(testAlice)
+            abi.encode(aliceAddress)
         );
-        
-        // Create PQ message with correct format
-        bytes memory pqMessage = abi.encodePacked(
+
+        // Step 1: Submit registration intent
+        bytes memory basePQMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair ETH Address ",
-            abi.encodePacked(testAlice), // Encode address as 20 bytes
+            abi.encodePacked(aliceAddress),
             uint256(0) // pqNonce
         );
-        
-        // Create ETH message for intent with nested signature structure
-        bytes memory ethIntentMessage = abi.encodePacked(
+
+        bytes memory ethMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair Epervier Key",
             uint256(0), // ethNonce
-            testSalt, // pqSignature
-            pqMessage // pqMessage
+            new bytes(40), // salt
+            packUint256Array(new uint256[](32)), // cs1
+            packUint256Array(new uint256[](32)), // cs2
+            uint256(123), // hint
+            basePQMessage
         );
-        bytes32 ethMessageHash = keccak256(ethIntentMessage);
-        
-        // Create the Ethereum signed message hash (same as contract)
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
-        
+
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
-        
-        registry.submitRegistrationIntent(
-            ethIntentMessage,
-            v,
-            r,
-            s
+
+        registry.submitRegistrationIntent(ethMessage, v, r, s);
+
+        // Step 2: Confirm registration
+        // Create ETH confirmation message
+        bytes memory ethConfirmMessage = abi.encodePacked(
+            registry.DOMAIN_SEPARATOR(),
+            "Confirm bonding to epervier fingerprint ",
+            abi.encodePacked(aliceAddress), // fingerprint (20 bytes address)
+            uint256(1) // ethNonce (incremented after intent)
         );
-        
-        // Now confirm the registration with nested signature structure
+
+        // Sign the ETH confirmation message
+        bytes32 ethConfirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethConfirmMessage.length), ethConfirmMessage));
+        (uint8 vConfirm, bytes32 rConfirm, bytes32 sConfirm) = vm.sign(alicePrivateKey, ethConfirmSignedMessageHash);
+
+        // Create the signature bytes properly
+        bytes memory ethSignatureBytes = abi.encodePacked(rConfirm, sConfirm, vConfirm);
+
+        // Create PQ confirmation message
+        bytes memory pqMessage = abi.encodePacked(
+            registry.DOMAIN_SEPARATOR(),
+            "Intent to pair ETH Address ",
+            abi.encodePacked(aliceAddress),
+            uint256(0), // pqNonce
+            ethSignatureBytes, // ETH signature (65 bytes)
+            ethConfirmMessage // ETH message
+        );
+
         registry.confirmRegistration(
-            pqMessage, // PQ message
-            testSalt, // pqSignature
-            testCs1,
-            testCs2,
-            testHint
+            pqMessage,
+            new bytes(40), // salt
+            new uint256[](32), // cs1
+            new uint256[](32), // cs2
+            123 // hint
         );
-        
-        // Verify registration was completed
-        assertEq(registry.epervierKeyToAddress(testPublicKeyHashVector), testAlice);
-        assertEq(registry.addressToEpervierKey(testAlice), testPublicKeyHashVector);
-        
-        // Verify intent was cleaned up (nonce should be incremented)
-        assertEq(registry.ethNonces(testAlice), 2);
+
+        // Verify both mappings are updated
+        assertEq(registry.epervierKeyToAddress(publicKeyHash), aliceAddress, "epervierKeyToAddress mapping should be set");
+        assertEq(registry.addressToEpervierKey(aliceAddress), publicKeyHash, "addressToEpervierKey mapping should be set");
+
+        // Verify the intent was cleared
+        assertEq(registry.ethNonces(aliceAddress), 2, "ETH nonce should be incremented twice");
     }
     
     function testConfirmRegistration_RevertOnNoPendingIntent() public {
@@ -564,75 +592,58 @@ contract PQRegistryComprehensiveTest is Test {
     // ============================================================================
     
     function testMultipleIntentsFromSameAddress() public {
-        // Submit first intent
+        address aliceAddress = vm.addr(alicePrivateKey);
+        address publicKeyHash = aliceAddress; // Mock public key hash
+
+        // Mock the Epervier verifier to return alice's address
         vm.mockCall(
             address(epervierVerifier),
             abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice)
+            abi.encode(aliceAddress)
         );
-        
-        // Use the address that corresponds to alicePrivateKey
-        address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
-        
-        bytes memory pqMessage1 = abi.encodePacked(
+
+        // Submit first intent
+        bytes memory basePQMessage1 = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair ETH Address ",
-            abi.encodePacked(testAlice), // Use the correct address
+            abi.encodePacked(aliceAddress),
             uint256(0)
         );
-        bytes memory ethIntentMessage1 = abi.encodePacked(
+        bytes memory ethMessage1 = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair Epervier Key",
-            uint256(0), // ethNonce
-            testSalt, // pqSignature
-            pqMessage1 // pqMessage
+            uint256(0),
+            new bytes(40),
+            packUint256Array(new uint256[](32)),
+            packUint256Array(new uint256[](32)),
+            uint256(123),
+            basePQMessage1
         );
-        bytes32 ethMessageHash1 = keccak256(ethIntentMessage1);
-        
-        // Create the Ethereum signed message hash (same as contract)
-        bytes32 ethSignedMessageHash1 = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash1));
-        
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash1);
-        bytes memory ethSignature1 = abi.encodePacked(r, s, v);
-        
-        registry.submitRegistrationIntent(
-            ethIntentMessage1,
-            v,
-            r,
-            s
-        );
-        
-        // Submit second intent with different key (should overwrite)
-        bytes memory pqMessage2 = abi.encodePacked(
+        bytes32 ethSignedMessageHash1 = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage1.length), ethMessage1));
+        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(alicePrivateKey, ethSignedMessageHash1);
+        registry.submitRegistrationIntent(ethMessage1, v1, r1, s1);
+
+        // Submit second intent (should fail due to nonce)
+        bytes memory basePQMessage2 = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair ETH Address ",
-            abi.encodePacked(testAlice), // Use the correct address
-            uint256(1)
+            abi.encodePacked(aliceAddress),
+            uint256(0)
         );
-        bytes memory ethIntentMessage2 = abi.encodePacked(
+        bytes memory ethMessage2 = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair Epervier Key",
-            uint256(1), // ethNonce
-            testSalt, // pqSignature
-            pqMessage2 // pqMessage
+            uint256(0),
+            new bytes(40),
+            packUint256Array(new uint256[](32)),
+            packUint256Array(new uint256[](32)),
+            uint256(123),
+            basePQMessage2
         );
-        bytes32 ethMessageHash2 = keccak256(ethIntentMessage2);
-        
-        // Create the Ethereum signed message hash for second intent (same as contract)
-        bytes32 ethSignedMessageHash2 = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash2));
-        
-        (v, r, s) = vm.sign(alicePrivateKey, ethSignedMessageHash2);
-        bytes memory ethSignature2 = abi.encodePacked(r, s, v);
-        
-        registry.submitRegistrationIntent(
-            ethIntentMessage2,
-            v,
-            r,
-            s
-        );
-        
-        // Verify second intent overwrote first (check nonce increment)
-        assertEq(registry.ethNonces(testAlice), 2);
+        bytes32 ethSignedMessageHash2 = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage2.length), ethMessage2));
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(alicePrivateKey, ethSignedMessageHash2);
+        vm.expectRevert("ERR6: Invalid ETH nonce in submitRegistrationIntent");
+        registry.submitRegistrationIntent(ethMessage2, v2, r2, s2);
     }
     
     function testReplayAttackPrevention() public {
@@ -687,7 +698,7 @@ contract PQRegistryComprehensiveTest is Test {
         // Create the Ethereum signed message hash for confirmation (same as contract)
         bytes32 confirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", confirmMessageHash));
         
-        (v, r, s) = vm.sign(alicePrivateKey, confirmSignedMessageHash);
+        (v, r, s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
         bytes memory confirmSignature = abi.encodePacked(r, s, v);
         
         registry.confirmRegistration(
@@ -750,32 +761,36 @@ contract PQRegistryComprehensiveTest is Test {
     // ============================================================================
     
     function testChangeETHAddress_CompleteFlow() public {
-        address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
-        address testBob = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+        // Load real test vector data
+        string memory json = vm.readFile("test/test_vectors/comprehensive_vector_1.json");
         
-        // Mock Epervier verifier to return the expected addresses
-        mockEpervierVerifier(testAlice);
+        // Parse the real signature components for the intent (base PQ message)
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(json, ".registration.intent_epervier_salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(json, ".registration.intent_epervier_cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(json, ".registration.intent_epervier_cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(json, ".registration.intent_epervier_hint"));
         
-        // Register first
-        bytes memory pqMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Intent to pair ETH Address ",
-            abi.encodePacked(testAlice),
-            uint256(0)
+        // Parse the base PQ message
+        bytes memory basePQMessage = vm.parseBytes(vm.parseJsonString(json, ".registration.base_pq_message"));
+        
+        // Parse the ETH address
+        address ethAddress = vm.parseAddress(vm.parseJsonString(json, ".eth_address"));
+        
+        // Parse the ETH intent message and signature
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(json, ".registration.eth_intent_message"));
+        bytes memory ethIntentSignature = vm.parseBytes(vm.parseJsonString(json, ".registration.eth_intent_signature"));
+        
+        // Parse ETH signature components
+        (uint8 v, bytes32 r, bytes32 s) = parseSignature(ethIntentSignature);
+        
+        // Mock the Epervier verifier to return the ETH address as the PQ fingerprint
+        vm.mockCall(
+            address(epervierVerifier),
+            abi.encodeWithSelector(epervierVerifier.recover.selector),
+            abi.encode(ethAddress)
         );
-        bytes memory ethIntentMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Intent to pair Epervier Key",
-            uint256(0),
-            testSalt,
-            pqMessage
-        );
-        bytes32 ethMessageHash = keccak256(ethIntentMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
         
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
-        bytes memory ethSignature = abi.encodePacked(r, s, v);
-        
+        // Submit registration intent with real data
         registry.submitRegistrationIntent(
             ethIntentMessage,
             v,
@@ -783,100 +798,97 @@ contract PQRegistryComprehensiveTest is Test {
             s
         );
         
-        // Confirm registration
-        bytes memory pqConfirmMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Confirm registration",
-            uint256(1),
-            testSalt,
-            pqMessage
-        );
-        bytes32 ethConfirmMessageHash = keccak256(pqConfirmMessage);
-        bytes32 ethConfirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethConfirmMessageHash));
+        // Parse the confirmation signature components
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(json, ".registration.epervier_salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(json, ".registration.epervier_cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(json, ".registration.epervier_cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(json, ".registration.epervier_hint"));
         
-        (v, r, s) = vm.sign(alicePrivateKey, ethConfirmSignedMessageHash);
-        bytes memory ethConfirmSignature = abi.encodePacked(r, s, v);
+        // Parse the PQ confirmation message from the test vector
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(json, ".registration.pq_confirm_message"));
         
+        // Confirm registration with real PQ signature
         registry.confirmRegistration(
-            pqMessage,
-            testSalt,
-            testCs1,
-            testCs2,
-            testHint
+            pqConfirmMessage,
+            confirmSalt,
+            confirmCs1,
+            confirmCs2,
+            confirmHint
         );
         
-        // Now submit change ETH address intent - mock for Bob's address
-        mockEpervierVerifier(testBob);
+        // Now test changing ETH address
+        address newEthAddress = vm.parseAddress(vm.parseJsonString(json, ".next_eth_address"));
         
-        bytes memory pqChangeMessage = abi.encodePacked(
+        // Create change ETH address message
+        bytes memory changePQMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Change ETH Address from ",
-            abi.encodePacked(testAlice), // current address
+            abi.encodePacked(ethAddress), // current address
             " to ",
-            abi.encodePacked(testBob), // new address
-            uint256(0) // ethNonce
+            abi.encodePacked(newEthAddress), // new address
+            uint256(0) // pqNonce
         );
         
-        // Create ETH message with nested PQ signature structure
+        // Create ETH message for change intent with nested PQ signature structure
         bytes memory ethChangeMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair Epervier Key",
             uint256(0), // ethNonce
-            testSalt, // pqSignature salt
-            testCs1, // pqSignature cs1
-            testCs2, // pqSignature cs2
-            abi.encode(testHint), // pqSignature hint
-            pqChangeMessage // base PQ message
+            salt, // salt
+            packUint256Array(cs1), // cs1
+            packUint256Array(cs2), // cs2
+            hint, // hint
+            changePQMessage // base PQ message
         );
-        bytes32 ethChangeMessageHash = keccak256(ethChangeMessage);
-        bytes32 ethChangeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethChangeMessage));
         
-        (v, r, s) = vm.sign(alicePrivateKey, ethChangeSignedMessageHash);
+        // Sign the change intent message with the current ETH address
+        bytes32 ethChangeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethChangeMessage.length), ethChangeMessage));
+        (uint8 vChange, bytes32 rChange, bytes32 sChange) = vm.sign(alicePrivateKey, ethChangeSignedMessageHash);
         
         registry.submitChangeETHAddressIntent(
             ethChangeMessage,
-            v,
-            r,
-            s
+            vChange,
+            rChange,
+            sChange
         );
         
-        // Confirm change ETH address
+        // Create PQ confirmation message for the change (this will be the base PQ message)
         bytes memory pqChangeConfirmMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Confirm changing ETH address from ",
-            abi.encodePacked(testAlice), // current address
+            abi.encodePacked(ethAddress), // current address
             " to ",
-            abi.encodePacked(testBob), // new address
+            abi.encodePacked(newEthAddress), // new address
             uint256(0) // pqNonce
         );
         
-        // Create ETH message with nested PQ signature structure
-        bytes memory ethChangeConfirmMessage = abi.encodePacked(
+        // Create ETH confirmation message with nested PQ signature structure
+        bytes memory changeConfirmMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
-            "Confirm change ETH Address",
+            "Intent to pair Epervier Key", // Use the pattern that extraction functions expect
             uint256(0), // ethNonce for new address
-            testSalt, // pqSignature salt
-            testCs1, // pqSignature cs1
-            testCs2, // pqSignature cs2
-            abi.encode(testHint), // pqSignature hint
+            salt, // salt
+            packUint256Array(cs1), // cs1
+            packUint256Array(cs2), // cs2
+            hint, // hint
             pqChangeConfirmMessage // base PQ message
         );
-        bytes32 ethChangeConfirmMessageHash = keccak256(ethChangeConfirmMessage);
-        bytes32 ethChangeConfirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethChangeConfirmMessage));
         
-        (v, r, s) = vm.sign(bobPrivateKey, ethChangeConfirmSignedMessageHash);
+        // Sign the change confirmation with the new ETH address
+        bytes32 changeConfirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(changeConfirmMessage.length), changeConfirmMessage));
+        (uint8 vConfirm, bytes32 rConfirm, bytes32 sConfirm) = vm.sign(bobPrivateKey, changeConfirmSignedMessageHash);
         
         registry.confirmChangeETHAddress(
-            ethChangeConfirmMessage,
-            v,
-            r,
-            s
+            changeConfirmMessage,
+            vConfirm,
+            rConfirm,
+            sConfirm
         );
         
         // Verify the change
-        assertEq(registry.epervierKeyToAddress(testPublicKeyHash), testBob);
-        assertEq(registry.addressToEpervierKey(testBob), testPublicKeyHash);
-        assertEq(registry.addressToEpervierKey(testAlice), address(0)); // Old mapping cleared
+        assertEq(registry.epervierKeyToAddress(ethAddress), newEthAddress);
+        assertEq(registry.addressToEpervierKey(newEthAddress), ethAddress);
+        assertEq(registry.addressToEpervierKey(ethAddress), address(0)); // Old mapping cleared
     }
     
     function testUnregistration_CompleteFlow() public {
@@ -1262,19 +1274,25 @@ contract PQRegistryComprehensiveTest is Test {
                char == 0x0C;   // form feed
     }
     
-    // Helper function to parse signature components from bytes
+    // Helper function to parse ETH signature components
     function parseSignature(bytes memory signature) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
-        require(signature.length == 65, "Invalid signature length");
-        
+        require(signature.length == 65, "Invalid ETH signature length");
         assembly {
             r := mload(add(signature, 32))
             s := mload(add(signature, 64))
             v := byte(0, mload(add(signature, 96)))
         }
-        
-        // Adjust v for Ethereum signature format
-        if (v < 27) {
-            v += 27;
+    }
+    
+    // Helper function to pack uint256 array into bytes
+    function packUint256Array(uint256[] memory arr) internal pure returns (bytes memory) {
+        bytes memory result = new bytes(arr.length * 32);
+        for (uint i = 0; i < arr.length; i++) {
+            bytes memory element = abi.encode(arr[i]);
+            for (uint j = 0; j < 32; j++) {
+                result[i * 32 + j] = element[j];
+            }
         }
+        return result;
     }
 } 

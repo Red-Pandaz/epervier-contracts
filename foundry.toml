@@ -22,4 +22,9 @@ optimizer_runs = 10000
 # EVM version matching verified contract
 evm_version = "cancun"
 
+# File system permissions for test files
+fs_permissions = [
+    { access = "read", path = "./test/test_vectors/" }
+]
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

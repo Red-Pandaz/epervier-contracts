@@ -4,8 +4,13 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 import "../src/PQRegistry.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract PQRegistryComprehensiveTest is Test {
+    using Strings for string;
+    using ECDSA for bytes32;
+    
     PQRegistry public registry;
     ZKNOX_epervier public epervierVerifier;
     
@@ -17,8 +22,8 @@ contract PQRegistryComprehensiveTest is Test {
     // Test keys
     uint256[2] public testPublicKey = [uint256(123), uint256(456)];
     uint256[2] public testPublicKey2 = [uint256(789), uint256(101)];
-    bytes32 public testPublicKeyHash;
-    bytes32 public testPublicKeyHash2;
+    address public testPublicKeyHash;
+    address public testPublicKeyHash2;
     
     // Test signature components (mock data)
     bytes public testSalt;
@@ -61,8 +66,18 @@ contract PQRegistryComprehensiveTest is Test {
         registry = new PQRegistry(address(epervierVerifier));
         
         // Calculate public key hashes
-        testPublicKeyHash = keccak256(abi.encodePacked(testPublicKey[0], testPublicKey[1]));
-        testPublicKeyHash2 = keccak256(abi.encodePacked(testPublicKey2[0], testPublicKey2[1]));
+        bytes32 hash1 = keccak256(abi.encodePacked(testPublicKey[0], testPublicKey[1]));
+        bytes32 hash2 = keccak256(abi.encodePacked(testPublicKey2[0], testPublicKey2[1]));
+        
+        // Convert bytes32 to address using manual conversion
+        uint256 addr1 = 0;
+        uint256 addr2 = 0;
+        for (uint j = 0; j < 20; j++) {
+            addr1 = (addr1 << 8) | uint8(hash1[j]);
+            addr2 = (addr2 << 8) | uint8(hash2[j]);
+        }
+        testPublicKeyHash = address(uint160(addr1));
+        testPublicKeyHash2 = address(uint160(addr2));
         
         // Setup mock signature components
         testSalt = new bytes(40);
@@ -176,7 +191,7 @@ contract PQRegistryComprehensiveTest is Test {
             );
             
             // Verify registration was confirmed
-            address registeredEth = registry.epervierKeyToAddress(keccak256(abi.encodePacked(vector.pqPublicKey[0], vector.pqPublicKey[1])));
+            address registeredEth = registry.epervierKeyToAddress(address(uint160(uint256(keccak256(abi.encodePacked(vector.pqPublicKey[0], vector.pqPublicKey[1]))))));
             assertEq(registeredEth, intentAddress);
         }
     }
@@ -235,7 +250,7 @@ contract PQRegistryComprehensiveTest is Test {
             );
             
             // Verify the change
-            address registeredEth = registry.epervierKeyToAddress(keccak256(abi.encodePacked(vector.pqPublicKey[0], vector.pqPublicKey[1])));
+            address registeredEth = registry.epervierKeyToAddress(address(uint160(uint256(keccak256(abi.encodePacked(vector.pqPublicKey[0], vector.pqPublicKey[1]))))));
             assertEq(registeredEth, newAddress);
         }
     }
@@ -292,11 +307,11 @@ contract PQRegistryComprehensiveTest is Test {
             );
             
             // Verify unregistration
-            address registeredEth = registry.epervierKeyToAddress(keccak256(abi.encodePacked(vector.pqPublicKey[0], vector.pqPublicKey[1])));
+            address registeredEth = registry.epervierKeyToAddress(address(uint160(uint256(keccak256(abi.encodePacked(vector.pqPublicKey[0], vector.pqPublicKey[1]))))));
             assertEq(registeredEth, address(0));
             
-            bytes32 registeredKey = registry.addressToEpervierKey(intentAddress);
-            assertEq(registeredKey, bytes32(0));
+            address registeredKey = registry.addressToEpervierKey(intentAddress);
+            assertEq(registeredKey, address(0));
         }
     }
     
@@ -584,6 +599,18 @@ contract PQRegistryComprehensiveTest is Test {
         return type(uint256).max;
     }
     
+    // Helper function to pack uint256 array into bytes
+    function packUint256Array(uint256[] memory arr) internal pure returns (bytes memory) {
+        bytes memory result = new bytes(arr.length * 32);
+        for (uint i = 0; i < arr.length; i++) {
+            bytes memory element = abi.encode(arr[i]);
+            for (uint j = 0; j < 32; j++) {
+                result[i * 32 + j] = element[j];
+            }
+        }
+        return result;
+    }
+    
     // Simple test that doesn't rely on complex test vectors
     function testBasicFunctionality() public {
         // Test basic constructor and initial state
@@ -596,7 +623,7 @@ contract PQRegistryComprehensiveTest is Test {
         
         // Test that no keys are registered initially
         assertEq(registry.epervierKeyToAddress(testPublicKeyHash), address(0));
-        assertEq(registry.addressToEpervierKey(alice), bytes32(0));
+        assertEq(registry.addressToEpervierKey(alice), address(0));
     }
     
     // Test with mock data instead of real test vectors
@@ -616,25 +643,24 @@ contract PQRegistryComprehensiveTest is Test {
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair ETH Address ",
             abi.encodePacked(aliceAddress),
-            uint256(0), // pqNonce
-            uint256(0), // ethNonce
-            abi.encodePacked(uint8(27), bytes32(0), bytes32(0)) // dummy ETH signature (v, r, s)
+            uint256(0) // pqNonce
         );
         
         // Build the ETH message with nested PQ signature components
+        // Format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
         bytes memory ethMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair Epervier Key",
             uint256(0), // ethNonce
             new bytes(40), // salt (40 bytes of zeros)
-            new uint256[](32), // cs1 (32 uint256 values of zeros)
-            new uint256[](32), // cs2 (32 uint256 values of zeros)
+            packUint256Array(new uint256[](32)), // cs1 (32 uint256 values of zeros)
+            packUint256Array(new uint256[](32)), // cs2 (32 uint256 values of zeros)
             uint256(123), // hint
             basePQMessage // base PQ message
         );
         
         // Sign the ETH message
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethMessage));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
         
         // Debug logging
@@ -649,8 +675,8 @@ contract PQRegistryComprehensiveTest is Test {
         assertEq(registry.ethNonces(aliceAddress), 1, "ETH nonce should be incremented");
         
         // Verify the PQ nonce was incremented to prevent replay attacks
-        bytes32 publicKeyHash = bytes32(uint256(uint160(aliceAddress))); // Mock public key hash
-        assertEq(registry.pqKeyNonces(publicKeyHash), 1, "PQ nonce should be incremented");
+        address publicKeyHash = aliceAddress; // Mock public key hash
+        assertEq(uint256(registry.pqKeyNonces(publicKeyHash)), 1, "PQ nonce should be incremented");
         
         // Verify the intent was stored in pendingIntents mapping
         // Check that the intent exists by verifying the timestamp is non-zero
@@ -662,7 +688,7 @@ contract PQRegistryComprehensiveTest is Test {
     function testMockFullRegistration() public {
         // Use the address that corresponds to alicePrivateKey
         address aliceAddress = vm.addr(alicePrivateKey);
-        bytes32 publicKeyHash = bytes32(uint256(uint160(aliceAddress))); // Mock public key hash
+        address publicKeyHash = aliceAddress; // Mock public key hash
         
         // Mock the Epervier verifier to return alice's address
         vm.mockCall(
@@ -676,9 +702,7 @@ contract PQRegistryComprehensiveTest is Test {
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair ETH Address ",
             abi.encodePacked(aliceAddress),
-            uint256(0), // pqNonce
-            uint256(0), // ethNonce
-            abi.encodePacked(uint8(27), bytes32(0), bytes32(0)) // dummy ETH signature
+            uint256(0) // pqNonce
         );
         
         bytes memory ethMessage = abi.encodePacked(
@@ -686,25 +710,41 @@ contract PQRegistryComprehensiveTest is Test {
             "Intent to pair Epervier Key",
             uint256(0), // ethNonce
             new bytes(40), // salt
-            new uint256[](32), // cs1
-            new uint256[](32), // cs2
+            packUint256Array(new uint256[](32)), // cs1
+            packUint256Array(new uint256[](32)), // cs2
             uint256(123), // hint
             basePQMessage
         );
         
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethMessage));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
         
         registry.submitRegistrationIntent(ethMessage, v, r, s);
         
         // Step 2: Confirm registration
+        // Create ETH confirmation message
+        bytes memory ethConfirmMessage = abi.encodePacked(
+            registry.DOMAIN_SEPARATOR(),
+            "Confirm bonding to epervier fingerprint ",
+            abi.encodePacked(aliceAddress), // fingerprint (20 bytes address)
+            uint256(1) // ethNonce (incremented after intent)
+        );
+        
+        // Sign the ETH confirmation message
+        bytes32 ethConfirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethConfirmMessage.length), ethConfirmMessage));
+        (uint8 vConfirm, bytes32 rConfirm, bytes32 sConfirm) = vm.sign(alicePrivateKey, ethConfirmSignedMessageHash);
+        
+        // Create the signature bytes properly
+        bytes memory ethSignatureBytes = abi.encodePacked(rConfirm, sConfirm, vConfirm);
+        
+        // Create PQ confirmation message
         bytes memory pqMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
-            "Confirm registration Address: ",
+            "Intent to pair ETH Address ",
             abi.encodePacked(aliceAddress),
             uint256(0), // pqNonce
-            abi.encodePacked(uint8(27), bytes32(0), bytes32(0)), // ETH signature
-            ethMessage // ETH message
+            ethSignatureBytes, // ETH signature (65 bytes)
+            ethConfirmMessage // ETH message
         );
         
         registry.confirmRegistration(
@@ -763,17 +803,25 @@ contract PQRegistryComprehensiveTest is Test {
         assertEq(registry.ethNonces(ethAddress), 1, "ETH nonce should be incremented");
         
         // Verify the PQ nonce was incremented
-        bytes32 publicKeyHash = keccak256(abi.encodePacked(
-            vm.parseUint(extractJsonValue(json, "pq_public_key[0]")),
-            vm.parseUint(extractJsonValue(json, "pq_public_key[1]"))
-        ));
-        assertEq(registry.pqKeyNonces(publicKeyHash), 1, "PQ nonce should be incremented");
+        address publicKeyHash = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            vm.parseUint(extractJsonValue(json, "pq_public_key[0]")),
+                            vm.parseUint(extractJsonValue(json, "pq_public_key[1]"))
+                        )
+                    )
+                )
+            )
+        );
+        assertEq(uint256(registry.pqKeyNonces(publicKeyHash)), 1, "PQ nonce should be incremented");
         
         // Verify the intent was stored in pendingIntents mapping
         // The Epervier verifier should return the public key hash, which becomes the fingerprint
         // We can check this by calling the verifier directly to see what it returns
         address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
-        bytes32 expectedFingerprint = bytes32(uint256(uint160(recoveredFingerprint)));
+        address expectedFingerprint = publicKeyHash;
         
         // Check that the intent was stored with the correct fingerprint
         // We can verify the intent exists by checking that the ETH nonce was incremented
@@ -782,6 +830,6 @@ contract PQRegistryComprehensiveTest is Test {
         assertGt(registry.pqKeyNonces(publicKeyHash), 0, "Intent should be stored (PQ nonce > 0)");
         
         // Additional verification: the recovered fingerprint should match the expected public key hash
-        assertEq(expectedFingerprint, publicKeyHash, "Recovered fingerprint should match public key hash");
+        assertEq(recoveredFingerprint, publicKeyHash, "Recovered fingerprint should match public key hash");
     }
 } 
