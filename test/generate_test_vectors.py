@@ -232,6 +232,7 @@ def generate_comprehensive_test_vectors():
         # ============================================================================
         
         # Step 1: Create base PQ message for registration intent
+        # Schema: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + ethAddress + pqNonce
         eth_address_bytes = bytes.fromhex(eth_address[2:])
         base_pq_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
@@ -245,16 +246,23 @@ def generate_comprehensive_test_vectors():
         epervier_sig = generate_epervier_signature(base_pq_message, i)
         
         # Step 3: Create ETH message that includes the PQ signature components
+        # Schema: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
         eth_intent_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Intent to pair Epervier Key",
-            (0).to_bytes(32, 'big'),  # ethNonce
-            bytes.fromhex(epervier_sig["salt"][2:]),  # pqSignature salt
-            pack_uint256_array(epervier_sig["cs1"]),  # cs1 as 32*32 bytes, no prefix
-            pack_uint256_array(epervier_sig["cs2"]),  # cs2 as 32*32 bytes, no prefix
-            epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint
-            base_pq_message  # pqMessage
+            base_pq_message,  # basePQMessage (111 bytes)
+            bytes.fromhex(epervier_sig["salt"][2:]),  # pqSignature salt (40 bytes)
+            pack_uint256_array(epervier_sig["cs1"]),  # cs1 as 32*32 bytes (1024 bytes)
+            pack_uint256_array(epervier_sig["cs2"]),  # cs2 as 32*32 bytes (1024 bytes)
+            epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint (32 bytes)
+            (0).to_bytes(32, 'big')  # ethNonce (32 bytes)
         )
+        
+        # Verify the ETH intent message length matches schema (2322 bytes)
+        eth_intent_length = len(eth_intent_message)
+        print(f"  ETH intent message length: {eth_intent_length} bytes (should be 2322)")
+        if eth_intent_length != 2322:
+            print(f"  WARNING: ETH intent message length is {eth_intent_length}, expected 2322")
                 
         # Step 4: Sign the ETH message
         # Use the same format as the contract: "\x19Ethereum Signed Message:\n" + length + message
@@ -265,12 +273,6 @@ def generate_comprehensive_test_vectors():
         eth_signature = Account._sign_hash(eth_message_hash, private_key=account.key)
         
         # Step 5: Create ETH confirmation message and signature
-        # Create ETH confirmation message with fingerprint
-        # The fingerprint should be the address recovered from the PQ signature verification
-        # We need to use the actual recovered address from the Epervier signature
-        # For now, we'll use a mock recovered address that we know the contract will accept
-        # In a real implementation, this would be the actual address recovered from the PQ signature
-        
         # Mock recovered fingerprint - this should match what the contract recovers
         # We'll use a deterministic address based on the key index
         recovered_fingerprint = bytes.fromhex("7b317f4d231cbc63de7c6c690ef4ba9c653437fb")
@@ -280,52 +282,52 @@ def generate_comprehensive_test_vectors():
         print(f"  Generated fingerprint: 0x{pq_fingerprint.hex()}")
         print(f"  Expected fingerprint: 0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb")
         
-        print(f"ETH confirmation fingerprint (should match contract): 0x{pq_fingerprint.hex()}")
-        
-        # NEW FORMAT: ETH confirmation message should be:
-        # DOMAIN_SEPARATOR + "Confirm binding Fingerprint " + fingerprint + " to ETH Address " + ethAddress + ethNonce
+        # Schema: DOMAIN_SEPARATOR + "Confirm bonding to epervier fingerprint " + pqFingerprint + ethNonce
         eth_confirm_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Confirm binding Fingerprint ",
+            "Confirm bonding to epervier fingerprint ",
             pq_fingerprint,  # fingerprint address (20 bytes)
-            " to ETH Address ",
-            eth_address_bytes,  # ETH address (20 bytes)
             (1).to_bytes(32, 'big')  # ethNonce (incremented after intent)
         )
         
-        # Sign the ETH confirmation message
+        # Verify the ETH confirmation message length matches schema (124 bytes)
         eth_confirm_length = len(eth_confirm_message)
+        print(f"  ETH confirmation message length: {eth_confirm_length} bytes (should be 124)")
+        if eth_confirm_length != 124:
+            print(f"  WARNING: ETH confirmation message length is {eth_confirm_length}, expected 124")
+        
+        # Sign the ETH confirmation message
         eth_confirm_signed = b"\x19Ethereum Signed Message:\n" + str(eth_confirm_length).encode() + eth_confirm_message
         eth_confirm_hash = keccak(eth_confirm_signed)
         eth_confirm_signature = Account._sign_hash(eth_confirm_hash, private_key=account.key)
         
         # Step 6: Create PQ message for registration confirmation (PQ key signs with ETH sig nested)
-        # NEW FORMAT: DOMAIN_SEPARATOR + "Confirm binding ETH Address " + ethAddress + " to Fingerprint " + fingerprintAddress + pqNonce + ethSignature + ETH_message
-        # The contract expects the signature at offset 160, so we need to ensure the PQ header is exactly 160 bytes
-        pq_header = abi_encode_packed(
+        # Schema: DOMAIN_SEPARATOR + "Confirm binding ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+        pq_confirm_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Confirm binding ETH Address ",
-            eth_address_bytes,
-            " to Fingerprint ",
-            pq_fingerprint,  # fingerprint address (20 bytes)
-            (0).to_bytes(32, 'big')  # pqNonce
+            b"Confirm binding ETH Address ",  # 28 bytes pattern (was previously 27?)
+            eth_address_bytes,  # ETH address (20 bytes)
+            eth_confirm_message,  # baseETHMessage (124 bytes)
+            eth_confirm_signature.v.to_bytes(1, 'big'),  # v (1 byte)
+            eth_confirm_signature.r.to_bytes(32, 'big'),  # r (32 bytes)
+            eth_confirm_signature.s.to_bytes(32, 'big'),   # s (32 bytes)
+            (0).to_bytes(32, 'big')  # pqNonce (32 bytes)
         )
+        # Ensure correct length (should be 285 bytes)
+        if len(pq_confirm_message) != 285:
+            print(f"  WARNING: PQ confirmation message length is {len(pq_confirm_message)}, expected 285")
         
-        # Verify the header length is exactly 160 bytes
-        header_length = len(pq_header)
-        print(f"  PQ header length: {header_length} bytes (should be 160)")
-        if header_length != 160:
-            print(f"  WARNING: PQ header length is {header_length}, expected 160")
-            # Pad or truncate to exactly 160 bytes
-            if header_length < 160:
-                # Pad with zeros
-                padding = b'\x00' * (160 - header_length)
-                pq_header = pq_header + padding
-            else:
-                # Truncate (this shouldn't happen with the current format)
-                pq_header = pq_header[:160]
-        
-        pq_confirm_message = pq_header + eth_confirm_signature.signature + eth_confirm_message
+        # Debug: Show the field offsets to verify they match the contract
+        print(f"  === DEBUG: PQ Confirmation Message Structure ===")
+        print(f"  DOMAIN_SEPARATOR: 0-31 (32 bytes)")
+        print(f"  Pattern: 32-59 (28 bytes): 'Confirm binding ETH Address '")
+        print(f"  ethAddress: 60-79 (20 bytes)")
+        print(f"  baseETHMessage: 80-203 (124 bytes)")
+        print(f"  v: 204 (1 byte)")
+        print(f"  r: 205-236 (32 bytes)")
+        print(f"  s: 237-268 (32 bytes)")
+        print(f"  pqNonce: 269-300 (32 bytes)")
+        print(f"  Total: {len(pq_confirm_message)} bytes")
         
         # Generate Epervier signature for the confirmation message
         print(f"  Generating Epervier signature for registration confirmation...")
@@ -335,33 +337,42 @@ def generate_comprehensive_test_vectors():
         # REMOVE INTENT FLOW
         # ============================================================================
         
-        # Create remove intent message with new format: DOMAIN_SEPARATOR + "Remove intent from address " + address + pqNonce
-        # The fingerprint is the address representation of the recovered PQ address
+        # Schema: DOMAIN_SEPARATOR + "Remove intent from address" + pqFingerprint + ethNonce
+        # Note: This references the PQ fingerprint, not the ETH address
         remove_intent_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Remove intent from address ",
-            eth_address_bytes,  # ETH address (20 bytes)
+            b"Remove intent from address",  # 26 bytes pattern (no trailing space)
+            pq_fingerprint,  # PQ fingerprint (20 bytes)
             (1).to_bytes(32, 'big')  # ethNonce (incremented after intent submission)
         )
+        # Ensure correct length (should be 110 bytes)
+        if len(remove_intent_message) != 110:
+            print(f"  WARNING: Remove intent message length is {len(remove_intent_message)}, expected 110")
         
         # Debug: Print the exact bytes and offsets
         print(f"  === DEBUG: Remove Intent Message Construction ===")
         print(f"  DOMAIN_SEPARATOR length: {len(DOMAIN_SEPARATOR)} bytes")
-        pattern = "Remove intent from address "
+        pattern = "Remove intent from address"
         print(f"  Pattern: '{pattern}' (length: {len(pattern)} bytes)")
         print(f"  Pattern bytes: {pattern.encode('utf-8').hex()}")
+        print(f"  pqFingerprint: {pq_fingerprint.hex()}")
         print(f"  ethNonce: 1 (32 bytes: {(1).to_bytes(32, 'big').hex()})")
-        print(f"  fingerprint: {pq_fingerprint.hex()}")
         print(f"  Total message length: {len(remove_intent_message)} bytes")
         print(f"  Full message: {remove_intent_message.hex()}")
         
         # Debug: Show the expected offsets
-        expected_nonce_offset = 32 + 25  # DOMAIN_SEPARATOR + pattern
-        expected_fingerprint_offset = 32 + 25 + 32  # DOMAIN_SEPARATOR + pattern + nonce
-        print(f"  Expected nonce offset: {expected_nonce_offset}")
+        expected_fingerprint_offset = 32 + 26  # DOMAIN_SEPARATOR + pattern
+        expected_nonce_offset = 32 + 26 + 20  # DOMAIN_SEPARATOR + pattern + fingerprint
         print(f"  Expected fingerprint offset: {expected_fingerprint_offset}")
+        print(f"  Expected nonce offset: {expected_nonce_offset}")
         
         # Debug: Extract and show the bytes at the expected offsets
+        if len(remove_intent_message) >= expected_fingerprint_offset + 20:
+            fingerprint_bytes = remove_intent_message[expected_fingerprint_offset:expected_fingerprint_offset + 20]
+            print(f"  Fingerprint bytes at offset {expected_fingerprint_offset}: {fingerprint_bytes.hex()}")
+        else:
+            print(f"  ERROR: Message too short for fingerprint extraction")
+            
         if len(remove_intent_message) >= expected_nonce_offset + 32:
             nonce_bytes = remove_intent_message[expected_nonce_offset:expected_nonce_offset + 32]
             print(f"  Nonce bytes at offset {expected_nonce_offset}: {nonce_bytes.hex()}")
@@ -369,12 +380,6 @@ def generate_comprehensive_test_vectors():
             print(f"  Nonce value: {nonce_value}")
         else:
             print(f"  ERROR: Message too short for nonce extraction")
-            
-        if len(remove_intent_message) >= expected_fingerprint_offset + 20:
-            fingerprint_bytes = remove_intent_message[expected_fingerprint_offset:expected_fingerprint_offset + 20]
-            print(f"  Fingerprint bytes at offset {expected_fingerprint_offset}: {fingerprint_bytes.hex()}")
-        else:
-            print(f"  ERROR: Message too short for fingerprint extraction")
         
         # Sign the remove intent message
         remove_message_length = len(remove_intent_message)
@@ -394,10 +399,11 @@ def generate_comprehensive_test_vectors():
         next_eth_address = next_account.address
         
         # Create base PQ message for change ETH address
+        # Schema: DOMAIN_SEPARATOR + "Confirm changing ETH address from " + oldEthAddress + " to " + newEthAddress + pqNonce
         next_eth_address_bytes = bytes.fromhex(next_eth_address[2:])
         change_pq_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Change ETH Address from ",
+            "Confirm changing ETH address from ",
             eth_address_bytes,  # current address
             " to ",
             next_eth_address_bytes,  # new address
@@ -409,17 +415,18 @@ def generate_comprehensive_test_vectors():
         change_epervier_sig = generate_epervier_signature(change_pq_message, (i + 1) % len(pq_keys))
         
         # Create ETH message for change ETH address confirmation
-        # NEW FORMAT: DOMAIN_SEPARATOR + "Confirm change ETH Address" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
+        # Schema: DOMAIN_SEPARATOR + "Confirm change ETH Address" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
         change_confirm_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Confirm change ETH Address",
-            (0).to_bytes(32, 'big'),  # ethNonce for new address
-            bytes.fromhex(change_epervier_sig["salt"][2:]),  # pqSignature salt
-            pack_uint256_array(change_epervier_sig["cs1"]),  # cs1 as 32*32 bytes, no prefix
-            pack_uint256_array(change_epervier_sig["cs2"]),  # cs2 as 32*32 bytes, no prefix
-            change_epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint
-            change_pq_message  # Include the PQ message that was signed
+            change_pq_message,  # basePQMessage (140 bytes)
+            bytes.fromhex(change_epervier_sig["salt"][2:]),  # pqSignature salt (40 bytes)
+            pack_uint256_array(change_epervier_sig["cs1"]),  # cs1 as 32*32 bytes (1024 bytes)
+            pack_uint256_array(change_epervier_sig["cs2"]),  # cs2 as 32*32 bytes (1024 bytes)
+            change_epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint (32 bytes)
+            (0).to_bytes(32, 'big')  # ethNonce for new address (32 bytes)
         )
+        
         # Use the same format as the contract: "\x19Ethereum Signed Message:\n" + length + message
         change_confirm_length = len(change_confirm_message)
         change_confirm_signed = b"\x19Ethereum Signed Message:\n" + str(change_confirm_length).encode() + change_confirm_message
@@ -427,22 +434,29 @@ def generate_comprehensive_test_vectors():
         change_confirm_signature = Account._sign_hash(change_confirm_hash, private_key=next_account.key)
         
         # Create PQ message for change ETH address confirmation (PQ key signs with ETH sig nested)
-        # NEW FORMAT: DOMAIN_SEPARATOR + "Confirm changing ETH address from " + currentAddress + " to " + newAddress + pqNonce + ethSignature + ETH_message
-        # The contract expects the signature at a specific offset, so we need to ensure the PQ header is exactly the right length
-        change_pq_header = abi_encode_packed(
+        # Schema: DOMAIN_SEPARATOR + "Change ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
+        # First create the base ETH message for change intent
+        base_eth_change_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Confirm changing ETH address from ",
+            "Intent to Change ETH Address for fingeprint ",
+            pq_fingerprint,  # pqFingerprint (20 bytes)
+            " to ",
+            next_eth_address_bytes,  # newEthAddress (20 bytes)
+            (0).to_bytes(32, 'big')  # ethNonce (32 bytes)
+        )
+        
+        change_confirm_pq_message = abi_encode_packed(
+            DOMAIN_SEPARATOR,
+            "Change ETH Address from ",
             eth_address_bytes,  # current address
             " to ",
             next_eth_address_bytes,  # new address
-            (0).to_bytes(32, 'big')  # pqNonce
+            base_eth_change_message,  # baseETHMessage (152 bytes)
+            change_confirm_signature.v.to_bytes(1, 'big'),  # v (1 byte)
+            change_confirm_signature.r.to_bytes(32, 'big'),  # r (32 bytes)
+            change_confirm_signature.s.to_bytes(32, 'big'),   # s (32 bytes)
+            (0).to_bytes(32, 'big')  # pqNonce (32 bytes)
         )
-        
-        # Verify the header length and adjust if needed
-        change_header_length = len(change_pq_header)
-        print(f"  Change PQ header length: {change_header_length} bytes")
-        
-        change_confirm_pq_message = change_pq_header + change_confirm_signature.signature + change_confirm_message
         
         # Generate Epervier signature for change ETH address confirmation
         print(f"  Generating Epervier signature for change ETH address confirmation...")
@@ -453,12 +467,12 @@ def generate_comprehensive_test_vectors():
         # ============================================================================
         
         # Create test data for unregistration
-        # NEW FORMAT: DOMAIN_SEPARATOR + "Confirm unregistration from PQ fingerprint" + ethAddress + pqNonce
+        # Schema: DOMAIN_SEPARATOR + "Confirm unregistration from ETH Address" + ethAddress + pqNonce
         unreg_pq_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Confirm unregistration from PQ fingerprint",
+            "Confirm unregistration from ETH Address",
             next_eth_address_bytes,  # Use the new address
-            (2).to_bytes(32, 'big')  # ethNonce (incremented)
+            (2).to_bytes(32, 'big')  # pqNonce (32 bytes)
         )
         
         # Generate Epervier signature for unregistration
@@ -466,17 +480,19 @@ def generate_comprehensive_test_vectors():
         unreg_epervier_sig = generate_epervier_signature(unreg_pq_message, (i + 2) % len(pq_keys))
         
         # Create ETH message for unregistration confirmation
-        # NEW FORMAT: DOMAIN_SEPARATOR + "Confirm unregistration from PQ fingerprint" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
+        # Schema: DOMAIN_SEPARATOR + "Confirm unregistration from PQ fingerprint" + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
         unreg_confirm_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Confirm unregistration from PQ fingerprint",
-            (2).to_bytes(32, 'big'),  # ethNonce
-            bytes.fromhex(unreg_epervier_sig["salt"][2:]),  # pqSignature salt
-            pack_uint256_array(unreg_epervier_sig["cs1"]),  # cs1 as 32*32 bytes, no prefix
-            pack_uint256_array(unreg_epervier_sig["cs2"]),  # cs2 as 32*32 bytes, no prefix
-            unreg_epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint
-            unreg_pq_message  # Include the PQ message that was signed
+            pq_fingerprint,  # pqFingerprint (20 bytes)
+            unreg_pq_message,  # basePQMessage (111 bytes)
+            bytes.fromhex(unreg_epervier_sig["salt"][2:]),  # pqSignature salt (40 bytes)
+            pack_uint256_array(unreg_epervier_sig["cs1"]),  # cs1 as 32*32 bytes (1024 bytes)
+            pack_uint256_array(unreg_epervier_sig["cs2"]),  # cs2 as 32*32 bytes (1024 bytes)
+            unreg_epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint (32 bytes)
+            (2).to_bytes(32, 'big')  # ethNonce (32 bytes)
         )
+        
         # Use the same format as the contract: "\x19Ethereum Signed Message:\n" + length + message
         unreg_confirm_length = len(unreg_confirm_message)
         unreg_confirm_signed = b"\x19Ethereum Signed Message:\n" + str(unreg_confirm_length).encode() + unreg_confirm_message
@@ -571,15 +587,16 @@ def generate_simple_test_vector():
     epervier_sig = generate_epervier_signature(base_pq_message, 0)
     
     # Create ETH message that includes the PQ signature components
+    # Schema: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
     eth_intent_message = abi_encode_packed(
         DOMAIN_SEPARATOR,
         "Intent to pair Epervier Key",
-        (0).to_bytes(32, 'big'),  # ethNonce
-        bytes.fromhex(epervier_sig["salt"][2:]),  # pqSignature salt
-        pack_uint256_array(epervier_sig["cs1"]),  # cs1 as 32*32 bytes, no prefix
-        pack_uint256_array(epervier_sig["cs2"]),  # cs2 as 32*32 bytes, no prefix
-        epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint
-        base_pq_message  # pqMessage
+        base_pq_message,  # basePQMessage (111 bytes)
+        bytes.fromhex(epervier_sig["salt"][2:]),  # pqSignature salt (40 bytes)
+        pack_uint256_array(epervier_sig["cs1"]),  # cs1 as 32*32 bytes (1024 bytes)
+        pack_uint256_array(epervier_sig["cs2"]),  # cs2 as 32*32 bytes (1024 bytes)
+        epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint (32 bytes)
+        (0).to_bytes(32, 'big')  # ethNonce (32 bytes)
     )
     
     # Sign the ETH message

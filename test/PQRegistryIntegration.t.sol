@@ -236,6 +236,16 @@ contract PQRegistryIntegrationTest is Test {
         console.log("Expected ETH address:", ethAddress);
         console.log("Recovered ETH address:", recoveredAddress);
         console.log("Addresses match:", ethAddress == recoveredAddress);
+        console.log("ETH message hash:", uint256(ethMessageHash));
+        console.log("ETH signed message hash:", uint256(ethSignedMessageHash));
+        console.log("ETH signature v:", v);
+        console.log("ETH signature r:", uint256(r));
+        console.log("ETH signature s:", uint256(s));
+        
+        // Also verify the signature using OpenZeppelin's recover function
+        address openZeppelinRecovered = ECDSA.recover(ethSignedMessageHash, v, r, s);
+        console.log("OpenZeppelin recovered address:", openZeppelinRecovered);
+        console.log("OpenZeppelin addresses match:", ethAddress == openZeppelinRecovered);
         
         // Verify the intent was created
         assertEq(registry.ethNonces(ethAddress), 1, "ETH nonce should be incremented");
