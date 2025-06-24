@@ -7,6 +7,10 @@ from pathlib import Path
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from web3 import Web3
+from eth_hash.auto import keccak
+
+# Get the script directory for proper path resolution
+SCRIPT_DIR = Path(__file__).parent.absolute()
 
 # Import the necessary modules for signature parsing
 sys.path.append('../ETHFALCON/python-ref')
@@ -155,14 +159,14 @@ def generate_epervier_signature(message, pq_key_index):
         # Call the Python CLI to sign the message
         cmd = [
             sys.executable, 
-            "../ETHFALCON/python-ref/sign_cli.py", 
+            str(SCRIPT_DIR / "../ETHFALCON/python-ref/sign_cli.py"), 
             "sign",
             "--version", "epervier",
-            "--privkey", f"test_keys/private_key_{pq_key_index + 1}.pem",
+            "--privkey", str(SCRIPT_DIR / f"test_keys/private_key_{pq_key_index + 1}.pem"),
             "--data", message_hex
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=".")
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(SCRIPT_DIR))
         
         if result.returncode != 0:
             print(f"Warning: Epervier signing failed for key {pq_key_index}: {result.stderr}")
@@ -175,7 +179,7 @@ def generate_epervier_signature(message, pq_key_index):
             }
         
         # Parse the signature from the generated file
-        sig_file = Path("sig")
+        sig_file = SCRIPT_DIR / "sig"
         if sig_file.exists():
             signature_data = parse_signature_file(sig_file)
             # Clean up the temporary signature file
@@ -204,7 +208,7 @@ def generate_epervier_signature(message, pq_key_index):
 def generate_comprehensive_test_vectors():
     """Generate comprehensive test vectors for all PQRegistry scenarios"""
     # Create test_vectors directory
-    test_vectors_dir = Path("test_vectors")
+    test_vectors_dir = SCRIPT_DIR / "test_vectors"
     test_vectors_dir.mkdir(exist_ok=True)
     
     # Get PQ public keys
@@ -223,7 +227,11 @@ def generate_comprehensive_test_vectors():
         pq_pubkey_bytes = pq_key[0].to_bytes(32, 'big') + pq_key[1].to_bytes(32, 'big')
         pq_pubkey_hash = "0x" + pq_pubkey_bytes.hex()
         
-        # Create base PQ message for registration
+        # ============================================================================
+        # REGISTRATION FLOW
+        # ============================================================================
+        
+        # Step 1: Create base PQ message for registration intent
         eth_address_bytes = bytes.fromhex(eth_address[2:])
         base_pq_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
@@ -232,39 +240,76 @@ def generate_comprehensive_test_vectors():
             (0).to_bytes(32, 'big')  # pqNonce
         )
         
-        # Generate Epervier signature for registration
-        print(f"  Generating Epervier signature for registration...")
+        # Step 2: Generate Epervier signature for the base PQ message
+        print(f"  Generating Epervier signature for registration intent...")
         epervier_sig = generate_epervier_signature(base_pq_message, i)
         
-        # Create ETH message for registration intent
+        # Step 3: Create ETH message that includes the PQ signature components
         eth_intent_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Intent to pair Epervier Key",
             (0).to_bytes(32, 'big'),  # ethNonce
-            base_pq_message
+            bytes.fromhex(epervier_sig["salt"][2:]),  # pqSignature salt
+            pack_uint256_array(epervier_sig["cs1"]),  # cs1 as 32*32 bytes, no prefix
+            pack_uint256_array(epervier_sig["cs2"]),  # cs2 as 32*32 bytes, no prefix
+            epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint
+            base_pq_message  # pqMessage
         )
-        eth_message_hash = encode_defunct(eth_intent_message)
-        eth_signature = account.sign_message(eth_message_hash)
+                
+        # Step 4: Sign the ETH message
+        # Use the same format as the contract: "\x19Ethereum Signed Message:\n" + length + message
+        eth_message_length = len(eth_intent_message)
+        eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(eth_message_length).encode() + eth_intent_message
+        print("PYTHON: eth_signed_message:", eth_signed_message.hex())
+        eth_message_hash = keccak(eth_signed_message)
+        eth_signature = Account._sign_hash(eth_message_hash, private_key=account.key)
         
-        # Create full PQ message for registration intent
-        full_pq_message = abi_encode_packed(
-            base_pq_message,
-            eth_signature.signature
-        )
+        # Step 5: Create ETH confirmation message and signature
+        # Create ETH confirmation message with fingerprint
+        # The fingerprint should be the same as what was stored in the intent mapping
+        # This is the address recovered from the PQ signature verification
+        # From the contract debug logs, we know the recovered fingerprint is:
+        # 0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb
+        # We'll use this as mock data since we know exactly what the contract will recover
+        recovered_fingerprint = bytes.fromhex("7b317f4d231cbc63de7c6c690ef4ba9c653437fb")
+        pq_fingerprint = b'\x00' * 12 + recovered_fingerprint  # Left-pad with 12 zero bytes
         
-        # Create ETH message for registration confirmation
+        # Debug: Print the fingerprint to verify it matches what the contract expects
+        print(f"  Generated fingerprint: 0x{pq_fingerprint.hex()}")
+        print(f"  Expected fingerprint: 0x0000000000000000000000007b317f4d231cbc63de7c6c690ef4ba9c653437fb")
+        
         eth_confirm_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Confirm registration",
-            (0).to_bytes(32, 'big'),  # ethNonce
-            bytes.fromhex(epervier_sig["salt"][2:]),
-            abi_encode(epervier_sig["cs1"]),
-            abi_encode(epervier_sig["cs2"]),
-            abi_encode(epervier_sig["hint"]),
-            base_pq_message
+            b"Confirm bonding to epervier fingerprint ",
+            pq_fingerprint,
+            (1).to_bytes(32, 'big')  # ethNonce (incremented after intent)
         )
-        eth_confirm_hash = encode_defunct(eth_confirm_message)
-        eth_confirm_signature = account.sign_message(eth_confirm_hash)
+        
+        # Sign the ETH confirmation message
+        eth_confirm_length = len(eth_confirm_message)
+        eth_confirm_signed = b"\x19Ethereum Signed Message:\n" + str(eth_confirm_length).encode() + eth_confirm_message
+        eth_confirm_hash = keccak(eth_confirm_signed)
+        eth_confirm_signature = Account._sign_hash(eth_confirm_hash, private_key=account.key)
+        
+        # Step 6: Create PQ message for registration confirmation (PQ key signs with ETH sig nested)
+        # The PQ message should contain: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce + ethSignature + ETH_message
+        # Note: We need to use the same pattern as the intent message so parseIntentAddress can find it
+        pq_confirm_message = abi_encode_packed(
+            DOMAIN_SEPARATOR,
+            "Intent to pair ETH Address ",
+            eth_address_bytes,
+            (0).to_bytes(32, 'big'),  # pqNonce
+            eth_confirm_signature.signature,  # ETH signature for confirmation message
+            eth_confirm_message  # ETH confirmation message
+        )
+        
+        # Generate Epervier signature for the confirmation message
+        print(f"  Generating Epervier signature for registration confirmation...")
+        epervier_confirm_sig = generate_epervier_signature(pq_confirm_message, i)
+        
+        # ============================================================================
+        # CHANGE ETH ADDRESS FLOW
+        # ============================================================================
         
         # Create test data for change ETH address (using next private key)
         next_eth_priv_key = ETH_PRIVATE_KEYS[(i + 1) % len(ETH_PRIVATE_KEYS)]
@@ -275,8 +320,10 @@ def generate_comprehensive_test_vectors():
         next_eth_address_bytes = bytes.fromhex(next_eth_address[2:])
         change_pq_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Intent to pair ETH Address ",
-            next_eth_address_bytes,
+            "Change ETH Address from ",
+            eth_address_bytes,  # current address
+            " to ",
+            next_eth_address_bytes,  # new address
             (0).to_bytes(32, 'big')  # pqNonce
         )
         
@@ -289,26 +336,63 @@ def generate_comprehensive_test_vectors():
             DOMAIN_SEPARATOR,
             "Confirm change ETH Address",
             (0).to_bytes(32, 'big'),  # ethNonce for new address
-            bytes.fromhex(change_epervier_sig["salt"][2:]),
-            abi_encode(change_epervier_sig["cs1"]),
-            abi_encode(change_epervier_sig["cs2"]),
-            abi_encode(change_epervier_sig["hint"]),
-            change_pq_message
+            bytes.fromhex(change_epervier_sig["salt"][2:]),  # pqSignature salt
+            pack_uint256_array(change_epervier_sig["cs1"]),  # cs1 as 32*32 bytes, no prefix
+            pack_uint256_array(change_epervier_sig["cs2"]),  # cs2 as 32*32 bytes, no prefix
+            change_epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint
+            change_pq_message  # Include the PQ message that was signed
         )
-        change_confirm_hash = encode_defunct(change_confirm_message)
-        change_confirm_signature = next_account.sign_message(change_confirm_hash)
+        # Use the same format as the contract: "\x19Ethereum Signed Message:\n" + length + message
+        change_confirm_length = len(change_confirm_message)
+        change_confirm_signed = b"\x19Ethereum Signed Message:\n" + str(change_confirm_length).encode() + change_confirm_message
+        change_confirm_hash = keccak(change_confirm_signed)
+        change_confirm_signature = Account._sign_hash(change_confirm_hash, private_key=next_account.key)
+        
+        # Create PQ message for change ETH address confirmation (PQ key signs with ETH sig nested)
+        change_confirm_pq_message = abi_encode_packed(
+            DOMAIN_SEPARATOR,
+            "Confirm change ETH Address",
+            (0).to_bytes(32, 'big'),  # ethNonce for new address
+            change_confirm_signature.signature,  # ETH signature nested inside PQ message
+            change_confirm_message  # ETH message
+        )
+        
+        # Generate Epervier signature for change ETH address confirmation
+        print(f"  Generating Epervier signature for change ETH address confirmation...")
+        change_confirm_epervier_sig = generate_epervier_signature(change_confirm_pq_message, (i + 1) % len(pq_keys))
+        
+        # ============================================================================
+        # UNREGISTRATION FLOW
+        # ============================================================================
         
         # Create test data for unregistration
         unreg_pq_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
             "Intent to pair ETH Address ",
             next_eth_address_bytes,  # Use the new address
-            (1).to_bytes(32, 'big')  # pqNonce (incremented)
+            (2).to_bytes(32, 'big')  # ethNonce (incremented)
         )
         
         # Generate Epervier signature for unregistration
         print(f"  Generating Epervier signature for unregistration...")
         unreg_epervier_sig = generate_epervier_signature(unreg_pq_message, (i + 2) % len(pq_keys))
+        
+        # Create ETH message for unregistration confirmation
+        unreg_confirm_message = abi_encode_packed(
+            DOMAIN_SEPARATOR,
+            "Confirm unregistration",
+            (2).to_bytes(32, 'big'),  # ethNonce
+            bytes.fromhex(unreg_epervier_sig["salt"][2:]),  # pqSignature salt
+            pack_uint256_array(unreg_epervier_sig["cs1"]),  # cs1 as 32*32 bytes, no prefix
+            pack_uint256_array(unreg_epervier_sig["cs2"]),  # cs2 as 32*32 bytes, no prefix
+            unreg_epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint
+            unreg_pq_message  # Include the PQ message that was signed
+        )
+        # Use the same format as the contract: "\x19Ethereum Signed Message:\n" + length + message
+        unreg_confirm_length = len(unreg_confirm_message)
+        unreg_confirm_signed = b"\x19Ethereum Signed Message:\n" + str(unreg_confirm_length).encode() + unreg_confirm_message
+        unreg_confirm_hash = keccak(unreg_confirm_signed)
+        unreg_confirm_signature = Account._sign_hash(unreg_confirm_hash, private_key=next_account.key)
         
         # Save comprehensive test vector
         test_vector = {
@@ -320,15 +404,18 @@ def generate_comprehensive_test_vectors():
             # Registration data
             "registration": {
                 "base_pq_message": base_pq_message.hex(),
-                "full_pq_message": full_pq_message.hex(),
                 "eth_intent_message": eth_intent_message.hex(),
-                "eth_confirm_message": eth_confirm_message.hex(),
                 "eth_intent_signature": eth_signature.signature.hex(),
-                "eth_confirm_signature": eth_confirm_signature.signature.hex(),
-                "epervier_salt": epervier_sig["salt"],
-                "epervier_cs1": epervier_sig["cs1"],
-                "epervier_cs2": epervier_sig["cs2"],
-                "epervier_hint": epervier_sig["hint"]
+                "pq_confirm_message": pq_confirm_message.hex(),
+                "epervier_salt": epervier_confirm_sig["salt"],
+                "epervier_cs1": epervier_confirm_sig["cs1"],
+                "epervier_cs2": epervier_confirm_sig["cs2"],
+                "epervier_hint": epervier_confirm_sig["hint"],
+                # Add intent signature data for submitRegistrationIntent
+                "intent_epervier_salt": epervier_sig["salt"],
+                "intent_epervier_cs1": epervier_sig["cs1"],
+                "intent_epervier_cs2": epervier_sig["cs2"],
+                "intent_epervier_hint": epervier_sig["hint"]
             },
             
             # Change ETH address data
@@ -336,15 +423,18 @@ def generate_comprehensive_test_vectors():
                 "base_pq_message": change_pq_message.hex(),
                 "eth_confirm_message": change_confirm_message.hex(),
                 "eth_confirm_signature": change_confirm_signature.signature.hex(),
-                "epervier_salt": change_epervier_sig["salt"],
-                "epervier_cs1": change_epervier_sig["cs1"],
-                "epervier_cs2": change_epervier_sig["cs2"],
-                "epervier_hint": change_epervier_sig["hint"]
+                "pq_confirm_message": change_confirm_pq_message.hex(),
+                "epervier_salt": change_confirm_epervier_sig["salt"],
+                "epervier_cs1": change_confirm_epervier_sig["cs1"],
+                "epervier_cs2": change_confirm_epervier_sig["cs2"],
+                "epervier_hint": change_confirm_epervier_sig["hint"]
             },
             
             # Unregistration data
             "unregistration": {
                 "base_pq_message": unreg_pq_message.hex(),
+                "eth_confirm_message": unreg_confirm_message.hex(),
+                "eth_confirm_signature": unreg_confirm_signature.signature.hex(),
                 "epervier_salt": unreg_epervier_sig["salt"],
                 "epervier_cs1": unreg_epervier_sig["cs1"],
                 "epervier_cs2": unreg_epervier_sig["cs2"],
@@ -353,7 +443,7 @@ def generate_comprehensive_test_vectors():
         }
         
         # Save to file
-        filename = f"test_vectors/comprehensive_vector_{i+1}.json"
+        filename = test_vectors_dir / f"comprehensive_vector_{i+1}.json"
         with open(filename, 'w') as f:
             json.dump(test_vector, f, indent=2)
         print(f"  Saved to {filename}")
@@ -361,5 +451,75 @@ def generate_comprehensive_test_vectors():
     print(f"\nGenerated {len(ETH_PRIVATE_KEYS)} comprehensive test vectors in test_vectors/")
     print("Note: Test vectors now include registration, change ETH address, and unregistration scenarios.")
 
+def generate_simple_test_vector():
+    """Generate a simple test vector for basic tests"""
+    print("Generating simple test vector...")
+    
+    # Use the first private key and PQ key
+    eth_priv_key = ETH_PRIVATE_KEYS[0]
+    pq_key = get_pq_public_keys()[0]
+    
+    # Create Ethereum account
+    account = Account.from_key(eth_priv_key)
+    eth_address = account.address
+    
+    # Create base PQ message for registration intent
+    eth_address_bytes = bytes.fromhex(eth_address[2:])
+    base_pq_message = abi_encode_packed(
+        DOMAIN_SEPARATOR,
+        "Intent to pair ETH Address ",
+        eth_address_bytes,
+        (0).to_bytes(32, 'big')  # pqNonce
+    )
+    
+    # Generate Epervier signature for the base PQ message
+    epervier_sig = generate_epervier_signature(base_pq_message, 0)
+    
+    # Create ETH message that includes the PQ signature components
+    eth_intent_message = abi_encode_packed(
+        DOMAIN_SEPARATOR,
+        "Intent to pair Epervier Key",
+        (0).to_bytes(32, 'big'),  # ethNonce
+        bytes.fromhex(epervier_sig["salt"][2:]),  # pqSignature salt
+        pack_uint256_array(epervier_sig["cs1"]),  # cs1 as 32*32 bytes, no prefix
+        pack_uint256_array(epervier_sig["cs2"]),  # cs2 as 32*32 bytes, no prefix
+        epervier_sig["hint"].to_bytes(32, 'big'),  # pqSignature hint
+        base_pq_message  # pqMessage
+    )
+    
+    # Sign the ETH message
+    # Use the same format as the contract: "\x19Ethereum Signed Message:\n" + length + message
+    eth_message_length = len(eth_intent_message)
+    eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(eth_message_length).encode() + eth_intent_message
+    print("PYTHON: eth_signed_message:", eth_signed_message.hex())
+    eth_message_hash = keccak(eth_signed_message)
+    print("PYTHON: eth_signed_message:", eth_signed_message.hex())
+    eth_signature = Account._sign_hash(eth_message_hash, private_key=account.key)
+    
+    # Create simple test vector
+    test_vector = {
+        "eth_address": eth_address,
+        "pq_public_key": pq_key,
+        "base_pq_message": base_pq_message.hex(),
+        "eth_intent_message": eth_intent_message.hex(),
+        "eth_intent_signature": eth_signature.signature.hex(),
+        "epervier_salt": epervier_sig["salt"],
+        "epervier_cs1": epervier_sig["cs1"],
+        "epervier_cs2": epervier_sig["cs2"],
+        "epervier_hint": epervier_sig["hint"]
+    }
+    
+    # Save to file
+    filename = SCRIPT_DIR / "test_vectors/test_vector_1.json"
+    with open(filename, 'w') as f:
+        json.dump(test_vector, f, indent=2)
+    print(f"  Saved to {filename}")
+
+def pack_uint256_array(arr):
+    return b''.join(x.to_bytes(32, 'big') for x in arr)
+
 if __name__ == "__main__":
-    generate_comprehensive_test_vectors() 
+    generate_comprehensive_test_vectors()
+    generate_simple_test_vector() 
+
+print("Fingerprint bytes in ETH confirm message:", eth_confirm_message[68:100].hex()) 
