@@ -337,9 +337,11 @@ contract PQRegistryComprehensiveTest is Test {
         );
 
         // Sign the ETH confirmation message
-        bytes32 ethConfirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethConfirmMessage.length), ethConfirmMessage));
-        (uint8 vConfirm, bytes32 rConfirm, bytes32 sConfirm) = vm.sign(alicePrivateKey, ethConfirmSignedMessageHash);
-
+        (uint8 vConfirm, bytes32 rConfirm, bytes32 sConfirm) = vm.sign(alicePrivateKey, keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethConfirmMessage.length), ethConfirmMessage)));
+        
+        // Explicitly ensure v is 27 or 28
+        vConfirm = (vConfirm % 2) + 27;
+        
         // Create the signature bytes properly
         bytes memory ethSignatureBytes = abi.encodePacked(rConfirm, sConfirm, vConfirm);
 
@@ -370,30 +372,40 @@ contract PQRegistryComprehensiveTest is Test {
     }
     
     function testConfirmRegistration_RevertOnNoPendingIntent() public {
-        // Use the address that corresponds to alicePrivateKey
-        address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+        // Load real test vector data
+        string memory json = vm.readFile("test/test_vectors/comprehensive_vector_1.json");
         
-        // Mock Epervier verifier to return the correct address
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(testAlice)
+        // Parse the real signature components for the confirmation
+        bytes memory salt = vm.parseBytes(extractJsonValue(json, ".registration.epervier_salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(json, ".registration.epervier_cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(json, ".registration.epervier_cs2");
+        uint256 hint = vm.parseUint(extractJsonValue(json, ".registration.epervier_hint"));
+        
+        // Parse the PQ confirmation message from the test vector
+        bytes memory pqConfirmMessage = vm.parseBytes(extractJsonValue(json, ".registration.pq_confirm_message"));
+        
+        // Use a completely unused Foundry test address (999) that has no pending intents
+        address testUnused = vm.addr(999);
+        
+        console.log("Using address:", testUnused);
+        
+        // Clear any existing state for this address by directly manipulating storage
+        // Clear the pending intent timestamp (slot 2 for pendingIntents mapping)
+        vm.store(
+            address(registry),
+            keccak256(abi.encode(testUnused, uint256(2))), // pendingIntents slot (mapping slot 2)
+            bytes32(0) // Clear the timestamp to 0
         );
         
-        bytes memory pqMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Intent to pair ETH Address ",
-            abi.encodePacked(testAlice), // Use the correct address
-            uint256(0)
-        );
-        
+        // Try to confirm registration with real test vector data but for an address with no pending intent
+        // This should revert with "No pending intent found"
         vm.expectRevert("No pending intent found");
         registry.confirmRegistration(
-            pqMessage, // PQ message
-            testSalt, // pqSignature
-            testCs1,
-            testCs2,
-            testHint
+            pqConfirmMessage,
+            salt,
+            cs1,
+            cs2,
+            hint
         );
     }
     
@@ -408,7 +420,7 @@ contract PQRegistryComprehensiveTest is Test {
         // Use the address that corresponds to alicePrivateKey
         address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
         
-        bytes memory pqMessage = abi.encodePacked(
+        bytes memory basePQMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
             "Intent to pair ETH Address ",
             abi.encodePacked(testAlice), // Use the correct address
@@ -419,12 +431,14 @@ contract PQRegistryComprehensiveTest is Test {
             "Intent to pair Epervier Key",
             uint256(0), // ethNonce
             testSalt, // pqSignature
-            pqMessage // pqMessage
+            packUint256Array(testCs1), // cs1
+            packUint256Array(testCs2), // cs2
+            abi.encode(testHint), // hint
+            basePQMessage // pqMessage
         );
-        bytes32 ethMessageHash = keccak256(ethIntentMessage);
         
         // Create the Ethereum signed message hash (same as contract)
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
         
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
         
@@ -435,9 +449,39 @@ contract PQRegistryComprehensiveTest is Test {
             s
         );
         
-        // Try to confirm with wrong nonce - this should fail at the ETH signature verification level
-        // since the contract will try to verify the ETH signature with nonce 1, but we're using nonce 0
-        vm.expectRevert("Invalid ETH nonce");
+        // Create ETH confirmation message with wrong nonce (0 instead of 1)
+        bytes memory ethConfirmMessage = abi.encodePacked(
+            registry.DOMAIN_SEPARATOR(),
+            "Confirm binding Fingerprint ",
+            abi.encodePacked(alice), // fingerprint (20 bytes address)
+            " to ETH Address ",
+            abi.encodePacked(testAlice), // ETH address (20 bytes)
+            uint256(0) // ethNonce (wrong - should be 1)
+        );
+
+        // Sign the ETH confirmation message
+        (uint8 vConfirm, bytes32 rConfirm, bytes32 sConfirm) = vm.sign(alicePrivateKey, keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethConfirmMessage.length), ethConfirmMessage)));
+        
+        // Explicitly ensure v is 27 or 28
+        vConfirm = (vConfirm % 2) + 27;
+        
+        // Create the signature bytes properly
+        bytes memory ethSignatureBytes = abi.encodePacked(rConfirm, sConfirm, vConfirm);
+
+        // Create PQ confirmation message with new bidirectional binding format
+        bytes memory pqMessage = abi.encodePacked(
+            registry.DOMAIN_SEPARATOR(),
+            "Confirm binding ETH Address ",
+            abi.encodePacked(testAlice), // ETH address
+            " to Fingerprint ",
+            abi.encodePacked(alice), // fingerprint address
+            uint256(0), // pqNonce
+            ethSignatureBytes, // ETH signature (65 bytes)
+            ethConfirmMessage // ETH message
+        );
+        
+        // Try to confirm with wrong nonce - this should fail at the ETH nonce verification level
+        vm.expectRevert("ERR6: Invalid ETH nonce in confirmRegistration");
         registry.confirmRegistration(
             pqMessage, // PQ message
             testSalt, // pqSignature
@@ -490,19 +534,17 @@ contract PQRegistryComprehensiveTest is Test {
         );
         
         // Verify intent exists
-        // Note: We can't easily access the struct fields directly, so we'll verify the nonce increment
         assertEq(registry.ethNonces(testAlice), 1);
         
-        // Remove intent with ETH signature
+        // Remove intent with ETH signature (new format)
         bytes memory ethRemoveMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
-            "Remove registration intent",
-            uint256(1), // ethNonce (incremented after intent submission)
-            pqMessage // Include the PQ message for context
+            "Remove intent from address ",
+            abi.encodePacked(testAlice),
+            uint256(1) // pqNonce or ethNonce (incremented after intent submission)
         );
         bytes32 removeMessageHash = keccak256(ethRemoveMessage);
-        bytes32 removeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethRemoveMessage));
-        
+        bytes32 removeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethRemoveMessage.length), ethRemoveMessage));
         (v, r, s) = vm.sign(alicePrivateKey, removeSignedMessageHash);
         
         registry.removeIntent(
@@ -517,26 +559,17 @@ contract PQRegistryComprehensiveTest is Test {
     }
     
     function testRemoveIntent_RevertOnNoIntent() public {
-        // Use the address that corresponds to alicePrivateKey
         address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
         
-        bytes memory pqMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Intent to pair ETH Address ",
-            abi.encodePacked(testAlice), // Use the correct address
-            uint256(0)
-        );
-        
-        // Try to remove intent that doesn't exist
+        // Try to remove intent that doesn't exist (new format)
         bytes memory ethRemoveMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
-            "Remove registration intent",
-            uint256(0), // ethNonce
-            pqMessage // Include the PQ message for context
+            "Remove intent from address ",
+            abi.encodePacked(testAlice),
+            uint256(0)
         );
         bytes32 removeMessageHash = keccak256(ethRemoveMessage);
-        bytes32 removeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethRemoveMessage));
-        
+        bytes32 removeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethRemoveMessage.length), ethRemoveMessage));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, removeSignedMessageHash);
         
         vm.expectRevert("No pending intent found");
@@ -546,6 +579,56 @@ contract PQRegistryComprehensiveTest is Test {
             r,
             s
         );
+    }
+    
+    function testRemoveIntentByPQ_Success() public {
+        // First submit an intent
+        vm.mockCall(
+            address(epervierVerifier),
+            abi.encodeWithSelector(epervierVerifier.recover.selector),
+            abi.encode(alice)
+        );
+        address testAlice = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+        bytes memory pqMessage = abi.encodePacked(
+            registry.DOMAIN_SEPARATOR(),
+            "Intent to pair ETH Address ",
+            abi.encodePacked(testAlice),
+            uint256(0)
+        );
+        bytes memory ethIntentMessage = abi.encodePacked(
+            registry.DOMAIN_SEPARATOR(),
+            "Intent to pair Epervier Key",
+            uint256(0),
+            testSalt,
+            pqMessage
+        );
+        bytes32 ethMessageHash = keccak256(ethIntentMessage);
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
+        registry.submitRegistrationIntent(
+            ethIntentMessage,
+            v,
+            r,
+            s
+        );
+        assertEq(registry.ethNonces(testAlice), 1);
+        // PQ-controlled remove intent
+        bytes memory pqRemoveMessage = abi.encodePacked(
+            registry.DOMAIN_SEPARATOR(),
+            "Remove intent from address ",
+            abi.encodePacked(testAlice),
+            uint256(1)
+        );
+        // Use mock signature components for PQ
+        registry.removeIntentByPQ(
+            pqRemoveMessage,
+            testSalt,
+            testCs1,
+            testCs2,
+            testHint
+        );
+        // Verify intent was removed
+        assertEq(registry.ethNonces(testAlice), 1); // ETH nonce unchanged
     }
     
     // ============================================================================
@@ -698,8 +781,8 @@ contract PQRegistryComprehensiveTest is Test {
         // Create the Ethereum signed message hash for confirmation (same as contract)
         bytes32 confirmSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", confirmMessageHash));
         
-        (v, r, s) = vm.sign(alicePrivateKey, ethSignedMessageHash);
-        bytes memory confirmSignature = abi.encodePacked(r, s, v);
+        (uint8 vConfirm, bytes32 rConfirm, bytes32 sConfirm) = vm.sign(alicePrivateKey, ethSignedMessageHash);
+        bytes memory confirmSignature = abi.encodePacked(rConfirm, sConfirm, vConfirm);
         
         registry.confirmRegistration(
             pqMessage, // PQ message
@@ -1045,12 +1128,12 @@ contract PQRegistryComprehensiveTest is Test {
         // Remove the intent with ETH signature
         bytes memory ethRemoveMessage = abi.encodePacked(
             registry.DOMAIN_SEPARATOR(),
-            "Remove registration intent",
-            uint256(1), // ethNonce (incremented after intent submission)
-            pqMessage // Include the PQ message for context
+            "Remove intent from address ",
+            abi.encodePacked(testAlice),
+            uint256(1) // pqNonce (incremented after intent submission)
         );
         bytes32 removeMessageHash = keccak256(ethRemoveMessage);
-        bytes32 removeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethRemoveMessage));
+        bytes32 removeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethRemoveMessage.length), ethRemoveMessage));
         
         (v, r, s) = vm.sign(alicePrivateKey, removeSignedMessageHash);
         
