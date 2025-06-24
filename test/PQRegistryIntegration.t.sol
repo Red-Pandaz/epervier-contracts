@@ -104,7 +104,7 @@ contract PQRegistryIntegrationTest is Test {
         // Verify intent signature with OpenZeppelin ECDSA
         bytes32 intentMessageHash = keccak256(ethIntentMessage);
         // Match Python library format: "Ethereum Signed Message:\n" + length + message
-        bytes32 intentSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethIntentMessage));
+        bytes32 intentSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
         address recoveredIntentAddress = intentSignedMessageHash.recover(ethIntentSignature);
         
         console.log("Recovered intent address:", recoveredIntentAddress);
@@ -375,38 +375,40 @@ contract PQRegistryIntegrationTest is Test {
         // TODO: Test nonce increment after real registration
     }
     
+    // Add the extractEthNonceFromRemoveMessage function for test debug
+    function extractEthNonceFromRemoveMessage(bytes memory message) internal pure returns (uint256 ethNonce) {
+        require(message.length >= 32 + 26 + 32, "Message too short for ETH nonce from remove message");
+        bytes memory nonceBytes = new bytes(32);
+        for (uint j = 0; j < 32; j++) {
+            nonceBytes[j] = message[32 + 26 + j];
+        }
+        return abi.decode(nonceBytes, (uint256));
+    }
+
     function testRemoveIntentIntegration() public {
-        // Mock the Epervier verifier to return a valid address
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(realRecoveredAddress)
-        );
+        // Load real test vector data
+        string memory json = vm.readFile("test/test_vectors/comprehensive_vector_1.json");
         
-        // Create the PQ message for intent
-        bytes memory pqMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Intent to pair ETH Address ",
-            abi.encodePacked(realRecoveredAddress),
-            uint256(0) // pqNonce
-        );
+        // Parse the real signature components for the intent (base PQ message)
+        bytes memory salt = vm.parseBytes(extractJsonValue(json, ".registration.intent_epervier_salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(json, ".registration.intent_epervier_cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(json, ".registration.intent_epervier_cs2");
+        uint256 hint = vm.parseUint(extractJsonValue(json, ".registration.intent_epervier_hint"));
         
-        // Create the ETH intent message with nested signature structure
-        bytes memory ethIntentMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Intent to pair Epervier Key",
-            uint256(0), // ethNonce
-            realSalt, // salt
-            abi.encodePacked(realCs1), // cs1 (32 uint256 values)
-            abi.encodePacked(realCs2), // cs2 (32 uint256 values)
-            abi.encodePacked(realHint), // hint
-            pqMessage // base_pq_message
-        );
-        bytes32 ethMessageHash = keccak256(ethIntentMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", ethMessageHash));
+        // Parse the base PQ message
+        bytes memory basePQMessage = vm.parseBytes(extractJsonValue(json, ".registration.base_pq_message"));
         
-        // Submit registration intent
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80, ethSignedMessageHash);
+        // Parse the ETH address
+        address ethAddress = vm.parseAddress(extractJsonValue(json, ".eth_address"));
+        
+        // Parse the ETH intent message and signature
+        bytes memory ethIntentMessage = vm.parseBytes(extractJsonValue(json, ".registration.eth_intent_message"));
+        bytes memory ethIntentSignature = vm.parseBytes(extractJsonValue(json, ".registration.eth_intent_signature"));
+        
+        // Parse ETH signature components
+        (uint8 v, bytes32 r, bytes32 s) = parseSignature(ethIntentSignature);
+        
+        // Submit registration intent with real data
         registry.submitRegistrationIntent(
             ethIntentMessage,
             v,
@@ -415,29 +417,29 @@ contract PQRegistryIntegrationTest is Test {
         );
         
         // Verify intent was created
-        assertEq(registry.ethNonces(realRecoveredAddress), 1);
+        assertEq(registry.ethNonces(ethAddress), 1);
         
-        // Remove intent with ETH signature
-        bytes memory ethRemoveMessage = abi.encodePacked(
-            registry.DOMAIN_SEPARATOR(),
-            "Remove registration intent",
-            uint256(1), // ethNonce (incremented after intent submission)
-            pqMessage // Include the PQ message for context
-        );
-        bytes32 removeMessageHash = keccak256(ethRemoveMessage);
-        bytes32 removeSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n202", ethRemoveMessage));
+        // Get the remove intent data from the test vector
+        bytes memory ethRemoveMessage = vm.parseBytes(extractJsonValue(json, ".remove_intent.eth_message"));
+        bytes memory ethRemoveSignature = vm.parseBytes(extractJsonValue(json, ".remove_intent.eth_signature"));
         
-        (v, r, s) = vm.sign(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80, removeSignedMessageHash);
+        // Parse ETH signature components
+        (uint8 vRemove, bytes32 rRemove, bytes32 sRemove) = parseSignature(ethRemoveSignature);
+        
+        // Debug: Extract and print the nonce from the remove intent message
+        uint256 extractedRemoveNonce = extractEthNonceFromRemoveMessage(ethRemoveMessage);
+        console.log("Extracted nonce from remove intent message:", extractedRemoveNonce);
+        console.log("Contract ethNonces[ethAddress] before removeIntent:", registry.ethNonces(ethAddress));
         
         registry.removeIntent(
             ethRemoveMessage,
-            v,
-            r,
-            s
+            vRemove,
+            rRemove,
+            sRemove
         );
         
         // Verify intent was removed
-        assertEq(registry.ethNonces(realRecoveredAddress), 2);
+        assertEq(registry.ethNonces(ethAddress), 2);
     }
     
     // Helper function to extract JSON values

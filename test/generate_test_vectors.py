@@ -308,6 +308,59 @@ def generate_comprehensive_test_vectors():
         epervier_confirm_sig = generate_epervier_signature(pq_confirm_message, i)
         
         # ============================================================================
+        # REMOVE INTENT FLOW
+        # ============================================================================
+        
+        # Create remove intent message with new format: DOMAIN_SEPARATOR + "Remove registration intent" + ethNonce + fingerprint
+        # The fingerprint is the bytes32 representation of the recovered PQ address
+        remove_intent_message = abi_encode_packed(
+            DOMAIN_SEPARATOR,
+            "Remove registration intent",
+            (1).to_bytes(32, 'big'),  # ethNonce (incremented after intent submission)
+            pq_fingerprint  # fingerprint (bytes32)
+        )
+        
+        # Debug: Print the exact bytes and offsets
+        print(f"  === DEBUG: Remove Intent Message Construction ===")
+        print(f"  DOMAIN_SEPARATOR length: {len(DOMAIN_SEPARATOR)} bytes")
+        pattern = "Remove registration intent"
+        print(f"  Pattern: '{pattern}' (length: {len(pattern)} bytes)")
+        print(f"  Pattern bytes: {pattern.encode('utf-8').hex()}")
+        print(f"  ethNonce: 1 (32 bytes: {(1).to_bytes(32, 'big').hex()})")
+        print(f"  fingerprint: {pq_fingerprint.hex()}")
+        print(f"  Total message length: {len(remove_intent_message)} bytes")
+        print(f"  Full message: {remove_intent_message.hex()}")
+        
+        # Debug: Show the expected offsets
+        expected_nonce_offset = 32 + 25  # DOMAIN_SEPARATOR + pattern
+        expected_fingerprint_offset = 32 + 25 + 32  # DOMAIN_SEPARATOR + pattern + nonce
+        print(f"  Expected nonce offset: {expected_nonce_offset}")
+        print(f"  Expected fingerprint offset: {expected_fingerprint_offset}")
+        
+        # Debug: Extract and show the bytes at the expected offsets
+        if len(remove_intent_message) >= expected_nonce_offset + 32:
+            nonce_bytes = remove_intent_message[expected_nonce_offset:expected_nonce_offset + 32]
+            print(f"  Nonce bytes at offset {expected_nonce_offset}: {nonce_bytes.hex()}")
+            nonce_value = int.from_bytes(nonce_bytes, 'big')
+            print(f"  Nonce value: {nonce_value}")
+        else:
+            print(f"  ERROR: Message too short for nonce extraction")
+            
+        if len(remove_intent_message) >= expected_fingerprint_offset + 32:
+            fingerprint_bytes = remove_intent_message[expected_fingerprint_offset:expected_fingerprint_offset + 32]
+            print(f"  Fingerprint bytes at offset {expected_fingerprint_offset}: {fingerprint_bytes.hex()}")
+        else:
+            print(f"  ERROR: Message too short for fingerprint extraction")
+        
+        # Sign the remove intent message
+        remove_message_length = len(remove_intent_message)
+        remove_signed_message = b"\x19Ethereum Signed Message:\n" + str(remove_message_length).encode() + remove_intent_message
+        remove_message_hash = keccak(remove_signed_message)
+        remove_signature = Account._sign_hash(remove_message_hash, private_key=account.key)
+        
+        print(f"  Generated remove intent data with fingerprint: 0x{pq_fingerprint.hex()}")
+        
+        # ============================================================================
         # CHANGE ETH ADDRESS FLOW
         # ============================================================================
         
@@ -418,6 +471,13 @@ def generate_comprehensive_test_vectors():
                 "intent_epervier_hint": epervier_sig["hint"]
             },
             
+            # Remove intent data
+            "remove_intent": {
+                "eth_message": remove_intent_message.hex(),
+                "eth_signature": remove_signature.signature.hex(),
+                "fingerprint": pq_fingerprint.hex()
+            },
+            
             # Change ETH address data
             "change_eth_address": {
                 "base_pq_message": change_pq_message.hex(),
@@ -521,5 +581,3 @@ def pack_uint256_array(arr):
 if __name__ == "__main__":
     generate_comprehensive_test_vectors()
     generate_simple_test_vector() 
-
-print("Fingerprint bytes in ETH confirm message:", eth_confirm_message[68:100].hex()) 
