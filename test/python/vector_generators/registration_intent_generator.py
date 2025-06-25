@@ -9,7 +9,7 @@ print("Script loaded successfully!")
 # TODO: import cryptography and web3/eth_account utilities as needed
 
 ACTORS_CONFIG_PATH = Path("test/test_keys/actors_config.json")
-OUTPUT_PATH = Path("registration_intent_vectors.json")
+OUTPUT_PATH = Path("test/test_vectors/registration_intent_vectors.json")
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
 # Helper to convert int to bytes32
@@ -38,11 +38,15 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
         tmp.write(base_pq_message)
         tmp.flush()
         tmp_path = tmp.name
-    # Call sign_cli.py
-    sign_cli = str(Path("../../../ETHFALCON/python-ref/sign_cli.py").resolve())
-    privkey_path = str(Path("../../../test/test_keys") / pq_private_key_file)
+    # Find the project root (assuming this script is at test/python/vector_generators/)
+    project_root = Path(__file__).resolve().parents[3]  # epervier-registry
+
+    sign_cli = project_root / "ETHFALCON/python-ref/sign_cli.py"
+    privkey_path = project_root / "test/test_keys" / pq_private_key_file
+    venv_python = project_root / "ETHFALCON/python-ref/myenv/bin/python3"
+
     cmd = [
-        "python3", sign_cli, "sign",
+        str(venv_python), str(sign_cli), "sign",
         f"--privkey={privkey_path}",
         f"--data={base_pq_message.hex()}",
         "--version=epervier"
@@ -52,8 +56,7 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
     os.unlink(tmp_path)
     print("PQ sign_cli output:")
     print(result.stdout)
-    # Parse output (assume output is JSON or parse as needed)
-    # For now, expect output: salt, hint, cs1, cs2 as hex strings
+    # Parse output for salt, hint, cs1, cs2
     lines = result.stdout.splitlines()
     out = {}
     for line in lines:
@@ -65,6 +68,9 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
             out["cs1"] = [int(x, 16) for x in line.split()[1:]]
         elif line.startswith("cs2:"):
             out["cs2"] = [int(x, 16) for x in line.split()[1:]]
+    if not all(k in out for k in ["salt", "hint", "cs1", "cs2"]):
+        print("Failed to parse PQ signature components!")
+        return None
     return out
 
 
@@ -95,49 +101,52 @@ def main():
     actors = load_actors_config()
     print(f"Loaded {len(actors)} actors from config")
     vectors = []
-    # Only Alice for now
-    alice = actors["alice"]
-    print(f"Processing Alice: {alice['eth_address']}")
-    eth_address = alice["eth_address"]
-    eth_private_key = alice["eth_private_key"]
-    pq_private_key_file = alice["pq_private_key_file"]
-    pq_nonce = 0
-    eth_nonce = 0
-    # 1. Build base PQ message
-    print("Building base PQ message...")
-    base_pq_message = build_base_pq_message(DOMAIN_SEPARATOR, eth_address, pq_nonce)
-    print(f"Base PQ message length: {len(base_pq_message)} bytes")
-    # 2. PQ sign
-    print("Signing with PQ key...")
-    pq_sig = sign_with_pq_key(base_pq_message, pq_private_key_file)
-    print(f"PQ signature generated: {len(pq_sig)} components")
-    # 3. Build ETH intent message
-    print("Building ETH intent message...")
-    eth_intent_message = build_eth_intent_message(
-        DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
-    )
-    print(f"ETH intent message length: {len(eth_intent_message)} bytes")
-    # 4. ETH sign
-    print("Signing with ETH key...")
-    eth_sig = sign_with_eth_key(eth_intent_message, eth_private_key)
-    print(f"ETH signature generated: v={eth_sig['v']}, r={eth_sig['r']}, s={eth_sig['s']}")
-    # 5. Collect all fields
-    print("Collecting vector data...")
-    vector = {
-        "actor": "alice",
-        "eth_address": eth_address,
-        "pq_fingerprint": alice["pq_fingerprint"],
-        "base_pq_message": base_pq_message.hex(),
-        "pq_signature": {
-            "salt": pq_sig["salt"].hex(),
-            "cs1": [hex(x) for x in pq_sig["cs1"]],
-            "cs2": [hex(x) for x in pq_sig["cs2"]],
-            "hint": pq_sig["hint"]
-        },
-        "eth_message": eth_intent_message.hex(),
-        "eth_signature": eth_sig
-    }
-    vectors.append(vector)
+    for actor_name, actor in actors.items():
+        print(f"Processing {actor_name.capitalize()}: {actor['eth_address']}")
+        eth_address = actor["eth_address"]
+        eth_private_key = actor["eth_private_key"]
+        pq_private_key_file = actor["pq_private_key_file"]
+        pq_nonce = 0
+        eth_nonce = 0
+        # 1. Build base PQ message
+        print("Building base PQ message...")
+        base_pq_message = build_base_pq_message(DOMAIN_SEPARATOR, eth_address, pq_nonce)
+        print(f"Base PQ message length: {len(base_pq_message)} bytes")
+        # 2. PQ sign
+        print("Signing with PQ key...")
+        pq_sig = sign_with_pq_key(base_pq_message, pq_private_key_file)
+        if pq_sig is None:
+            print(f"Failed to generate PQ signature for {actor_name}!")
+            continue
+        print(f"PQ signature generated: {len(pq_sig)} components")
+        # 3. Build ETH intent message
+        print("Building ETH intent message...")
+        eth_intent_message = build_eth_intent_message(
+            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
+        )
+        print(f"ETH intent message length: {len(eth_intent_message)} bytes")
+        # 4. ETH sign
+        print("Signing with ETH key...")
+        eth_sig = sign_with_eth_key(eth_intent_message, eth_private_key)
+        print(f"ETH signature generated: v={eth_sig['v']}, r={eth_sig['r']}, s={eth_sig['s']}")
+        # 5. Collect all fields
+        print("Collecting vector data...")
+        vector = {
+            "actor": actor_name,
+            "eth_address": eth_address,
+            "pq_fingerprint": actor["pq_fingerprint"],
+            "base_pq_message": base_pq_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": [hex(x) for x in pq_sig["cs1"]],
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            },
+            "eth_message": eth_intent_message.hex(),
+            "eth_signature": eth_sig,
+            "eth_nonce": eth_nonce
+        }
+        vectors.append(vector)
     print(f"Writing {len(vectors)} vectors to {OUTPUT_PATH}")
     with open(OUTPUT_PATH, "w") as f:
         json.dump({"registration_intent": vectors}, f, indent=2)
