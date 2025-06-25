@@ -24,7 +24,8 @@ evm_version = "cancun"
 
 # File system permissions for test files
 fs_permissions = [
-    { access = "read", path = "./test/test_vectors/" }
+    { access = "read", path = "./test/test_vectors/" },
+    { access = "read", path = "./test/test_keys/" }
 ]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

@@ -1,0 +1,91 @@
+{
+  "actors": {
+    "alice": {
+      "index": 0,
+      "eth_private_key": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+      "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "pq_private_key_file": "private_key_1.pem",
+      "pq_public_key_file": "public_key_1.pem",
+      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb"
+    },
+    "bob": {
+      "index": 1,
+      "eth_private_key": "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+      "eth_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      "pq_private_key_file": "private_key_2.pem",
+      "pq_public_key_file": "public_key_2.pem",
+      "pq_fingerprint": "0xe6115cdcd7c5df334d05c80787244361e31f0f33"
+    },
+    "charlie": {
+      "index": 2,
+      "eth_private_key": "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+      "eth_address": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "pq_private_key_file": "private_key_3.pem",
+      "pq_public_key_file": "public_key_3.pem",
+      "pq_fingerprint": "0x46f1c659d4e3ea9671636418a5970a33fe1842fd"
+    },
+    "danielle": {
+      "index": 3,
+      "eth_private_key": "0x7c852118e8d7cbcbc6b99d3c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c",
+      "eth_address": "0x9BBfABe4dB16Cbf6902a438588B1f1eE9FB88182",
+      "pq_private_key_file": "private_key_4.pem",
+      "pq_public_key_file": "public_key_4.pem",
+      "pq_fingerprint": "0x55020f422187dfd87b9c28dd19bbdbb7cd8c0f48"
+    },
+    "eve": {
+      "index": 4,
+      "eth_private_key": "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
+      "eth_address": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+      "pq_private_key_file": "private_key_5.pem",
+      "pq_public_key_file": "public_key_5.pem",
+      "pq_fingerprint": "0x37b0e4354e670e8c189694cfee10fe545245cd46"
+    },
+    "frank": {
+      "index": 5,
+      "eth_private_key": "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6ad409a",
+      "eth_address": "0x803B38246BDfaA0A5D0265321BCb167457030387",
+      "pq_private_key_file": "private_key_6.pem",
+      "pq_public_key_file": "public_key_6.pem",
+      "pq_fingerprint": "0x6d587a8c0e28bc807b8adedda642d9d2607e54f5"
+    },
+    "grace": {
+      "index": 6,
+      "eth_private_key": "0xf214f2b2cd398c806f84e317254e0f0b801d0643303237d97a22a48e01628897",
+      "eth_address": "0xBcd4042DE499D14e55001CcbB24a551F3b954096",
+      "pq_private_key_file": "private_key_7.pem",
+      "pq_public_key_file": "public_key_7.pem",
+      "pq_fingerprint": "0xd25979e2c759f8176cdd62f4f8a97bfd1801ad95"
+    },
+    "henry": {
+      "index": 7,
+      "eth_private_key": "0x701b615bbdfb9de65240bc28bd21bbc0d996645a3dd57e7b12bc2bdf6f192c82",
+      "eth_address": "0x71bE63f3384f5fb98995898A86B02Fb2426c5788",
+      "pq_private_key_file": "private_key_8.pem",
+      "pq_public_key_file": "public_key_8.pem",
+      "pq_fingerprint": "0x0d9ad31df419d7f961dfc11d9302faa56318f883"
+    },
+    "iris": {
+      "index": 8,
+      "eth_private_key": "0xa267530f49f8280200edf313ee7af6b827f2a8bce2897751d06a843f644967e1",
+      "eth_address": "0xf80B2Fdbc2d167cA461897a6A0860Ff74Dcc473B",
+      "pq_private_key_file": "private_key_9.pem",
+      "pq_public_key_file": "public_key_9.pem",
+      "pq_fingerprint": "0x74192317068d4066148118ae026695b43a7cabc5"
+    },
+    "jack": {
+      "index": 9,
+      "eth_private_key": "0xdf57089febbacf7ba0bc227dafbffa9fc08a93fdc68e1e42411a14efcf23656e",
+      "eth_address": "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199",
+      "pq_private_key_file": "private_key_10.pem",
+      "pq_public_key_file": "public_key_10.pem",
+      "pq_fingerprint": "0x7c511189493d0820ca696079dcede5f1e3a8e2bd"
+    }
+  },
+  "metadata": {
+    "description": "Configuration file mapping actor names to their keys and addresses",
+    "total_actors": 10,
+    "fingerprints_validated": true,
+    "last_updated": "2024-06-25",
+    "validated_count": 10
+  }
+}
