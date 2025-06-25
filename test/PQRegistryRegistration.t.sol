@@ -26,6 +26,9 @@ contract PQRegistryRegistrationTest is Test {
     // Actor mapping
     mapping(string => Actor) public actors;
     
+    // Actor names array for easy iteration
+    string[] public actorNames;
+    
     function setUp() public {
         epervierVerifier = new ZKNOX_epervier();
         registry = new PQRegistry(address(epervierVerifier));
@@ -41,8 +44,8 @@ contract PQRegistryRegistrationTest is Test {
         // Load the centralized actors config
         string memory jsonData = vm.readFile("test/test_keys/actors_config.json");
         
-        // Load each actor from the config
-        string[] memory actorNames = new string[](10);
+        // Define actor names
+        actorNames = new string[](10);
         actorNames[0] = "alice";
         actorNames[1] = "bob";
         actorNames[2] = "charlie";
@@ -83,7 +86,7 @@ contract PQRegistryRegistrationTest is Test {
         // Load test data from the comprehensive registration vectors
         string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
         
-        // Parse addresses from the test vector (Alice is the first element in registration_intent array)
+        // Parse addresses from the test vector directly
         address testETHAddress = vm.parseAddress(vm.parseJsonString(jsonData, ".registration_intent[0].eth_address"));
         address testPQFingerprint = vm.parseAddress(vm.parseJsonString(jsonData, ".registration_intent[0].pq_fingerprint"));
         
@@ -109,21 +112,24 @@ contract PQRegistryRegistrationTest is Test {
         
         // Parse signature components from the test vector
         uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
-        bytes32 r = bytes32(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r")));
-        bytes32 s = bytes32(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
         
+        // Check initial nonces before submitting intent
+        assertEq(registry.ethNonces(alice.ethAddress), 0, "Initial ETH nonce should be 0");
+        assertEq(registry.pqKeyNonces(alice.pqFingerprint), 0, "Initial PQ nonce should be 0");
+
         // Submit registration intent with real data
         registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
         
         // Verify intent was created
-        (address pqFingerprint, bytes memory intentMessage, uint256 timestamp, uint256 ethNonce) = registry.pendingIntents(alice.ethAddress);
+        (address pqFingerprint, bytes memory intentMessage, uint256 timestamp) = registry.pendingIntents(alice.ethAddress);
         assertEq(pqFingerprint, alice.pqFingerprint, "PQ fingerprint should match");
-        assertEq(ethNonce, 0, "ETH nonce should match");
-        assertGt(timestamp, 0, "Timestamp should be set");
-        
-        // Verify nonces were incremented
         assertEq(registry.ethNonces(alice.ethAddress), 1, "ETH nonce should be incremented");
         assertEq(registry.pqKeyNonces(alice.pqFingerprint), 1, "PQ nonce should be incremented");
+        assertGt(timestamp, 0, "Timestamp should be set");
         
         // Verify bidirectional mapping
         assertEq(registry.pqFingerprintToPendingIntentAddress(alice.pqFingerprint), alice.ethAddress, "Bidirectional mapping should be set");
@@ -139,8 +145,10 @@ contract PQRegistryRegistrationTest is Test {
         
         // Parse signature components from the test vector
         uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
-        bytes32 r = bytes32(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r")));
-        bytes32 s = bytes32(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
         
         // Mock the Epervier verifier for intent submission
         vm.mockCall(
@@ -152,13 +160,14 @@ contract PQRegistryRegistrationTest is Test {
         registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
         
         // Load the real PQ confirmation message from test vector
-        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_message"));
+        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_message"));
         
         // Load the real signature components for confirmation
-        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_signature.salt"));
-        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".registration_confirmation[0].pq_signature.cs1");
-        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".registration_confirmation[0].pq_signature.cs2");
-        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_signature.hint"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
         
         // Confirm registration with real data
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
@@ -168,12 +177,151 @@ contract PQRegistryRegistrationTest is Test {
         assertEq(registry.addressToEpervierKey(alice.ethAddress), alice.pqFingerprint, "ETH address should be mapped to PQ fingerprint");
         
         // Verify intent was cleared
-        (address pqFingerprint2, bytes memory intentMessage2, uint256 timestamp2, uint256 ethNonce2) = registry.pendingIntents(alice.ethAddress);
+        (address pqFingerprint2, bytes memory intentMessage2, uint256 timestamp2) = registry.pendingIntents(alice.ethAddress);
         assertEq(timestamp2, 0, "Intent should be cleared");
         assertEq(registry.pqFingerprintToPendingIntentAddress(alice.pqFingerprint), address(0), "Bidirectional mapping should be cleared");
         
         // Verify nonces were incremented
         assertEq(registry.ethNonces(alice.ethAddress), 2, "ETH nonce should be incremented again");
+    }
+    
+    function testConfirmRegistration_AllActors_Success() public {
+        // Load comprehensive test vectors
+        string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        
+        for (uint i = 0; i < actorNames.length; i++) {
+            string memory actorName = actorNames[i];
+            Actor memory actor = getActor(actorName);
+            
+            // Find the intent vector for this actor
+            string memory intentVectorPath = string.concat(".registration_intent[", vm.toString(i), "]");
+            
+            // Parse intent data from the test vector
+            bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_message")));
+            uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.v"))));
+            uint256 rDecimal = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.r")));
+            uint256 sDecimal = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.s")));
+            bytes32 r = bytes32(rDecimal);
+            bytes32 s = bytes32(sDecimal);
+            
+            // Mock the Epervier verifier for intent submission
+            vm.mockCall(
+                address(epervierVerifier),
+                abi.encodeWithSelector(epervierVerifier.recover.selector),
+                abi.encode(actor.pqFingerprint)
+            );
+            
+            // Check initial nonces before submitting intent
+            assertEq(registry.ethNonces(actor.ethAddress), 0, string.concat("Initial ETH nonce should be 0 for ", actorName));
+            assertEq(registry.pqKeyNonces(actor.pqFingerprint), 0, string.concat("Initial PQ nonce should be 0 for ", actorName));
+            
+            // Submit registration intent
+            registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+            
+            // Verify intent was created
+            (address pqFingerprint, bytes memory intentMessage, uint256 timestamp) = registry.pendingIntents(actor.ethAddress);
+            assertEq(pqFingerprint, actor.pqFingerprint, string.concat("PQ fingerprint should match for ", actorName));
+            assertEq(registry.ethNonces(actor.ethAddress), 1, string.concat("ETH nonce should be incremented for ", actorName));
+            assertEq(registry.pqKeyNonces(actor.pqFingerprint), 1, string.concat("PQ nonce should be incremented for ", actorName));
+            assertGt(timestamp, 0, string.concat("Timestamp should be set for ", actorName));
+            
+            // Find the confirmation vector for this actor
+            string memory confirmVectorPath = string.concat(".registration_confirmation[", vm.toString(i), "]");
+            
+            // Parse confirmation data from the test vector
+            bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, string.concat(confirmVectorPath, ".pq_message")));
+            bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(confirmJsonData, string.concat(confirmVectorPath, ".pq_signature.salt")));
+            uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJsonData, string.concat(confirmVectorPath, ".pq_signature.cs1"));
+            uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJsonData, string.concat(confirmVectorPath, ".pq_signature.cs2"));
+            uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJsonData, string.concat(confirmVectorPath, ".pq_signature.hint")));
+            
+            // Mock the Epervier verifier for confirmation
+            vm.mockCall(
+                address(epervierVerifier),
+                abi.encodeWithSelector(epervierVerifier.recover.selector),
+                abi.encode(actor.pqFingerprint)
+            );
+            
+            // Confirm registration
+            registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+            
+            // Verify registration was completed
+            assertEq(registry.epervierKeyToAddress(actor.pqFingerprint), actor.ethAddress, string.concat("PQ fingerprint should be mapped to ETH address for ", actorName));
+            assertEq(registry.addressToEpervierKey(actor.ethAddress), actor.pqFingerprint, string.concat("ETH address should be mapped to PQ fingerprint for ", actorName));
+            
+            // Verify intent was cleared
+            (address pqFingerprint2, bytes memory intentMessage2, uint256 timestamp2) = registry.pendingIntents(actor.ethAddress);
+            assertEq(timestamp2, 0, string.concat("Intent should be cleared for ", actorName));
+            assertEq(registry.pqFingerprintToPendingIntentAddress(actor.pqFingerprint), address(0), string.concat("Bidirectional mapping should be cleared for ", actorName));
+            
+            // Verify nonces were incremented
+            assertEq(registry.ethNonces(actor.ethAddress), 2, string.concat("ETH nonce should be incremented again for ", actorName));
+            assertEq(registry.pqKeyNonces(actor.pqFingerprint), 2, string.concat("PQ nonce should be incremented again for ", actorName));
+            
+            console.log(string.concat("Completed registration flow for ", actorName));
+        }
+        
+        console.log("All 10 actors registration flows completed successfully!");
+    }
+    
+    function testRemoveIntent_AllActors_Success() public {
+        // Load intent and removal vectors
+        string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory removalJsonData = vm.readFile("test/test_vectors/registration_eth_removal_vectors.json");
+
+        for (uint i = 0; i < actorNames.length; i++) {
+            string memory actorName = actorNames[i];
+            Actor memory actor = getActor(actorName);
+
+            // Find the intent vector for this actor
+            string memory intentVectorPath = string.concat(".registration_intent[", vm.toString(i), "]");
+            // Find the removal vector for this actor
+            string memory removalVectorPath = string.concat(".registration_eth_removal[", vm.toString(i), "]");
+
+            // Parse intent data from the test vector
+            bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_message")));
+            uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.v"))));
+            uint256 rDecimal = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.r")));
+            uint256 sDecimal = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.s")));
+            bytes32 r = bytes32(rDecimal);
+            bytes32 s = bytes32(sDecimal);
+
+            // Submit the registration intent
+            registry.submitRegistrationIntent(
+                ethIntentMessage,
+                v,
+                r,
+                s
+            );
+
+            // Parse removal data from the test vector
+            bytes memory ethRemoveMessage = vm.parseBytes(vm.parseJsonString(removalJsonData, string.concat(removalVectorPath, ".eth_message")));
+            uint8 vRemove = uint8(vm.parseUint(vm.parseJsonString(removalJsonData, string.concat(removalVectorPath, ".eth_signature.v"))));
+            uint256 rRemoveDecimal = vm.parseUint(vm.parseJsonString(removalJsonData, string.concat(removalVectorPath, ".eth_signature.r")));
+            uint256 sRemoveDecimal = vm.parseUint(vm.parseJsonString(removalJsonData, string.concat(removalVectorPath, ".eth_signature.s")));
+            bytes32 rRemove = bytes32(rRemoveDecimal);
+            bytes32 sRemove = bytes32(sRemoveDecimal);
+
+            // Get the PQ fingerprint from the intent before removing it
+            (address storedPQFingerprint, , ) = registry.pendingIntents(actor.ethAddress);
+            console.log("Stored PQ fingerprint:", storedPQFingerprint);
+
+            // Remove the intent
+            registry.removeIntent(ethRemoveMessage, vRemove, rRemove, sRemove);
+
+            // Verify the intent mapping is cleared
+            (address pqFingerprint, , uint256 timestamp) = registry.pendingIntents(actor.ethAddress);
+            assertEq(pqFingerprint, address(0), "PQ fingerprint should be zero address after removal");
+            assertEq(timestamp, 0, "Timestamp should be zero after removal");
+
+            // Check the bidirectional mapping using the PQ fingerprint that was stored in the intent
+            address ethAddress = registry.pqFingerprintToPendingIntentAddress(storedPQFingerprint);
+            console.log("ETH address for stored PQ fingerprint:", ethAddress);
+            assertEq(ethAddress, address(0), "ETH address should be zero address after removal");
+
+            console.log("Intent created and removed for", actorName);
+        }
     }
     
     // ============================================================================
@@ -197,17 +345,20 @@ contract PQRegistryRegistrationTest is Test {
         
         // Parse signature components from the test vector
         uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
-        bytes32 r = bytes32(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r")));
-        bytes32 s = bytes32(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
         
         registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
         
         // Confirm the registration
-        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_message"));
-        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_signature.salt"));
-        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".registration_confirmation[0].pq_signature.cs1");
-        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".registration_confirmation[0].pq_signature.cs2");
-        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_signature.hint"));
+        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
         
         // Try to submit another registration intent - should revert
@@ -232,8 +383,10 @@ contract PQRegistryRegistrationTest is Test {
         
         // Parse signature components from the test vector
         uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
-        bytes32 r = bytes32(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r")));
-        bytes32 s = bytes32(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
         
         // Modify the nonce in the message to make it invalid
         // This is a simplified test - in practice we'd need to reconstruct the message with wrong nonce
@@ -278,12 +431,12 @@ contract PQRegistryRegistrationTest is Test {
         );
         
         // Try to confirm without submitting intent first
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_message"));
-        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_signature.salt"));
-        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".registration_confirmation[0].pq_signature.cs1");
-        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".registration_confirmation[0].pq_signature.cs2");
-        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_signature.hint"));
+        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
         
         vm.expectRevert("No pending intent found for PQ fingerprint");
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);

@@ -33,7 +33,6 @@ contract PQRegistry {
         address pqFingerprint;
         bytes intentMessage;
         uint256 timestamp;
-        uint256 ethNonce;
     }
     mapping(address => Intent) public pendingIntents;
     
@@ -57,7 +56,6 @@ contract PQRegistry {
         address publicKeyAddress;
         bytes pqMessage;
         uint256 timestamp;
-        uint256 ethNonce;
     }
     
     mapping(address => UnregistrationIntent) public unregistrationIntents;
@@ -65,14 +63,14 @@ contract PQRegistry {
     event EpervierKeyDeleted(address indexed owner, address indexed publicKeyAddress);
     event PQSecurityDisabled(address indexed owner);
     event PQSecurityEnabled(address indexed owner, address indexed publicKeyAddress);
-    event RegistrationIntentSubmitted(address indexed ethAddress, address indexed pqFingerprint, uint256 ethNonce);
+    event RegistrationIntentSubmitted(address indexed ethAddress, address indexed pqFingerprint);
     event RegistrationConfirmed(address indexed ethAddress, address indexed pqFingerprint);
     event RegistrationIntentRemoved(address indexed ethAddress);
     event IntentRemoved(address indexed owner);
     event ChangeETHAddressIntentSubmitted(address indexed pqFingerprint, address indexed newETHAddress, uint256 pqNonce);
     event ChangeETHAddressConfirmed(address indexed pqFingerprint, address indexed oldETHAddress, address indexed newETHAddress);
     event ChangeETHAddressIntentRemoved(address indexed pqFingerprint);
-    event UnregistrationIntentSubmitted(address indexed ethAddress, address indexed pqFingerprint, uint256 ethNonce);
+    event UnregistrationIntentSubmitted(address indexed ethAddress, address indexed pqFingerprint);
     event UnregistrationConfirmed(address indexed ethAddress, address indexed pqFingerprint);
     event UnregistrationIntentRemoved(address indexed ethAddress);
     event DebugParsedIntentAddress(address parsedAddress);
@@ -639,8 +637,7 @@ contract PQRegistry {
         pendingIntents[intentAddress] = Intent({
             pqFingerprint: recoveredFingerprint,  // Use recovered address directly
             intentMessage: basePQMessage,
-            timestamp: block.timestamp,
-            ethNonce: ethNonce
+            timestamp: block.timestamp
         });
         
         // Store the bidirectional mapping: PQ fingerprint to ETH address
@@ -652,7 +649,7 @@ contract PQRegistry {
         // Increment PQ nonce to prevent replay attacks
         pqKeyNonces[recoveredFingerprint]++;  // Use recovered address directly
         
-        emit RegistrationIntentSubmitted(intentAddress, recoveredFingerprint, ethNonce);
+        emit RegistrationIntentSubmitted(intentAddress, recoveredFingerprint);
     }
     
     /**
@@ -724,9 +721,9 @@ contract PQRegistry {
         // 2. PQ fingerprint from ETH message must match recovered PQ fingerprint from PQ signature
         require(pqFingerprint == recoveredFingerprint, "PQ fingerprint mismatch: ETH message vs recovered PQ signature");
         
-        // 3. Check that there's a pending intent for this PQ fingerprint
-        Intent storage intent = pendingIntents[recoveredFingerprint];
-        require(intent.timestamp != 0, "No pending intent found for PQ fingerprint");
+        // 3. Check that there's a pending intent for this ETH address
+        Intent storage intent = pendingIntents[ethAddress];
+        require(intent.timestamp != 0, "No pending intent found for ETH address");
         
         // 4. ETH address from PQ message must match the stored intent ETH address
         require(pqFingerprintToPendingIntentAddress[recoveredFingerprint] == ethAddress, "ETH address mismatch: PQ message vs stored intent");
@@ -757,6 +754,9 @@ contract PQRegistry {
         // Clear the pending intent and bidirectional mapping
         delete pendingIntents[ethAddress];
         delete pqFingerprintToPendingIntentAddress[recoveredFingerprint];
+        
+        // Increment PQ nonce
+        pqKeyNonces[recoveredFingerprint]++;
         
         // Increment ETH nonce
         ethNonces[ethAddress]++;
@@ -837,9 +837,12 @@ contract PQRegistry {
         // FOURTH: Verify ETH nonce
         require(ethNonces[recoveredETHAddress] == ethNonce, "ERR7: Invalid ETH nonce in removeIntent");
         
+        // Store the PQ fingerprint before clearing the intent
+        address pqFingerprintToClear = intent.pqFingerprint;
+        
         // Clear the intent
         delete pendingIntents[recoveredETHAddress];
-        delete pqFingerprintToPendingIntentAddress[intent.pqFingerprint];
+        delete pqFingerprintToPendingIntentAddress[pqFingerprintToClear];
         
         // Increment ETH nonce
         ethNonces[recoveredETHAddress]++;
@@ -1324,14 +1327,13 @@ contract PQRegistry {
             publicKey: publicKey,
             publicKeyAddress: publicKeyAddress,
             pqMessage: pqMessage,
-            timestamp: block.timestamp,
-            ethNonce: ethNonce
+            timestamp: block.timestamp
         });
         
         // Increment ETH nonce
         ethNonces[intentAddress]++;
         
-        emit UnregistrationIntentSubmitted(intentAddress, publicKeyAddress, ethNonce);
+        emit UnregistrationIntentSubmitted(intentAddress, publicKeyAddress);
     }
     
     /**
