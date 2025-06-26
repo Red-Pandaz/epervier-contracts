@@ -99,27 +99,28 @@
     "description": "Base PQ message structure for change ETH address confirmation.",
     "fields": [
       {"name": "DOMAIN_SEPARATOR", "type": "bytes32", "length": 32},
-      {"name": "pattern", "type": "string", "length": 32, "value": "Confirm changing ETH address from "},
+      {"name": "pattern", "type": "string", "length": 34, "value": "Confirm changing ETH address from "},
       {"name": "oldEthAddress", "type": "address", "length": 20, "description": "Current ETH address bound to the PQ fingerprint"},
       {"name": "pattern2", "type": "string", "length": 4, "value": " to "},
       {"name": "newEthAddress", "type": "address", "length": 20, "description": "New ETH address to bind to the PQ fingerprint"},
       {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
     ],
-    "total_length": 140
+    "total_length": 142
   },
   "ETHChangeETHAddressConfirmationMessage": {
     "description": "ETH message containing nested PQ signature components and base PQ message for change ETH address confirmation.",
     "fields": [
       {"name": "DOMAIN_SEPARATOR", "type": "bytes32", "length": 32},
-      {"name": "pattern", "type": "string", "length": 27, "value": "Confirm change ETH Address"},
-      {"name": "basePQMessage", "type": "BasePQChangeETHAddressConfirmMessage", "length": 140, "description": "Base PQ message that was signed"},
+      {"name": "pattern", "type": "string", "length": 43, "value": "Confirm change ETH Address for fingerprint "},
+      {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ fingerprint to remove change intent for"},
+      {"name": "basePQMessage", "type": "BasePQChangeETHAddressConfirmMessage", "length": 142, "description": "Base PQ message that was signed"},
       {"name": "salt", "type": "bytes", "length": 40, "description": "PQ signature salt component"},
       {"name": "cs1", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs1 component"},
       {"name": "cs2", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs2 component"},
       {"name": "hint", "type": "uint256", "length": 32, "description": "PQ signature hint component"},
       {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
     ],
-    "total_length": 2351
+    "total_length": 2389
   },
   "ETHRemoveChangeIntentMessage": {
     "description": "ETH-controlled removal of a pending change ETH address intent.",

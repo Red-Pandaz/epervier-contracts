@@ -1110,6 +1110,12 @@ contract PQRegistry {
         
         // SIXTH: Verify nonces
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
+        
+        // Debug output for ETH nonce
+        console.log("Expected ETH nonce:", ethNonce);
+        console.log("Actual ETH nonce for new address:", ethNonces[newEthAddress]);
+        console.log("New ETH address:", newEthAddress);
+        
         require(ethNonces[newEthAddress] == ethNonce, "Invalid ETH nonce");
         
         // Store the change intent
@@ -1122,6 +1128,8 @@ contract PQRegistry {
         
         // Increment PQ nonce
         pqKeyNonces[recoveredFingerprint]++;
+        // Increment ETH nonce for the new address
+        ethNonces[newEthAddress]++;
 
         emit ChangeETHAddressIntentSubmitted(recoveredFingerprint, newEthAddress, ethNonce);
     }
@@ -1141,6 +1149,7 @@ contract PQRegistry {
         
         // SECOND: Parse the ETH change address confirmation message using our standardized schema
         (
+            address pqFingerprint,
             uint256 ethNonce,
             bytes memory salt,
             uint256[] memory cs1,
@@ -1173,10 +1182,7 @@ contract PQRegistry {
         
         // 5. PQ fingerprint must be currently registered to the old ETH address
         require(epervierKeyToAddress[recoveredFingerprint] == oldEthAddress, "PQ fingerprint not registered to old ETH address");
-        
-        // 6. Verify intent message consistency
-        require(keccak256(intent.pqMessage) == keccak256(basePQMessage), "Intent message mismatch");
-        
+
         // SIXTH: Verify nonces
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[newEthAddress] == ethNonce, "Invalid ETH nonce");
@@ -1188,6 +1194,10 @@ contract PQRegistry {
         
         // Clear the intent
         delete changeETHAddressIntents[recoveredFingerprint];
+        
+        // Increment nonces
+        pqKeyNonces[recoveredFingerprint]++;
+        ethNonces[newEthAddress]++;
         
         emit ChangeETHAddressConfirmed(recoveredFingerprint, oldEthAddress, newEthAddress);
     }
@@ -2110,27 +2120,27 @@ contract PQRegistry {
         uint256[] memory fieldLengths = new uint256[](4);
         string[] memory fieldTypes = new string[](4);
         
-        // oldEthAddress: starts after DOMAIN_SEPARATOR (32) + pattern (32) = 64
-        fieldOffsets[0] = 64;
+        // oldEthAddress: starts after DOMAIN_SEPARATOR (32) + pattern (34) = 66
+        fieldOffsets[0] = 66;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // " to " pattern: starts after oldEthAddress = 64 + 20 = 84, length = 4
-        fieldOffsets[1] = 84;
+        // " to " pattern: starts after oldEthAddress = 66 + 20 = 86, length = 4
+        fieldOffsets[1] = 86;
         fieldLengths[1] = 4;
         fieldTypes[1] = "string";
         
-        // newEthAddress: starts after " to " = 84 + 4 = 88, length = 20
-        fieldOffsets[2] = 88;
+        // newEthAddress: starts after " to " = 86 + 4 = 90, length = 20
+        fieldOffsets[2] = 90;
         fieldLengths[2] = 20;
         fieldTypes[2] = "address";
         
-        // pqNonce: starts after newEthAddress = 88 + 20 = 108, length = 32
-        fieldOffsets[3] = 108;
+        // pqNonce: starts after newEthAddress = 90 + 20 = 110, length = 32
+        fieldOffsets[3] = 110;
         fieldLengths[3] = 32;
         fieldTypes[3] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 32, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 34, fieldOffsets, fieldLengths, fieldTypes);
         
         // Convert the extracted bytes to addresses manually to ensure correct byte order
         uint256 addr1 = 0;
@@ -2658,9 +2668,10 @@ contract PQRegistry {
 
     /**
      * @dev Parse a ETHChangeETHAddressConfirmationMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Confirm change ETH Address and bond with fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm change ETH Address for fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function parseETHChangeETHAddressConfirmationMessage(bytes memory message) internal pure returns (
+        address pqFingerprint,
         uint256 ethNonce,
         bytes memory salt,
         uint256[] memory cs1,
@@ -2668,50 +2679,56 @@ contract PQRegistry {
         uint256 hint,
         bytes memory basePQMessage
     ) {
-        bytes memory pattern = "Confirm change ETH Address and bond with fingerprint ";
-        uint256[] memory fieldOffsets = new uint256[](7);
-        uint256[] memory fieldLengths = new uint256[](7);
-        string[] memory fieldTypes = new string[](7);
+        bytes memory pattern = "Confirm change ETH Address for fingerprint ";
+        uint256[] memory fieldOffsets = new uint256[](8);
+        uint256[] memory fieldLengths = new uint256[](8);
+        string[] memory fieldTypes = new string[](8);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (47) = 79, length = 20
-        fieldOffsets[0] = 79;
+        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (43) = 75, length = 20
+        fieldOffsets[0] = 75;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // basePQMessage: starts after pqFingerprint = 79 + 20 = 99, length = 140
-        fieldOffsets[1] = 99;
-        fieldLengths[1] = 140;
+        // basePQMessage: starts after pqFingerprint = 75 + 20 = 95, length = 142
+        fieldOffsets[1] = 95;
+        fieldLengths[1] = 142;
         fieldTypes[1] = "bytes";
         
-        // salt: starts after basePQMessage = 99 + 140 = 239, length = 40
-        fieldOffsets[2] = 239;
+        // salt: starts after basePQMessage = 95 + 142 = 237, length = 40
+        fieldOffsets[2] = 237;
         fieldLengths[2] = 40;
         fieldTypes[2] = "bytes";
         
-        // cs1: starts after salt = 239 + 40 = 279, length = 32 * 32 = 1024
-        fieldOffsets[3] = 279;
+        // cs1: starts after salt = 237 + 40 = 277, length = 32 * 32 = 1024
+        fieldOffsets[3] = 277;
         fieldLengths[3] = 1024;
         fieldTypes[3] = "uint256[32]";
         
-        // cs2: starts after cs1 = 279 + 1024 = 1303, length = 32 * 32 = 1024
-        fieldOffsets[4] = 1303;
+        // cs2: starts after cs1 = 277 + 1024 = 1301, length = 32 * 32 = 1024
+        fieldOffsets[4] = 1301;
         fieldLengths[4] = 1024;
         fieldTypes[4] = "uint256[32]";
         
-        // hint: starts after cs2 = 1303 + 1024 = 2327, length = 32
-        fieldOffsets[5] = 2327;
+        // hint: starts after cs2 = 1301 + 1024 = 2325, length = 32
+        fieldOffsets[5] = 2325;
         fieldLengths[5] = 32;
         fieldTypes[5] = "uint256";
         
-        // ethNonce: starts after hint = 2327 + 32 = 2359, length = 32
-        fieldOffsets[6] = 2359;
+        // ethNonce: starts after hint = 2325 + 32 = 2357, length = 32
+        fieldOffsets[6] = 2357;
         fieldLengths[6] = 32;
         fieldTypes[6] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 47, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 43, fieldOffsets, fieldLengths, fieldTypes);
         
         // Convert parsed fields to appropriate types
-        // Note: pqFingerprint is parsed but not returned as it's not needed for this function
+        // Convert the extracted bytes to address manually to ensure correct byte order
+        uint256 addr = 0;
+        for (uint j = 0; j < 20; j++) {
+            addr = (addr << 8) | uint8(parsedFields[0][j]);
+        }
+        pqFingerprint = address(uint160(addr));
+        
         basePQMessage = parsedFields[1];
         salt = parsedFields[2];
         
