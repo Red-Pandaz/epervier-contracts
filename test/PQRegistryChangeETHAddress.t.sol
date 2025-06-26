@@ -1,0 +1,176 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "forge-std/Test.sol";
+import "../src/PQRegistry.sol";
+import "../src/ETHFALCON/ZKNOX_epervier.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+
+contract PQRegistryChangeETHAddressTest is Test {
+    using ECDSA for bytes32;
+    using Strings for string;
+    
+    PQRegistry public registry;
+    ZKNOX_epervier public epervierVerifier;
+    
+    // Actor data structure
+    struct Actor {
+        address ethAddress;
+        address pqFingerprint;
+        uint256 ethPrivateKey;
+        string pqPrivateKeyFile;
+        string pqPublicKeyFile;
+    }
+    
+    // Actor mapping
+    mapping(string => Actor) public actors;
+    
+    // Actor names array for easy iteration
+    string[] public actorNames;
+    
+    // Test events for verification
+    event ChangeETHAddressIntentSubmitted(address indexed pqFingerprint, address indexed newETHAddress, uint256 ethNonce);
+    
+    function setUp() public {
+        epervierVerifier = new ZKNOX_epervier();
+        registry = new PQRegistry(address(epervierVerifier));
+        
+        // Set a timestamp for the test environment
+        vm.warp(1640995200); // January 1, 2022 00:00:00 UTC
+        
+        // Load actor data from centralized config
+        loadActorsConfig();
+    }
+    
+    function loadActorsConfig() internal {
+        // Load the centralized actors config
+        string memory jsonData = vm.readFile("test/test_keys/actors_config.json");
+        
+        // Define actor names
+        actorNames = new string[](10);
+        actorNames[0] = "alice";
+        actorNames[1] = "bob";
+        actorNames[2] = "charlie";
+        actorNames[3] = "danielle";
+        actorNames[4] = "eve";
+        actorNames[5] = "frank";
+        actorNames[6] = "grace";
+        actorNames[7] = "henry";
+        actorNames[8] = "iris";
+        actorNames[9] = "jack";
+        
+        for (uint i = 0; i < actorNames.length; i++) {
+            string memory actorName = actorNames[i];
+            string memory actorPath = string.concat(".actors.", actorName);
+            
+            actors[actorName] = Actor({
+                ethAddress: vm.parseAddress(vm.parseJsonString(jsonData, string.concat(actorPath, ".eth_address"))),
+                pqFingerprint: vm.parseAddress(vm.parseJsonString(jsonData, string.concat(actorPath, ".pq_fingerprint"))),
+                ethPrivateKey: vm.parseUint(vm.parseJsonString(jsonData, string.concat(actorPath, ".eth_private_key"))),
+                pqPrivateKeyFile: vm.parseJsonString(jsonData, string.concat(actorPath, ".pq_private_key_file")),
+                pqPublicKeyFile: vm.parseJsonString(jsonData, string.concat(actorPath, ".pq_public_key_file"))
+            });
+        }
+    }
+    
+    function getActor(string memory actorName) internal view returns (Actor memory) {
+        return actors[actorName];
+    }
+    
+    // Helper function to parse signature
+    function parseSignature(bytes memory signature) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
+        require(signature.length == 65, "Invalid signature length");
+        
+        assembly {
+            r := mload(add(signature, 32))
+            s := mload(add(signature, 64))
+            v := byte(0, mload(add(signature, 96)))
+        }
+        
+        if (v < 27) v += 27;
+        require(v == 27 || v == 28, "Invalid signature 'v' value");
+    }
+    
+    // ============================================================================
+    // CHANGE ETH ADDRESS INTENT TESTS
+    // ============================================================================
+    
+    function testChangeETHAddressIntent_AllVectors_Isolated() public {
+        string memory registrationJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory confirmationJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/change_eth_address_intent_vectors.json");
+
+        string[] memory actorCycle = new string[](10);
+        actorCycle[0] = "alice";
+        actorCycle[1] = "bob";
+        actorCycle[2] = "charlie";
+        actorCycle[3] = "danielle";
+        actorCycle[4] = "eve";
+        actorCycle[5] = "frank";
+        actorCycle[6] = "grace";
+        actorCycle[7] = "henry";
+        actorCycle[8] = "iris";
+        actorCycle[9] = "jack";
+
+        for (uint i = 0; i < actorCycle.length; i++) {
+            // Reset state for each iteration
+            setUp();
+
+            string memory currentActor = actorCycle[i];
+            string memory nextActor = actorCycle[(i + 1) % actorCycle.length];
+            Actor memory currentActorData = getActor(currentActor);
+            Actor memory nextActorData = getActor(nextActor);
+
+            // Step 1: Register current actor (intent + confirm)
+            string memory registrationVectorPath = string.concat(".registration_intent[", vm.toString(i), "]");
+            bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(registrationJsonData, string.concat(registrationVectorPath, ".eth_message")));
+            uint8 vIntent = uint8(vm.parseUint(vm.parseJsonString(registrationJsonData, string.concat(registrationVectorPath, ".eth_signature.v"))));
+            uint256 rIntentDecimal = vm.parseUint(vm.parseJsonString(registrationJsonData, string.concat(registrationVectorPath, ".eth_signature.r")));
+            uint256 sIntentDecimal = vm.parseUint(vm.parseJsonString(registrationJsonData, string.concat(registrationVectorPath, ".eth_signature.s")));
+            bytes32 rIntent = bytes32(rIntentDecimal);
+            bytes32 sIntent = bytes32(sIntentDecimal);
+            registry.submitRegistrationIntent(ethIntentMessage, vIntent, rIntent, sIntent);
+            vm.clearMockedCalls();
+
+            string memory confirmationVectorPath = string.concat(".registration_confirmation[", vm.toString(i), "]");
+            bytes memory pqConfirmationMessage = vm.parseBytes(vm.parseJsonString(confirmationJsonData, string.concat(confirmationVectorPath, ".pq_message")));
+            bytes memory confirmationSalt = vm.parseBytes(vm.parseJsonString(confirmationJsonData, string.concat(confirmationVectorPath, ".pq_signature.salt")));
+            uint256 confirmationHint = vm.parseUint(vm.parseJsonString(confirmationJsonData, string.concat(confirmationVectorPath, ".pq_signature.hint")));
+            string memory confirmationCs1Path = string.concat(confirmationVectorPath, ".pq_signature.cs1");
+            uint256[] memory confirmationCs1 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                confirmationCs1[j] = vm.parseUint(vm.parseJsonString(confirmationJsonData, string.concat(confirmationCs1Path, "[", vm.toString(j), "]")));
+            }
+            string memory confirmationCs2Path = string.concat(confirmationVectorPath, ".pq_signature.cs2");
+            uint256[] memory confirmationCs2 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                confirmationCs2[j] = vm.parseUint(vm.parseJsonString(confirmationJsonData, string.concat(confirmationCs2Path, "[", vm.toString(j), "]")));
+            }
+            registry.confirmRegistration(pqConfirmationMessage, confirmationSalt, confirmationCs1, confirmationCs2, confirmationHint);
+            vm.clearMockedCalls();
+
+            // Step 2: Submit change ETH address intent (current -> next)
+            string memory changeVectorPath = string.concat(".change_eth_address_intent[", vm.toString(i), "]");
+            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".base_pq_message")));
+            bytes memory salt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".pq_signature.salt")));
+            uint256 hint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".pq_signature.hint")));
+            string memory cs1Path = string.concat(changeVectorPath, ".pq_signature.cs1");
+            uint256[] memory cs1 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cs1[j] = vm.parseUint(vm.parseJsonString(changeIntentJsonData, string.concat(cs1Path, "[", vm.toString(j), "]")));
+            }
+            string memory cs2Path = string.concat(changeVectorPath, ".pq_signature.cs2");
+            uint256[] memory cs2 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cs2[j] = vm.parseUint(vm.parseJsonString(changeIntentJsonData, string.concat(cs2Path, "[", vm.toString(j), "]")));
+            }
+            registry.submitChangeETHAddressIntent(pqMessage, salt, cs1, cs2, hint);
+
+            // Assert that the intent was created
+            (address newETHAddress, , uint256 changeTimestamp, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
+            assertEq(newETHAddress, nextActorData.ethAddress, string.concat("Change intent should map ", currentActor, "'s PQ fingerprint to ", nextActor, "'s ETH address"));
+            assertGt(changeTimestamp, 0, string.concat("Change intent should have a timestamp for ", currentActor));
+        }
+    }
+} 

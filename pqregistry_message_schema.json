@@ -71,29 +71,29 @@
     "description": "ETH message that gets signed and embedded in the PQ change address intent.",
     "fields": [
       {"name": "DOMAIN_SEPARATOR", "type": "bytes32", "length": 32},
-      {"name": "pattern", "type": "string", "length": 44, "value": "Intent to Change ETH Address and bond with fingeprint "},
+      {"name": "pattern", "type": "string", "length": 55, "value": "Intent to Change ETH Address and bond with fingerprint "},
       {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ fingerprint to change ETH address for"},
       {"name": "pattern2", "type": "string", "length": 4, "value": " to "},
       {"name": "newEthAddress", "type": "address", "length": 20, "description": "New ETH address to bind to the PQ fingerprint"},
       {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
     ],
-    "total_length": 152
+    "total_length": 163
   },
   "PQChangeETHAddressIntentMessage": {
     "description": "PQ message containing nested ETH signature and message for change ETH address intent.",
     "fields": [
       {"name": "DOMAIN_SEPARATOR", "type": "bytes32", "length": 32},
-      {"name": "pattern", "type": "string", "length": 29, "value": "Change bound ETH Address from "},
+      {"name": "pattern", "type": "string", "length": 40, "value": "Intent to change bound ETH Address from "},
       {"name": "oldEthAddress", "type": "address", "length": 20, "description": "Current ETH address bound to the PQ fingerprint"},
       {"name": "pattern2", "type": "string", "length": 4, "value": " to "},
       {"name": "newEthAddress", "type": "address", "length": 20, "description": "New ETH address to bind to the PQ fingerprint"},
-      {"name": "baseETHMessage", "type": "BaseETHChangeETHAddressIntentMessage", "length": 152, "description": "Base ETH message that was signed"},
+      {"name": "baseETHMessage", "type": "BaseETHChangeETHAddressIntentMessage", "length": 162, "description": "Base ETH message that was signed"},
       {"name": "v", "type": "uint8", "length": 1, "description": "ETH signature v component"},
       {"name": "r", "type": "bytes32", "length": 32, "description": "ETH signature r component"},
       {"name": "s", "type": "bytes32", "length": 32, "description": "ETH signature s component"},
       {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
     ],
-    "total_length": 362
+    "total_length": 372
   },
   "BasePQChangeETHAddressConfirmMessage": {
     "description": "Base PQ message structure for change ETH address confirmation.",

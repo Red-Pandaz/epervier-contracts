@@ -159,6 +159,9 @@ contract PQRegistryRegistrationTest is Test {
         
         registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
         
+        // Clear the mock
+        vm.clearMockedCalls();
+        
         // Load the real PQ confirmation message from test vector
         string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
         bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_message"));

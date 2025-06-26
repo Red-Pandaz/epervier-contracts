@@ -208,28 +208,28 @@ contract PQRegistryComprehensiveTest is Test {
             
             // Load the ETH intent message and signature
             bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_message")));
-            uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.v"))));
+            uint8 v2 = uint8(vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.v"))));
             
             // Convert decimal r and s values to hex format for bytes32 parsing
-            uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.r")));
-            uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.s")));
-            bytes32 r = bytes32(rDecimal);
-            bytes32 s = bytes32(sDecimal);
+            uint256 rDecimal2 = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.r")));
+            uint256 sDecimal2 = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.s")));
+            bytes32 r2 = bytes32(rDecimal2);
+            bytes32 s2 = bytes32(sDecimal2);
             
             // Test 1: Tamper with ETH address in the message (flip a bit)
             bytes memory tamperedMessage = tamperWithAddress(ethIntentMessage, 32, 0); // Flip first bit of address
             vm.expectRevert("Expected pattern not found in message");
-            registry.submitRegistrationIntent(tamperedMessage, v, r, s);
+            registry.submitRegistrationIntent(tamperedMessage, v2, r2, s2);
             
             // Test 2: Tamper with PQ fingerprint in the message (flip a bit)
             bytes memory tamperedMessage2 = tamperWithAddress(ethIntentMessage, 64, 0); // Flip first bit of fingerprint
             vm.expectRevert("Expected pattern not found in message");
-            registry.submitRegistrationIntent(tamperedMessage2, v, r, s);
+            registry.submitRegistrationIntent(tamperedMessage2, v2, r2, s2);
             
             // Test 3: Tamper with domain separator
             bytes memory tamperedMessage3 = tamperWithDomainSeparator(ethIntentMessage);
             vm.expectRevert("Expected pattern not found in message");
-            registry.submitRegistrationIntent(tamperedMessage3, v, r, s);
+            registry.submitRegistrationIntent(tamperedMessage3, v2, r2, s2);
             
             console.log(string.concat("+ Message validation tests successful for ", actorName));
         }
