@@ -101,22 +101,6 @@ contract PQRegistry {
     }
 
     /**
-     * @dev Extract ETH nonce from PQ message
-     * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce + ethSignature
-     */
-    function extractEthNonce(bytes memory message) internal pure returns (uint256 ethNonce) {
-        // Check if message is long enough to contain the pattern + address + nonce + signature
-        require(message.length >= 32 + 27 + 20 + 32 + 65, "Message too short for ETH nonce");
-        
-        // Extract the ETH nonce (32 bytes before the ETH signature)
-        bytes memory nonceBytes = new bytes(32);
-        for (uint j = 0; j < 32; j++) {
-            nonceBytes[j] = message[message.length - 65 - 32 + j];
-        }
-        return abi.decode(nonceBytes, (uint256));
-    }
-
-    /**
      * @dev Extract PQ signature salt from ETH message
      * @param messageType 0=Registration, 1=ChangeETHAddress, 2=Unregistration
      * Registration format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
@@ -365,13 +349,13 @@ contract PQRegistry {
 
     /**
      * @dev Extract fingerprint from ETH message
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to epervier fingerprint " + fingerprint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier fingerprint " + fingerprint + ethNonce
      */
     function extractFingerprintFromETHMessage(bytes memory message) internal pure returns (address fingerprint) {
         require(message.length >= 32 + 40 + 20 + 32, "Message too short for fingerprint from ETH message");
         bytes memory fingerprintBytes = new bytes(20);
         for (uint j = 0; j < 20; j++) {
-            fingerprintBytes[j] = message[32 + 40 + j]; // DOMAIN_SEPARATOR + "Confirm bonding to epervier fingerprint " + offset
+            fingerprintBytes[j] = message[32 + 40 + j]; // DOMAIN_SEPARATOR + "Confirm bonding to Epervier fingerprint " + offset
         }
         
         // Convert the extracted bytes to address manually to ensure correct byte order
@@ -521,39 +505,9 @@ contract PQRegistry {
      * @param message The message to extract nonce from
      * @param messageType 0 for intent message, 1 for confirmation message
      * Intent format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
-     * Confirmation format: DOMAIN_SEPARATOR + "Confirm bonding to epervier fingerprint " + fingerprint + ethNonce
+     * Confirmation format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier fingerprint " + fingerprint + ethNonce
      */
-    function extractEthNonce(bytes memory message, uint8 messageType) internal pure returns (uint256 ethNonce) {
-        if (messageType == 0) {
-            // Intent message format
-            require(message.length >= 32 + 27 + 32, "Message too short for ETH nonce from intent message");
-            
-            // Extract the ETH nonce (32 bytes after DOMAIN_SEPARATOR + pattern)
-            bytes memory nonceBytes = new bytes(32);
-            for (uint j = 0; j < 32; j++) {
-                nonceBytes[j] = message[32 + 27 + j]; // DOMAIN_SEPARATOR + pattern + offset
-            }
-            return abi.decode(nonceBytes, (uint256));
-        } else if (messageType == 1) {
-            // Confirmation message format: DOMAIN_SEPARATOR + "Confirm bonding to epervier fingerprint " + fingerprint + ethNonce
-            require(message.length >= 32 + 40 + 20 + 32, "Message too short for ETH nonce from confirmation message");
-            
-            // Extract the ETH nonce (last 32 bytes of the message)
-            bytes memory nonceBytes = new bytes(32);
-            for (uint j = 0; j < 32; j++) {
-                nonceBytes[j] = message[message.length - 32 + j]; // Last 32 bytes
-            }
-            
-            // Convert bytes to uint256 manually to ensure correct byte order
-            uint256 nonce = 0;
-            for (uint j = 0; j < 32; j++) {
-                nonce = (nonce << 8) | uint8(nonceBytes[j]);
-            }
-            return nonce;
-        } else {
-            revert("Invalid message type");
-        }
-    }
+    // This function is duplicated - removing this one
 
     function addressToBytes32(address a) internal pure returns (bytes32) {
         return bytes32(uint256(uint160(a)));
@@ -1202,50 +1156,6 @@ contract PQRegistry {
         emit ChangeETHAddressConfirmed(recoveredFingerprint, oldEthAddress, newEthAddress);
     }
     
-    function removeChangeETHAddressIntent(
-        bytes calldata pqMessage,
-        bytes calldata salt,
-        uint256[] calldata cs1,
-        uint256[] calldata cs2,
-        uint256 hint
-    ) external {
-        // FIRST: Verify the PQ signature and recover the fingerprint
-        address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
-        // Note: We don't validate the signature here because Epervier recover() always returns an address
-        // The signature will be validated by comparing fingerprints
-        
-        // SECOND: Parse the current ETH address from the PQ message
-        address currentETHAddress = parseCurrentETHAddress(pqMessage);
-        require(currentETHAddress != address(0), "Invalid current ETH address");
-        
-        // THIRD: Derive public key address from the recovered address
-        address publicKeyAddress = recoveredFingerprint;
-        
-        // FOURTH: Verify that the PQ key is currently registered to the current ETH address
-        require(addressToEpervierKey[publicKeyAddress] == currentETHAddress, "PQ key not registered to current address");
-        
-        // FIFTH: Extract PQ nonce from the PQ message
-        uint256 pqNonce = extractPQNonce(pqMessage, 0);
-        
-        // SIXTH: Check if there's a pending change intent
-        ChangeETHAddressIntent storage intent = changeETHAddressIntents[publicKeyAddress];
-        require(intent.timestamp != 0, "No pending change intent found");
-        
-        // SEVENTH: Verify PQ nonce
-        require(pqKeyNonces[publicKeyAddress] == pqNonce, "Invalid PQ nonce");
-        
-        // EIGHTH: Verify the PQ message contains the correct removal text
-        require(validatePQRemovalMessage(pqMessage), "Invalid PQ removal message");
-        
-        // Clear the intent
-        delete changeETHAddressIntents[publicKeyAddress];
-        
-        // Increment PQ nonce
-        pqKeyNonces[publicKeyAddress]++;
-
-        emit ChangeETHAddressIntentRemoved(publicKeyAddress);
-    }
-    
     /**
      * @dev Submit unregistration intent with nested signatures
      * @param pqMessage The PQ message signed by Epervier (contains ETH address, nonce, and signature)
@@ -1812,13 +1722,13 @@ contract PQRegistry {
     
     /**
      * @dev Parse a BaseETHRegistrationConfirmationMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to epervier fingerprint " + pqFingerprint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier fingerprint " + pqFingerprint + ethNonce
      */
     function parseBaseETHRegistrationConfirmationMessage(bytes memory message) internal pure returns (
         address pqFingerprint,
         uint256 ethNonce
     ) {
-        bytes memory pattern = "Confirm bonding to epervier fingerprint ";
+        bytes memory pattern = "Confirm bonding to Epervier fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
@@ -1976,14 +1886,14 @@ contract PQRegistry {
 
     /**
      * @dev Parse a BaseETHChangeETHAddressIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Intent to Change ETH Address and bond with fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
      */
     function parseBaseETHChangeETHAddressIntentMessage(bytes memory message) internal pure returns (
         address pqFingerprint,
         address newEthAddress,
         uint256 ethNonce
     ) {
-        bytes memory pattern = "Intent to Change ETH Address and bond with fingerprint ";
+        bytes memory pattern = "Intent to change ETH Address and bond with Epervier fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](4);
         uint256[] memory fieldLengths = new uint256[](4);
         string[] memory fieldTypes = new string[](4);
@@ -2108,39 +2018,39 @@ contract PQRegistry {
     
     /**
      * @dev Parse a BasePQChangeETHAddressConfirmMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Confirm changing ETH address from " + oldEthAddress + " to " + newEthAddress + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm changing ETH address from Epervier fingerprint " + oldEthAddress + " to " + newEthAddress + pqNonce
      */
     function parseBasePQChangeETHAddressConfirmMessage(bytes memory message) internal pure returns (
         address oldEthAddress,
         address newEthAddress,
         uint256 pqNonce
     ) {
-        bytes memory pattern = "Confirm changing ETH address from ";
+        bytes memory pattern = "Confirm changing ETH address from Epervier fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](4);
         uint256[] memory fieldLengths = new uint256[](4);
         string[] memory fieldTypes = new string[](4);
         
-        // oldEthAddress: starts after DOMAIN_SEPARATOR (32) + pattern (34) = 66
-        fieldOffsets[0] = 66;
+        // oldEthAddress: starts after DOMAIN_SEPARATOR (32) + pattern (44) = 76
+        fieldOffsets[0] = 76;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // " to " pattern: starts after oldEthAddress = 66 + 20 = 86, length = 4
-        fieldOffsets[1] = 86;
+        // " to " pattern: starts after oldEthAddress = 76 + 20 = 96, length = 4
+        fieldOffsets[1] = 96;
         fieldLengths[1] = 4;
         fieldTypes[1] = "string";
         
-        // newEthAddress: starts after " to " = 86 + 4 = 90, length = 20
-        fieldOffsets[2] = 90;
+        // newEthAddress: starts after " to " = 96 + 4 = 100, length = 20
+        fieldOffsets[2] = 100;
         fieldLengths[2] = 20;
         fieldTypes[2] = "address";
         
-        // pqNonce: starts after newEthAddress = 90 + 20 = 110, length = 32
-        fieldOffsets[3] = 110;
+        // pqNonce: starts after newEthAddress = 100 + 20 = 120, length = 32
+        fieldOffsets[3] = 120;
         fieldLengths[3] = 32;
         fieldTypes[3] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 34, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 44, fieldOffsets, fieldLengths, fieldTypes);
         
         // Convert the extracted bytes to addresses manually to ensure correct byte order
         uint256 addr1 = 0;
@@ -2378,28 +2288,28 @@ contract PQRegistry {
 
     /**
      * @dev Parse an ETHRemoveRegistrationIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Remove registration intent from address" + pqFingerprint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Remove registration intent from Epervier fingerprint " + pqFingerprint + ethNonce
      */
     function parseETHRemoveRegistrationIntentMessage(bytes memory message) internal pure returns (
         address pqFingerprint,
         uint256 ethNonce
     ) {
-        bytes memory pattern = "Remove registration intent from address";
+        bytes memory pattern = "Remove registration intent from Epervier fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (39) = 71
-        fieldOffsets[0] = 71;
+        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (44) = 76
+        fieldOffsets[0] = 76;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // ethNonce: starts after pqFingerprint = 71 + 20 = 91
-        fieldOffsets[1] = 91;
+        // ethNonce: starts after pqFingerprint = 76 + 20 = 96
+        fieldOffsets[1] = 96;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 39, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 44, fieldOffsets, fieldLengths, fieldTypes);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -2412,28 +2322,28 @@ contract PQRegistry {
     
     /**
      * @dev Parse an ETHRemoveChangeIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Remove change intent from address" + pqFingerprint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Remove change intent from Epervier fingerprint " + pqFingerprint + ethNonce
      */
     function parseETHRemoveChangeIntentMessage(bytes memory message) internal pure returns (
         address pqFingerprint,
         uint256 ethNonce
     ) {
-        bytes memory pattern = "Remove change intent from address";
+        bytes memory pattern = "Remove change intent from Epervier fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (30) = 62
-        fieldOffsets[0] = 62;
+        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (36) = 68
+        fieldOffsets[0] = 68;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // ethNonce: starts after pqFingerprint = 62 + 20 = 82
-        fieldOffsets[1] = 82;
+        // ethNonce: starts after pqFingerprint = 68 + 20 = 88
+        fieldOffsets[1] = 88;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 30, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 36, fieldOffsets, fieldLengths, fieldTypes);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -2446,28 +2356,28 @@ contract PQRegistry {
     
     /**
      * @dev Parse an ETHRemoveUnregistrationIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Remove unregistration intent from address" + pqFingerprint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Remove unregistration intent from Epervier fingerprint " + pqFingerprint + ethNonce
      */
     function parseETHRemoveUnregistrationIntentMessage(bytes memory message) internal pure returns (
         address pqFingerprint,
         uint256 ethNonce
     ) {
-        bytes memory pattern = "Remove unregistration intent from address";
+        bytes memory pattern = "Remove unregistration intent from Epervier fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (34) = 66
-        fieldOffsets[0] = 66;
+        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (44) = 76
+        fieldOffsets[0] = 76;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // ethNonce: starts after pqFingerprint = 66 + 20 = 86
-        fieldOffsets[1] = 86;
+        // ethNonce: starts after pqFingerprint = 76 + 20 = 96
+        fieldOffsets[1] = 96;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 34, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 44, fieldOffsets, fieldLengths, fieldTypes);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -2480,30 +2390,25 @@ contract PQRegistry {
     
     /**
      * @dev Parse a PQRemoveRegistrationIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Remove registration intent from address " + ethAddress + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Remove registration intent from ETH address " + ethAddress + pqNonce
      */
     function parsePQRemoveRegistrationIntentMessage(bytes memory message) internal pure returns (
         address ethAddress,
         uint256 pqNonce
     ) {
-        bytes memory pattern = "Remove registration intent from address ";
+        bytes memory pattern = "Remove registration intent from ETH address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
-        
         // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (36) = 68
         fieldOffsets[0] = 68;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
-        
         // pqNonce: starts after ethAddress = 68 + 20 = 88
         fieldOffsets[1] = 88;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
-        
         bytes[] memory parsedFields = parseMessageFields(message, pattern, 36, fieldOffsets, fieldLengths, fieldTypes);
-        
-        // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
         for (uint j = 0; j < 20; j++) {
             addr = (addr << 8) | uint8(parsedFields[0][j]);
@@ -2514,30 +2419,25 @@ contract PQRegistry {
     
     /**
      * @dev Parse a PQRemoveChangeIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Remove change intent from address " + ethAddress + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Remove change intent from ETH address " + ethAddress + pqNonce
      */
     function parsePQRemoveChangeIntentMessage(bytes memory message) internal pure returns (
         address ethAddress,
         uint256 pqNonce
     ) {
-        bytes memory pattern = "Remove change intent from address ";
+        bytes memory pattern = "Remove change intent from ETH address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
-        
-        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (31) = 63
-        fieldOffsets[0] = 63;
+        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (35) = 67
+        fieldOffsets[0] = 67;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
-        
-        // pqNonce: starts after ethAddress = 63 + 20 = 83
-        fieldOffsets[1] = 83;
+        // pqNonce: starts after ethAddress = 67 + 20 = 87
+        fieldOffsets[1] = 87;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
-        
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 31, fieldOffsets, fieldLengths, fieldTypes);
-        
-        // Convert the extracted bytes to address manually to ensure correct byte order
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 35, fieldOffsets, fieldLengths, fieldTypes);
         uint256 addr = 0;
         for (uint j = 0; j < 20; j++) {
             addr = (addr << 8) | uint8(parsedFields[0][j]);
@@ -2548,30 +2448,25 @@ contract PQRegistry {
     
     /**
      * @dev Parse a PQRemoveUnregistrationIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Remove unregistration intent from address " + ethAddress + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Remove unregistration intent from ETH address " + ethAddress + pqNonce
      */
     function parsePQRemoveUnregistrationIntentMessage(bytes memory message) internal pure returns (
         address ethAddress,
         uint256 pqNonce
     ) {
-        bytes memory pattern = "Remove unregistration intent from address ";
+        bytes memory pattern = "Remove unregistration intent from ETH address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
-        
-        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (35) = 67
-        fieldOffsets[0] = 67;
+        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (40) = 72
+        fieldOffsets[0] = 72;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
-        
-        // pqNonce: starts after ethAddress = 67 + 20 = 87
-        fieldOffsets[1] = 87;
+        // pqNonce: starts after ethAddress = 72 + 20 = 92
+        fieldOffsets[1] = 92;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
-        
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 35, fieldOffsets, fieldLengths, fieldTypes);
-        
-        // Convert the extracted bytes to address manually to ensure correct byte order
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 40, fieldOffsets, fieldLengths, fieldTypes);
         uint256 addr = 0;
         for (uint j = 0; j < 20; j++) {
             addr = (addr << 8) | uint8(parsedFields[0][j]);
@@ -2582,7 +2477,7 @@ contract PQRegistry {
 
     /**
      * @dev Parse a ETHChangeETHAddressIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Intent to Change ETH Address and bond with fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function parseETHChangeETHAddressIntentMessage(bytes memory message) internal pure returns (
         uint256 ethNonce,
@@ -2592,7 +2487,7 @@ contract PQRegistry {
         uint256 hint,
         bytes memory basePQMessage
     ) {
-        bytes memory pattern = "Intent to Change ETH Address and bond with fingerprint ";
+        bytes memory pattern = "Intent to change ETH Address and bond with Epervier fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](7);
         uint256[] memory fieldLengths = new uint256[](7);
         string[] memory fieldTypes = new string[](7);
@@ -2668,7 +2563,7 @@ contract PQRegistry {
 
     /**
      * @dev Parse a ETHChangeETHAddressConfirmationMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Confirm change ETH Address for fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm change ETH Address for Epervier fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function parseETHChangeETHAddressConfirmationMessage(bytes memory message) internal pure returns (
         address pqFingerprint,
@@ -2679,47 +2574,47 @@ contract PQRegistry {
         uint256 hint,
         bytes memory basePQMessage
     ) {
-        bytes memory pattern = "Confirm change ETH Address for fingerprint ";
+        bytes memory pattern = "Confirm change ETH Address for Epervier fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](8);
         uint256[] memory fieldLengths = new uint256[](8);
         string[] memory fieldTypes = new string[](8);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (43) = 75, length = 20
-        fieldOffsets[0] = 75;
+        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (48) = 80, length = 20
+        fieldOffsets[0] = 80;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // basePQMessage: starts after pqFingerprint = 75 + 20 = 95, length = 142
-        fieldOffsets[1] = 95;
-        fieldLengths[1] = 142;
+        // basePQMessage: starts after pqFingerprint = 80 + 20 = 100, length = 152
+        fieldOffsets[1] = 100;
+        fieldLengths[1] = 152;
         fieldTypes[1] = "bytes";
         
-        // salt: starts after basePQMessage = 95 + 142 = 237, length = 40
-        fieldOffsets[2] = 237;
+        // salt: starts after basePQMessage = 100 + 152 = 252, length = 40
+        fieldOffsets[2] = 252;
         fieldLengths[2] = 40;
         fieldTypes[2] = "bytes";
         
-        // cs1: starts after salt = 237 + 40 = 277, length = 32 * 32 = 1024
-        fieldOffsets[3] = 277;
+        // cs1: starts after salt = 252 + 40 = 292, length = 32 * 32 = 1024
+        fieldOffsets[3] = 292;
         fieldLengths[3] = 1024;
         fieldTypes[3] = "uint256[32]";
         
-        // cs2: starts after cs1 = 277 + 1024 = 1301, length = 32 * 32 = 1024
-        fieldOffsets[4] = 1301;
+        // cs2: starts after cs1 = 292 + 1024 = 1316, length = 32 * 32 = 1024
+        fieldOffsets[4] = 1316;
         fieldLengths[4] = 1024;
         fieldTypes[4] = "uint256[32]";
         
-        // hint: starts after cs2 = 1301 + 1024 = 2325, length = 32
-        fieldOffsets[5] = 2325;
+        // hint: starts after cs2 = 1316 + 1024 = 2340, length = 32
+        fieldOffsets[5] = 2340;
         fieldLengths[5] = 32;
         fieldTypes[5] = "uint256";
         
-        // ethNonce: starts after hint = 2325 + 32 = 2357, length = 32
-        fieldOffsets[6] = 2357;
+        // ethNonce: starts after hint = 2340 + 32 = 2372, length = 32
+        fieldOffsets[6] = 2372;
         fieldLengths[6] = 32;
         fieldTypes[6] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 43, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 48, fieldOffsets, fieldLengths, fieldTypes);
         
         // Convert parsed fields to appropriate types
         // Convert the extracted bytes to address manually to ensure correct byte order
@@ -2754,5 +2649,130 @@ contract PQRegistry {
         
         hint = uint256(bytes32(parsedFields[5]));
         ethNonce = uint256(bytes32(parsedFields[6]));
+    }
+
+    function removeChangeETHAddressIntentByPQ(
+        bytes calldata pqMessage,
+        bytes calldata salt,
+        uint256[] calldata cs1,
+        uint256[] calldata cs2,
+        uint256 hint
+    ) external {
+        // FIRST: Verify the PQ signature and recover the fingerprint
+        address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        // Note: We don't validate the signature here because Epervier recover() always returns an address
+        // The signature will be validated by comparing fingerprints
+        
+        // SECOND: Parse the PQ change address intent message using our standardized schema
+        (address oldEthAddress, address newEthAddress, uint256 pqNonce, bytes memory baseETHMessage, uint8 v, bytes32 r, bytes32 s) = parsePQChangeETHAddressIntentMessage(pqMessage);
+        
+        // Debug: Print the extracted values
+        emit DebugParseStep("extracted_old_eth_address", uint256(uint160(oldEthAddress)));
+        emit DebugParseStep("extracted_new_eth_address", uint256(uint160(newEthAddress)));
+        emit DebugParseStep("extracted_pq_nonce", pqNonce);
+        
+        // THIRD: Verify the ETH signature using the extracted base ETH message
+        bytes32 ethMessageHash = keccak256(baseETHMessage);
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(baseETHMessage.length), baseETHMessage));
+        
+        address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
+        require(recoveredETHAddress != address(0), "Invalid ETH signature");
+        
+        // FOURTH: Parse the base ETH message to extract the pqFingerprint, new ETH address, and ETH nonce
+        (address ethMessagePqFingerprint, address ethMessageNewEthAddress, uint256 ethNonce) = parseBaseETHChangeETHAddressIntentMessage(baseETHMessage);
+        
+        // Debug: Print the ETH nonce from the base ETH message
+        emit DebugParseStep("extracted_eth_nonce_from_base", ethNonce);
+        emit DebugParseStep("expected_eth_nonce", ethNonces[newEthAddress]);
+        
+        // FIFTH: Comprehensive cross-reference validation
+        // 1. PQ signature address (recoveredFingerprint) must be currently registered
+        address currentETHAddress = epervierKeyToAddress[recoveredFingerprint];
+        require(currentETHAddress != address(0), "PQ fingerprint not registered");
+        
+        // 2. ETH message must be signed by the new ETH address (not the current one)
+        require(newEthAddress == recoveredETHAddress, "ETH signature must be from new ETH address");
+        
+        // 3. Old ETH address from PQ message must match the current registration
+        require(oldEthAddress == currentETHAddress, "Old ETH address mismatch: PQ message vs current registration");
+        
+        // 4. ETH message must reference the PQ address (recoveredFingerprint)
+        require(ethMessagePqFingerprint == recoveredFingerprint, "ETH message PQ fingerprint mismatch");
+        require(ethMessageNewEthAddress == newEthAddress, "ETH message new ETH address mismatch");
+        
+        // 5. PQ fingerprint must be currently registered to the old ETH address
+        require(addressToEpervierKey[currentETHAddress] == recoveredFingerprint, "PQ key not registered to current address");
+        
+        // 6. Verify the new ETH address is different from the current one
+        require(newEthAddress != currentETHAddress, "New ETH address must be different from current address");
+        
+        // 7. Check if the new ETH address already has a registered PQ key
+        require(addressToEpervierKey[newEthAddress] == address(0), "New ETH address already has registered PQ key");
+        
+        // 8. Conflict prevention: Check for other pending intents
+        // Check for pending registration intents
+        require(pendingIntents[recoveredFingerprint].timestamp == 0, "PQ fingerprint has pending registration intent");
+        require(pendingIntents[newEthAddress].timestamp == 0, "New ETH address has pending registration intent");
+        
+        // Check for pending unregistration intents
+        require(unregistrationIntents[currentETHAddress].timestamp == 0, "Current ETH address has pending unregistration intent");
+        require(unregistrationIntents[newEthAddress].timestamp == 0, "New ETH address has pending unregistration intent");
+        
+        // Check for other pending change intents
+        require(changeETHAddressIntents[recoveredFingerprint].timestamp == 0, "PQ fingerprint has pending change intent");
+        
+        // SIXTH: Verify nonces
+        require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
+        
+        // Debug output for ETH nonce
+        console.log("Expected ETH nonce:", ethNonce);
+        console.log("Actual ETH nonce for new address:", ethNonces[newEthAddress]);
+        console.log("New ETH address:", newEthAddress);
+        
+        require(ethNonces[newEthAddress] == ethNonce, "Invalid ETH nonce");
+        
+        // Store the change intent
+        changeETHAddressIntents[recoveredFingerprint] = ChangeETHAddressIntent({
+            newETHAddress: newEthAddress,
+            pqMessage: pqMessage,
+            timestamp: block.timestamp,
+            pqNonce: pqKeyNonces[recoveredFingerprint] // Use current PQ nonce
+        });
+        
+        // Increment PQ nonce
+        pqKeyNonces[recoveredFingerprint]++;
+        // Increment ETH nonce for the new address
+        ethNonces[newEthAddress]++;
+
+        emit ChangeETHAddressIntentSubmitted(recoveredFingerprint, newEthAddress, ethNonce);
+    }
+
+    /**
+     * @dev Extract ETH nonce from a message according to schema
+     * For intent messages: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ... + ethNonce (last 32 bytes)
+     * For confirmation messages: DOMAIN_SEPARATOR + "Confirm bonding to Epervier fingerprint " + ... + ethNonce (last 32 bytes)
+     * @param message The message to extract nonce from
+     * @param messageType 0 for intent message, 1 for confirmation message
+     */
+    function extractEthNonce(bytes memory message, uint8 messageType) internal pure returns (uint256 ethNonce) {
+        if (messageType == 0) {
+            // Intent message: ETH nonce is the last 32 bytes
+            require(message.length >= 32, "Message too short for ETH nonce");
+            bytes memory nonceBytes = new bytes(32);
+            for (uint j = 0; j < 32; j++) {
+                nonceBytes[j] = message[message.length - 32 + j];
+            }
+            return abi.decode(nonceBytes, (uint256));
+        } else if (messageType == 1) {
+            // Confirmation message: ETH nonce is the last 32 bytes
+            require(message.length >= 32, "Message too short for ETH nonce");
+            bytes memory nonceBytes = new bytes(32);
+            for (uint j = 0; j < 32; j++) {
+                nonceBytes[j] = message[message.length - 32 + j];
+            }
+            return abi.decode(nonceBytes, (uint256));
+        } else {
+            revert("Invalid message type");
+        }
     }
 } 

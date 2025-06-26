@@ -104,7 +104,7 @@ def main():
         return
     eth_message = (
         DOMAIN_SEPARATOR +
-        b"Confirm change ETH Address " +
+        b"Confirm change ETH Address for Epervier fingerprint " +
         base_pq_message +
         bytes.fromhex(pq_signature["salt"]) +
         b"".join(int(x, 16).to_bytes(32, "big") for x in pq_signature["cs1"]) +

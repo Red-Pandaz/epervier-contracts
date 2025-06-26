@@ -54,8 +54,8 @@ def generate_registration_confirmation_vector(actor_name):
     eth_nonce = 1
     
     # Construct the BaseETHRegistrationConfirmationMessage according to schema
-    # DOMAIN_SEPARATOR + "Confirm bonding to epervier fingerprint " + pqFingerprint + ethNonce
-    base_eth_pattern = "Confirm bonding to epervier fingerprint "
+    # DOMAIN_SEPARATOR + "Confirm bonding to Epervier fingerprint " + pqFingerprint + ethNonce
+    base_eth_pattern = "Confirm bonding to Epervier fingerprint "
     pq_fingerprint_bytes = bytes.fromhex(actor["pq_fingerprint"][2:])  # Remove 0x prefix
     
     base_eth_message = (

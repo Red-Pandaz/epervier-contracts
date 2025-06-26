@@ -35,11 +35,11 @@ DOMAIN_SEPARATOR = "PQRegistry"
 def create_pq_removal_message(actor_data, pq_nonce):
     """
     Create PQ-side removal message for registration intent
-    Format: DOMAIN_SEPARATOR + "Remove registration intent from address " + ethAddress + pqNonce
+    Format: DOMAIN_SEPARATOR + "Remove registration intent from ETH address " + ethAddress + pqNonce
     """
     message = (
         DOMAIN_SEPARATOR +
-        "Remove registration intent from address " +
+        "Remove registration intent from ETH address " +
         actor_data["eth_address"][2:] +  # Remove "0x" prefix
         format(pq_nonce, '064x')  # 32-byte hex nonce
     )

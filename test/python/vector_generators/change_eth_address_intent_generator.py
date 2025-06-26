@@ -38,10 +38,10 @@ DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 def create_base_eth_message(domain_separator, pq_fingerprint, new_eth_address, eth_nonce):
     """
     Create base ETH message for change ETH address intent
-    Format: DOMAIN_SEPARATOR + "Intent to Change ETH Address and bond with fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+    Format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
     This is signed by Bob (new ETH address)
     """
-    pattern = b"Intent to Change ETH Address and bond with fingerprint "
+    pattern = b"Intent to change ETH Address and bond with Epervier fingerprint "
     message = (
         domain_separator +
         pattern +
@@ -198,7 +198,7 @@ def generate_change_eth_address_intent_vectors():
         
         eth_message = (
             DOMAIN_SEPARATOR +
-            b"Intent to Change ETH Address and bond with fingerprint " +
+            b"Intent to change ETH Address and bond with Epervier fingerprint " +
             bytes.fromhex(pq_fingerprint[2:]) +
             base_pq_message_for_contract +
             bytes.fromhex(pq_signature["salt"]) +

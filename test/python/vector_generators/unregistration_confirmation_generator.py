@@ -6,10 +6,8 @@ from eth_utils import keccak
 
 print("Script loaded successfully!")
 
-# TODO: import cryptography and web3/eth_account utilities as needed
-
 ACTORS_CONFIG_PATH = Path("test/test_keys/actors_config.json")
-OUTPUT_PATH = Path("test/test_vectors/registration_intent_vectors.json")
+OUTPUT_PATH = Path("test/test_vectors/unregistration_confirmation_vectors.json")
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
 # Helper to convert int to bytes32
@@ -22,16 +20,28 @@ def load_actors_config():
         return json.load(f)["actors"]
 
 
-def build_base_pq_message(domain_separator, eth_address, pq_nonce):
-    # DOMAIN_SEPARATOR (32) + "Intent to pair ETH Address " (27) + ethAddress (20) + pqNonce (32) = 111 bytes
-    # This matches BasePQRegistrationIntentMessage in schema
-    pattern = b"Intent to pair ETH Address "
+def build_base_pq_unregistration_confirm_message(domain_separator, eth_address, pq_nonce):
+    # DOMAIN_SEPARATOR + "Confirm unregistration from ETH Address " + ethAddress + pqNonce
+    # This matches BasePQUnregistrationConfirmMessage in schema (35 chars pattern)
+    pattern = b"Confirm unregistration from ETH Address "
     return domain_separator + pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
+
+
+def build_eth_unregistration_confirmation_message(domain_separator, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
+    # DOMAIN_SEPARATOR + "Confirm unregistration from Epervier fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    # This matches ETHUnregistrationConfirmationMessage in schema (28 chars pattern)
+    pattern = b"Confirm unregistration from Epervier fingerprint "
+    def pack_uint256_array(arr):
+        return b"".join(x.to_bytes(32, 'big') for x in arr)
+    return (
+        domain_separator + pattern + bytes.fromhex(pq_fingerprint[2:]) + base_pq_message + salt +
+        pack_uint256_array(cs1) + pack_uint256_array(cs2) +
+        hint.to_bytes(32, 'big') + int_to_bytes32(eth_nonce)
+    )
 
 
 def sign_with_pq_key(base_pq_message, pq_private_key_file):
     # Use sign_cli.py to sign the base PQ message
-    # Returns dict with salt, cs1, cs2, hint
     from tempfile import NamedTemporaryFile
     import os
     # Write message to temp file
@@ -39,7 +49,7 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
         tmp.write(base_pq_message)
         tmp.flush()
         tmp_path = tmp.name
-    # Find the project root (assuming this script is at test/python/vector_generators/)
+    # Find the project root
     project_root = Path(__file__).resolve().parents[3]  # epervier-registry
 
     sign_cli = project_root / "ETHFALCON/python-ref/sign_cli.py"
@@ -75,23 +85,10 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
     return out
 
 
-def build_eth_intent_message(domain_separator, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
-    # DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
-    # This matches ETHRegistrationIntentMessage in schema
-    pattern = b"Intent to pair Epervier Key"
-    def pack_uint256_array(arr):
-        return b"".join(x.to_bytes(32, 'big') for x in arr)
-    return (
-        domain_separator + pattern + base_pq_message + salt +
-        pack_uint256_array(cs1) + pack_uint256_array(cs2) +
-        hint.to_bytes(32, 'big') + int_to_bytes32(eth_nonce)
-    )
-
-
-def sign_with_eth_key(eth_intent_message, eth_private_key):
+def sign_with_eth_key(eth_message, eth_private_key):
     # Use Ethereum's personal_sign format
-    eth_message_length = len(eth_intent_message)
-    eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(eth_message_length).encode() + eth_intent_message
+    eth_message_length = len(eth_message)
+    eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(eth_message_length).encode() + eth_message
     eth_message_hash = keccak(eth_signed_message)
     account = Account.from_key(eth_private_key)
     sig = Account._sign_hash(eth_message_hash, private_key=account.key)
@@ -99,44 +96,52 @@ def sign_with_eth_key(eth_intent_message, eth_private_key):
 
 
 def main():
-    print("Starting registration intent vector generation...")
+    print("Starting unregistration confirmation vector generation...")
     actors = load_actors_config()
     print(f"Loaded {len(actors)} actors from config")
     vectors = []
+    
     for actor_name, actor in actors.items():
         print(f"Processing {actor_name.capitalize()}: {actor['eth_address']}")
         eth_address = actor["eth_address"]
         eth_private_key = actor["eth_private_key"]
         pq_private_key_file = actor["pq_private_key_file"]
-        pq_nonce = 0
+        pq_fingerprint = actor["pq_fingerprint"]
         eth_nonce = 0
-        # 1. Build base PQ message
-        print("Building base PQ message...")
-        base_pq_message = build_base_pq_message(DOMAIN_SEPARATOR, eth_address, pq_nonce)
+        pq_nonce = 0
+        
+        # 1. Build base PQ unregistration confirmation message
+        print("Building base PQ unregistration confirmation message...")
+        base_pq_message = build_base_pq_unregistration_confirm_message(DOMAIN_SEPARATOR, eth_address, pq_nonce)
         print(f"Base PQ message length: {len(base_pq_message)} bytes")
-        # 2. PQ sign
+        
+        # 2. PQ sign the base message
         print("Signing with PQ key...")
         pq_sig = sign_with_pq_key(base_pq_message, pq_private_key_file)
         if pq_sig is None:
             print(f"Failed to generate PQ signature for {actor_name}!")
             continue
         print(f"PQ signature generated: {len(pq_sig)} components")
-        # 3. Build ETH intent message
-        print("Building ETH intent message...")
-        eth_intent_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
+        
+        # 3. Build ETH unregistration confirmation message
+        print("Building ETH unregistration confirmation message...")
+        eth_confirmation_message = build_eth_unregistration_confirmation_message(
+            DOMAIN_SEPARATOR, pq_fingerprint, base_pq_message, 
+            pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
         )
-        print(f"ETH intent message length: {len(eth_intent_message)} bytes")
-        # 4. ETH sign
+        print(f"ETH confirmation message length: {len(eth_confirmation_message)} bytes")
+        
+        # 4. ETH sign the confirmation message
         print("Signing with ETH key...")
-        eth_sig = sign_with_eth_key(eth_intent_message, eth_private_key)
+        eth_sig = sign_with_eth_key(eth_confirmation_message, eth_private_key)
         print(f"ETH signature generated: v={eth_sig['v']}, r={eth_sig['r']}, s={eth_sig['s']}")
+        
         # 5. Collect all fields
         print("Collecting vector data...")
         vector = {
             "actor": actor_name,
             "eth_address": eth_address,
-            "pq_fingerprint": actor["pq_fingerprint"],
+            "pq_fingerprint": pq_fingerprint,
             "base_pq_message": base_pq_message.hex(),
             "pq_signature": {
                 "salt": pq_sig["salt"].hex(),
@@ -144,15 +149,17 @@ def main():
                 "cs2": [hex(x) for x in pq_sig["cs2"]],
                 "hint": pq_sig["hint"]
             },
-            "eth_message": eth_intent_message.hex(),
+            "eth_message": eth_confirmation_message.hex(),
             "eth_signature": eth_sig,
-            "eth_nonce": eth_nonce
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce
         }
         vectors.append(vector)
+    
     print(f"Writing {len(vectors)} vectors to {OUTPUT_PATH}")
     with open(OUTPUT_PATH, "w") as f:
-        json.dump({"registration_intent": vectors}, f, indent=2)
-    print("Vector generation complete!")
+        json.dump({"unregistration_confirmation": vectors}, f, indent=2)
+    print("Unregistration confirmation vector generation complete!")
 
 if __name__ == "__main__":
     main() 

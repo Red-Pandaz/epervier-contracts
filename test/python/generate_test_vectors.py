@@ -378,10 +378,10 @@ def generate_comprehensive_test_vectors():
         # ============================================================================
         
         # Step 5: Create base ETH message for registration confirmation
-        # Schema: DOMAIN_SEPARATOR + "Confirm bonding to epervier fingerprint " + pqFingerprint + ethNonce
+        # Schema: DOMAIN_SEPARATOR + "Confirm bonding to Epervier fingerprint " + pqFingerprint + ethNonce
         base_eth_confirm_message = abi_encode_packed(
             DOMAIN_SEPARATOR,
-            "Confirm bonding to epervier fingerprint ",
+            "Confirm bonding to Epervier fingerprint ",
             pq_fingerprint_bytes,  # pqFingerprint (20 bytes)
             (1).to_bytes(32, 'big')  # ethNonce (32 bytes)
         )
@@ -408,9 +408,9 @@ def generate_comprehensive_test_vectors():
         # ============================================================================
         
         # Create ETH message for removing registration intent
-        # Schema: DOMAIN_SEPARATOR + "Remove registration intent from address" + pqFingerprint + ethNonce
-        remove_registration_pattern = "Remove registration intent from address"
-        assert len(remove_registration_pattern.encode('utf-8')) == 39, "Pattern must be 39 bytes for schema compliance"
+        # Schema: DOMAIN_SEPARATOR + "Remove registration intent from Epervier fingerprint " + pqFingerprint + ethNonce
+        remove_registration_pattern = "Remove registration intent from Epervier fingerprint "
+        assert len(remove_registration_pattern.encode('utf-8')) == 44, "Pattern must be 44 bytes for schema compliance"
         
         # Debug: Print each component
         print(f"  Debug - DOMAIN_SEPARATOR: {len(DOMAIN_SEPARATOR)} bytes")
@@ -848,7 +848,7 @@ def generate_invalid_test_vectors():
     print("  Generating invalid PQ signature test...")
     base_eth_confirm_message = abi_encode_packed(
         DOMAIN_SEPARATOR,
-        "Confirm bonding to epervier fingerprint ",
+        "Confirm bonding to Epervier fingerprint ",
         pq_fingerprint_bytes,  # pqFingerprint (20 bytes)
         (1).to_bytes(32, 'big')  # ethNonce (32 bytes)
     )

@@ -33,11 +33,11 @@ DOMAIN_SEPARATOR_BYTES = keccak(b"PQRegistry")
 def create_eth_removal_message(actor_data, eth_nonce):
     """
     Create ETH-side removal message for registration intent
-    Format: abi.encodePacked(DOMAIN_SEPARATOR, "Remove registration intent from address", pqFingerprint, ethNonce)
+    Format: abi.encodePacked(DOMAIN_SEPARATOR, "Remove registration intent from Epervier fingerprint ", pqFingerprint, ethNonce)
     """
     msg = (
         DOMAIN_SEPARATOR_BYTES +
-        b"Remove registration intent from address" +
+        b"Remove registration intent from Epervier fingerprint " +
         bytes.fromhex(actor_data["pq_fingerprint"][2:]) +
         eth_nonce.to_bytes(32, "big")
     )

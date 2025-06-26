@@ -275,4 +275,145 @@ contract PQRegistryChangeETHAddressTest is Test {
             assertEq(registry.ethNonces(nextActorEthAddress), 2, string.concat(nextActor, "'s ETH nonce should increment to 2 after confirmation"));
         }
     }
+
+    // ============================================================================
+    // CANCEL CHANGE ETH ADDRESS INTENT TESTS
+    // ============================================================================
+
+    function testCancelChangeETHAddressIntent_AllActors_Success() public {
+        // Load intent and cancel vectors
+        string memory intentJsonData = vm.readFile("test/test_vectors/change_eth_address_intent_vectors.json");
+        string memory cancelPQJsonData = vm.readFile("test/test_vectors/change_eth_address_cancel_pq_vectors.json");
+        string memory cancelETHJsonData = vm.readFile("test/test_vectors/change_eth_address_cancel_eth_vectors.json");
+
+        for (uint i = 0; i < actorNames.length; i++) {
+            // Reset state for each iteration
+            setUp();
+
+            string memory currentActor = actorNames[i];
+            string memory nextActor = actorNames[(i + 1) % actorNames.length];
+            Actor memory currentActorData = getActor(currentActor);
+            Actor memory nextActorData = getActor(nextActor);
+
+            // Step 1: Register current actor
+            registerActor(currentActor, i);
+
+            // Step 2: Submit change ETH address intent
+            string memory intentVectorPath = string.concat(".change_eth_address_intent[", vm.toString(i), "]");
+            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".base_pq_message")));
+            bytes memory salt = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".pq_signature.salt")));
+            uint256 hint = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".pq_signature.hint")));
+            string memory cs1Path = string.concat(intentVectorPath, ".pq_signature.cs1");
+            uint256[] memory cs1 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cs1[j] = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(cs1Path, "[", vm.toString(j), "]")));
+            }
+            string memory cs2Path = string.concat(intentVectorPath, ".pq_signature.cs2");
+            uint256[] memory cs2 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cs2[j] = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(cs2Path, "[", vm.toString(j), "]")));
+            }
+            registry.submitChangeETHAddressIntent(pqMessage, salt, cs1, cs2, hint);
+
+            // Verify intent was created
+            (address newETHAddress, , uint256 changeTimestamp, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
+            assertEq(newETHAddress, nextActorData.ethAddress, string.concat("Change intent should map ", currentActor, "'s PQ fingerprint to ", nextActor, "'s ETH address"));
+
+            // Step 3a: Cancel the intent using PQ signature
+            string memory cancelPQVectorPath = string.concat(".change_eth_address_cancel_pq[", vm.toString(i), "]");
+            bytes memory pqCancelMessage = vm.parseBytes(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_message")));
+            bytes memory cancelSalt = vm.parseBytes(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_signature.salt")));
+            uint256 cancelHint = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_signature.hint")));
+            string memory cancelCs1Path = string.concat(cancelPQVectorPath, ".pq_signature.cs1");
+            uint256[] memory cancelCs1 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cancelCs1[j] = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelCs1Path, "[", vm.toString(j), "]")));
+            }
+            string memory cancelCs2Path = string.concat(cancelPQVectorPath, ".pq_signature.cs2");
+            uint256[] memory cancelCs2 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cancelCs2[j] = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelCs2Path, "[", vm.toString(j), "]")));
+            }
+            registry.removeChangeETHAddressIntentByPQ(pqCancelMessage, cancelSalt, cancelCs1, cancelCs2, cancelHint);
+
+            // Verify the intent is cleared after PQ cancel
+            (address clearedNewETHAddress, , uint256 clearedChangeTimestamp, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
+            assertEq(clearedNewETHAddress, address(0), string.concat("Change intent should be cleared after PQ cancel for ", currentActor));
+            assertEq(clearedChangeTimestamp, 0, string.concat("Change intent timestamp should be cleared after PQ cancel for ", currentActor));
+
+            // Verify PQ nonce is incremented
+            assertEq(registry.pqKeyNonces(currentActorData.pqFingerprint), 4, string.concat("PQ nonce should increment to 4 after PQ cancel for ", currentActor));
+
+            // Step 3b: Submit another intent and cancel using ETH signature
+            registry.submitChangeETHAddressIntent(pqMessage, salt, cs1, cs2, hint);
+
+            // Verify intent was created again
+            (address newETHAddress2, , uint256 changeTimestamp2, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
+            assertEq(newETHAddress2, nextActorData.ethAddress, string.concat("Change intent should be recreated for ", currentActor));
+
+            // Cancel using ETH signature
+            string memory cancelETHVectorPath = string.concat(".change_eth_address_cancel_eth[", vm.toString(i), "]");
+            bytes memory ethCancelMessage = vm.parseBytes(vm.parseJsonString(cancelETHJsonData, string.concat(cancelETHVectorPath, ".eth_message")));
+            uint8 vCancel = uint8(vm.parseUint(vm.parseJsonString(cancelETHJsonData, string.concat(cancelETHVectorPath, ".eth_signature.v"))));
+            uint256 rCancelDecimal = vm.parseUint(vm.parseJsonString(cancelETHJsonData, string.concat(cancelETHVectorPath, ".eth_signature.r")));
+            uint256 sCancelDecimal = vm.parseUint(vm.parseJsonString(cancelETHJsonData, string.concat(cancelETHVectorPath, ".eth_signature.s")));
+            bytes32 rCancel = bytes32(rCancelDecimal);
+            bytes32 sCancel = bytes32(sCancelDecimal);
+            registry.removeChangeETHAddressIntentByETH(ethCancelMessage, vCancel, rCancel, sCancel);
+
+            // Verify the intent is cleared after ETH cancel
+            (address clearedNewETHAddress2, , uint256 clearedChangeTimestamp2, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
+            assertEq(clearedNewETHAddress2, address(0), string.concat("Change intent should be cleared after ETH cancel for ", currentActor));
+            assertEq(clearedChangeTimestamp2, 0, string.concat("Change intent timestamp should be cleared after ETH cancel for ", currentActor));
+
+            // Verify ETH nonce is incremented
+            assertEq(registry.ethNonces(currentActorData.ethAddress), 2, string.concat("ETH nonce should increment to 2 after ETH cancel for ", currentActor));
+
+            console.log("Intent created and cancelled by both PQ and ETH for", currentActor);
+        }
+    }
+
+    // Helper function to register an actor
+    function registerActor(string memory actorName, uint256 vectorIndex) internal {
+        Actor memory actor = getActor(actorName);
+        
+        // Mock the Epervier verifier to return the actor's fingerprint
+        vm.mockCall(
+            address(epervierVerifier),
+            abi.encodeWithSelector(epervierVerifier.recover.selector),
+            abi.encode(actor.pqFingerprint)
+        );
+
+        // Submit registration intent
+        string memory registrationJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory confirmationJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        
+        string memory registrationVectorPath = string.concat(".registration_intent[", vm.toString(vectorIndex), "]");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(registrationJsonData, string.concat(registrationVectorPath, ".eth_message")));
+        uint8 vIntent = uint8(vm.parseUint(vm.parseJsonString(registrationJsonData, string.concat(registrationVectorPath, ".eth_signature.v"))));
+        uint256 rIntentDecimal = vm.parseUint(vm.parseJsonString(registrationJsonData, string.concat(registrationVectorPath, ".eth_signature.r")));
+        uint256 sIntentDecimal = vm.parseUint(vm.parseJsonString(registrationJsonData, string.concat(registrationVectorPath, ".eth_signature.s")));
+        bytes32 rIntent = bytes32(rIntentDecimal);
+        bytes32 sIntent = bytes32(sIntentDecimal);
+        registry.submitRegistrationIntent(ethIntentMessage, vIntent, rIntent, sIntent);
+        vm.clearMockedCalls();
+
+        // Confirm registration
+        string memory confirmationVectorPath = string.concat(".registration_confirmation[", vm.toString(vectorIndex), "]");
+        bytes memory pqConfirmationMessage = vm.parseBytes(vm.parseJsonString(confirmationJsonData, string.concat(confirmationVectorPath, ".pq_message")));
+        bytes memory confirmationSalt = vm.parseBytes(vm.parseJsonString(confirmationJsonData, string.concat(confirmationVectorPath, ".pq_signature.salt")));
+        uint256 confirmationHint = vm.parseUint(vm.parseJsonString(confirmationJsonData, string.concat(confirmationVectorPath, ".pq_signature.hint")));
+        string memory confirmationCs1Path = string.concat(confirmationVectorPath, ".pq_signature.cs1");
+        uint256[] memory confirmationCs1 = new uint256[](32);
+        for (uint j = 0; j < 32; j++) {
+            confirmationCs1[j] = vm.parseUint(vm.parseJsonString(confirmationJsonData, string.concat(confirmationCs1Path, "[", vm.toString(j), "]")));
+        }
+        string memory confirmationCs2Path = string.concat(confirmationVectorPath, ".pq_signature.cs2");
+        uint256[] memory confirmationCs2 = new uint256[](32);
+        for (uint j = 0; j < 32; j++) {
+            confirmationCs2[j] = vm.parseUint(vm.parseJsonString(confirmationJsonData, string.concat(confirmationCs2Path, "[", vm.toString(j), "]")));
+        }
+        registry.confirmRegistration(pqConfirmationMessage, confirmationSalt, confirmationCs1, confirmationCs2, confirmationHint);
+        vm.clearMockedCalls();
+    }
 } 
