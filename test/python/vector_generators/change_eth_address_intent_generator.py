@@ -21,7 +21,7 @@ from eth_account import Account
 from eth_utils import keccak
 
 # Add the project root to the Python path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).parent.parent.parent.parent  # epervier-registry
 sys.path.insert(0, str(project_root))
 
 # Load actors configuration
@@ -215,7 +215,7 @@ def generate_change_eth_address_intent_vectors():
             "new_eth_address": new_eth_address,
             "pq_fingerprint": pq_fingerprint,
             "base_eth_message": base_eth_message.hex(),
-            "base_pq_message": base_pq_message.hex(),
+            "pq_message": base_pq_message.hex(),
             "eth_message": eth_message.hex(),
             "eth_signature": {
                 "v": eth_signature["v"],

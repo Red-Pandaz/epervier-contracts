@@ -13,9 +13,11 @@ import os
 import sys
 import subprocess
 from pathlib import Path
+import binascii
+from eth_utils import keccak
 
 # Add the project root to the Python path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).resolve().parents[3]  # epervier-registry
 sys.path.insert(0, str(project_root))
 
 # Add ETHFALCON to the path for imports
@@ -29,20 +31,21 @@ def get_actor_config():
     with open(ACTORS_CONFIG_PATH, "r") as f:
         return json.load(f)["actors"]
 
-# Domain separator from the contract
-DOMAIN_SEPARATOR = "PQRegistry"
+# Domain separator from the contract (as bytes32)
+DOMAIN_SEPARATOR = keccak(b"PQRegistry")
+
+# Helper to convert int to bytes32
+int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
 
 def create_pq_removal_message(actor_data, pq_nonce):
     """
     Create PQ-side removal message for registration intent
-    Format: DOMAIN_SEPARATOR + "Remove registration intent from ETH address " + ethAddress + pqNonce
+    Format: DOMAIN_SEPARATOR (32 bytes) + "Remove registration intent from ETH address " (44 bytes) + ethAddress (20 bytes) + pqNonce (32 bytes)
     """
-    message = (
-        DOMAIN_SEPARATOR +
-        "Remove registration intent from ETH address " +
-        actor_data["eth_address"][2:] +  # Remove "0x" prefix
-        format(pq_nonce, '064x')  # 32-byte hex nonce
-    )
+    pattern = b"Remove registration intent from ETH address "
+    eth_address_bytes = bytes.fromhex(actor_data["eth_address"][2:])
+    nonce_bytes = int_to_bytes32(pq_nonce)
+    message = DOMAIN_SEPARATOR + pattern + eth_address_bytes + nonce_bytes
     return message
 
 def sign_pq_message(message, pq_private_key_file):
@@ -50,7 +53,7 @@ def sign_pq_message(message, pq_private_key_file):
     # Create temporary message file
     message_file = f"/tmp/pq_removal_message.hex"
     with open(message_file, 'w') as f:
-        f.write(message.encode('utf-8').hex())
+        f.write(message.hex())
     
     try:
         # Sign with PQ key using sign_cli.py
@@ -60,7 +63,7 @@ def sign_pq_message(message, pq_private_key_file):
         cmd = [
             "python3", sign_cli, "sign",
             f"--privkey={privkey_path}",
-            f"--data={message.encode('utf-8').hex()}",
+            f"--data={message.hex()}",
             "--version=epervier"
         ]
         
@@ -125,7 +128,7 @@ def generate_pq_removal_vectors():
             "actor": actor_name,
             "eth_address": actor_data["eth_address"],
             "pq_fingerprint": actor_data["pq_fingerprint"],
-            "pq_message": pq_message,
+            "pq_message": "0x" + pq_message.hex(),
             "pq_signature": pq_signature,
             "pq_nonce": pq_nonce
         }

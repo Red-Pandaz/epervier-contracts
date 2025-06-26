@@ -96,7 +96,7 @@ contract PQRegistryChangeETHAddressTest is Test {
     // CHANGE ETH ADDRESS INTENT TESTS
     // ============================================================================
     
-    function testChangeETHAddressIntent_SingleActor_Success() public {
+    function testChangeETHAddressIntent_AllActors_Success() public {
         // Load intent vectors for registration and change ETH address
         string memory registrationJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
         string memory confirmationJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
@@ -153,7 +153,7 @@ contract PQRegistryChangeETHAddressTest is Test {
 
             // Step 2: Submit change ETH address intent (current -> next)
             string memory changeVectorPath = string.concat(".change_eth_address_intent[", vm.toString(i), "]");
-            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".base_pq_message")));
+            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".pq_message")));
             bytes memory salt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".pq_signature.salt")));
             uint256 hint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".pq_signature.hint")));
             string memory cs1Path = string.concat(changeVectorPath, ".pq_signature.cs1");
@@ -233,7 +233,7 @@ contract PQRegistryChangeETHAddressTest is Test {
 
             // Step 2: Submit change ETH address intent (current -> next)
             string memory changeVectorPath = string.concat(".change_eth_address_intent[", vm.toString(i), "]");
-            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".base_pq_message")));
+            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".pq_message")));
             bytes memory salt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".pq_signature.salt")));
             uint256 hint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, string.concat(changeVectorPath, ".pq_signature.hint")));
             string memory cs1Path = string.concat(changeVectorPath, ".pq_signature.cs1");
@@ -300,7 +300,7 @@ contract PQRegistryChangeETHAddressTest is Test {
 
             // Step 2: Submit change ETH address intent
             string memory intentVectorPath = string.concat(".change_eth_address_intent[", vm.toString(i), "]");
-            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".base_pq_message")));
+            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".pq_message")));
             bytes memory salt = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".pq_signature.salt")));
             uint256 hint = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".pq_signature.hint")));
             string memory cs1Path = string.concat(intentVectorPath, ".pq_signature.cs1");

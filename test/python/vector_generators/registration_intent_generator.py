@@ -8,8 +8,10 @@ print("Script loaded successfully!")
 
 # TODO: import cryptography and web3/eth_account utilities as needed
 
-ACTORS_CONFIG_PATH = Path("test/test_keys/actors_config.json")
-OUTPUT_PATH = Path("test/test_vectors/registration_intent_vectors.json")
+# Get the project root directory
+PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
+ACTORS_CONFIG_PATH = PROJECT_ROOT / "test/test_keys/actors_config.json"
+OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/registration_intent_vectors.json"
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
 # Helper to convert int to bytes32

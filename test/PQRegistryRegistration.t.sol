@@ -268,7 +268,7 @@ contract PQRegistryRegistrationTest is Test {
         console.log("All 10 actors registration flows completed successfully!");
     }
     
-    function testRemoveIntent_AllActors_Success() public {
+    function testRemoveIntentByETH_AllActors_Success() public {
         // Load intent and removal vectors
         string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
         string memory removalJsonData = vm.readFile("test/test_vectors/registration_eth_removal_vectors.json");
@@ -324,6 +324,74 @@ contract PQRegistryRegistrationTest is Test {
             assertEq(ethAddress, address(0), "ETH address should be zero address after removal");
 
             console.log("Intent created and removed for", actorName);
+        }
+    }
+
+    function testRemoveIntentByPQ_AllActors_Success() public {
+        // Load intent and PQ removal vectors
+        string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory pqRemovalJsonData = vm.readFile("test/test_vectors/registration_pq_removal_vectors.json");
+
+        for (uint i = 0; i < actorNames.length; i++) {
+            string memory actorName = actorNames[i];
+            Actor memory actor = getActor(actorName);
+
+            // Find the intent vector for this actor
+            string memory intentVectorPath = string.concat(".registration_intent[", vm.toString(i), "]");
+            // Find the PQ removal vector for this actor
+            string memory pqRemovalVectorPath = string.concat(".registration_pq_removal[", vm.toString(i), "]");
+
+            // Parse intent data from the test vector
+            bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_message")));
+            uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.v"))));
+            uint256 rDecimal = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.r")));
+            uint256 sDecimal = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.s")));
+            bytes32 r = bytes32(rDecimal);
+            bytes32 s = bytes32(sDecimal);
+
+            // Log PQ nonce before submitting registration intent
+            console.log("[", actorName, "] PQ nonce before intent:", registry.pqKeyNonces(actor.pqFingerprint));
+
+            // Submit the registration intent
+            registry.submitRegistrationIntent(
+                ethIntentMessage,
+                v,
+                r,
+                s
+            );
+
+            // Log PQ nonce after submitting registration intent
+            console.log("[", actorName, "] PQ nonce after intent:", registry.pqKeyNonces(actor.pqFingerprint));
+
+            // Get the PQ fingerprint from the intent before removing it
+            (address storedPQFingerprint, , ) = registry.pendingIntents(actor.ethAddress);
+
+            // Parse PQ removal data from the test vector
+            bytes memory pqRemoveMessage = vm.parseBytes(vm.parseJsonString(pqRemovalJsonData, string.concat(pqRemovalVectorPath, ".pq_message")));
+            bytes memory salt = vm.parseBytes(vm.parseJsonString(pqRemovalJsonData, string.concat(pqRemovalVectorPath, ".pq_signature.salt")));
+            uint256[] memory cs1 = vm.parseJsonUintArray(pqRemovalJsonData, string.concat(pqRemovalVectorPath, ".pq_signature.cs1"));
+            uint256[] memory cs2 = vm.parseJsonUintArray(pqRemovalJsonData, string.concat(pqRemovalVectorPath, ".pq_signature.cs2"));
+            uint256 hint = vm.parseUint(vm.parseJsonString(pqRemovalJsonData, string.concat(pqRemovalVectorPath, ".pq_signature.hint")));
+
+            // Log PQ nonce before PQ removal
+            console.log("[", actorName, "] PQ nonce before PQ removal:", registry.pqKeyNonces(actor.pqFingerprint));
+
+            // Remove the intent by PQ
+            registry.removeIntentByPQ(pqRemoveMessage, salt, cs1, cs2, hint);
+
+            // Log PQ nonce after PQ removal
+            console.log("[", actorName, "] PQ nonce after PQ removal:", registry.pqKeyNonces(actor.pqFingerprint));
+
+            // Verify the intent mapping is cleared
+            (address pqFingerprint, , uint256 timestamp) = registry.pendingIntents(actor.ethAddress);
+            assertEq(pqFingerprint, address(0), "PQ fingerprint should be zero address after PQ removal");
+            assertEq(timestamp, 0, "Timestamp should be zero after PQ removal");
+
+            // Check the bidirectional mapping using the PQ fingerprint that was stored in the intent
+            address ethAddress = registry.pqFingerprintToPendingIntentAddress(storedPQFingerprint);
+            assertEq(ethAddress, address(0), "ETH address should be zero address after PQ removal");
+
+            console.log("Intent created and PQ-removed for", actorName);
         }
     }
     
