@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../src/PQRegistry.sol";
+import "../PQRegistry_main_functions.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -11,7 +11,7 @@ contract PQRegistryRegistrationTest is Test {
     using ECDSA for bytes32;
     using Strings for string;
     
-    PQRegistry public registry;
+    PQRegistryMainFunctions public registry;
     ZKNOX_epervier public epervierVerifier;
     
     // Actor data structure
@@ -31,7 +31,7 @@ contract PQRegistryRegistrationTest is Test {
     
     function setUp() public {
         epervierVerifier = new ZKNOX_epervier();
-        registry = new PQRegistry(address(epervierVerifier));
+        registry = new PQRegistryMainFunctions();
         
         // Load actor data from centralized config
         loadActorsConfig();
@@ -311,7 +311,7 @@ contract PQRegistryRegistrationTest is Test {
             console.log("Stored PQ fingerprint:", storedPQFingerprint);
 
             // Remove the intent
-            registry.removeIntent(ethRemoveMessage, vRemove, rRemove, sRemove);
+            registry.removeRegistrationIntentByETH(ethRemoveMessage, vRemove, rRemove, sRemove);
 
             // Verify the intent mapping is cleared
             (address pqFingerprint, , uint256 timestamp) = registry.pendingIntents(actor.ethAddress);
@@ -377,7 +377,7 @@ contract PQRegistryRegistrationTest is Test {
             console.log("[", actorName, "] PQ nonce before PQ removal:", registry.pqKeyNonces(actor.pqFingerprint));
 
             // Remove the intent by PQ
-            registry.removeIntentByPQ(pqRemoveMessage, salt, cs1, cs2, hint);
+            registry.removeRegistrationIntentByPQ(pqRemoveMessage, salt, cs1, cs2, hint);
 
             // Log PQ nonce after PQ removal
             console.log("[", actorName, "] PQ nonce after PQ removal:", registry.pqKeyNonces(actor.pqFingerprint));
