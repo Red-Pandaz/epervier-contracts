@@ -3,12 +3,13 @@ from pathlib import Path
 import subprocess
 from eth_account import Account
 from eth_utils import keccak
+import hashlib
 
 print("Script loaded successfully!")
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
-ACTORS_CONFIG_PATH = PROJECT_ROOT / "test_keys/actors_config.json"
+ACTORS_CONFIG_PATH = PROJECT_ROOT / "test/test_keys/actors_config.json"
 OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/unregistration_intent_vectors.json"
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
@@ -22,10 +23,56 @@ def load_actors_config():
         return json.load(f)["actors"]
 
 
-def build_base_eth_unregistration_intent_message(domain_separator, pq_fingerprint, eth_nonce):
-    # DOMAIN_SEPARATOR + "Intent to unregister from Epervier fingerprint " + pqFingerprint + ethNonce
-    pattern = b"Intent to unregister from Epervier fingerprint "
-    return domain_separator + pattern + bytes.fromhex(pq_fingerprint[2:]) + int_to_bytes32(eth_nonce)
+def create_base_eth_message(domain_separator, pq_fingerprint, eth_nonce):
+    """
+    Create base ETH message for unregistration intent
+    Format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint " + pqFingerprint + ethNonce
+    This is signed by the ETH Address
+    """
+    pattern = b"Intent to unregister from Epervier Fingerprint "
+    message = (
+        domain_separator +
+        pattern +
+        bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
+        eth_nonce.to_bytes(32, 'big')
+    )
+    return message
+
+
+def create_base_pq_message(domain_separator, current_eth_address, base_eth_message, v, r, s, pq_nonce):
+    """
+    Create base PQ message for unregistration intent
+    Format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint from address " + currentEthAddress + baseETHMessage + v + r + s + pqNonce
+    This is signed by the PQ key
+    """
+    pattern = b"Intent to unregister from Epervier Fingerprint from address "
+    message = (
+        domain_separator +
+        pattern +
+        bytes.fromhex(current_eth_address[2:]) +  # Remove "0x" prefix
+        base_eth_message +
+        v.to_bytes(1, 'big') +
+        r.to_bytes(32, 'big') +
+        s.to_bytes(32, 'big') +
+        pq_nonce.to_bytes(32, 'big')
+    )
+    return message
+
+
+def create_eth_message_for_signing(domain_separator, eth_nonce, pq_message):
+    """
+    Create ETH message for signing in unregistration intent
+    Format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint from address " + ethNonce + pqMessage
+    This is what the ETH signature should sign
+    """
+    pattern = b"Intent to unregister from Epervier Fingerprint from address "
+    message = (
+        domain_separator +
+        pattern +
+        eth_nonce.to_bytes(32, 'big') +
+        pq_message
+    )
+    return message
 
 
 def sign_with_eth_key(message_bytes, private_key):
@@ -37,21 +84,6 @@ def sign_with_eth_key(message_bytes, private_key):
     return {"v": sig.v, "r": sig.r, "s": sig.s}
 
 
-def build_pq_unregistration_intent_message(domain_separator, current_eth_address, base_eth_message, eth_signature, pq_nonce):
-    # DOMAIN_SEPARATOR + "Intent to unregister from Epervier fingerprint from address " + currentEthAddress + baseETHMessage + v + r + s + pqNonce
-    pattern = b"Intent to unregister from Epervier fingerprint from address "
-    return (
-        domain_separator +
-        pattern +
-        bytes.fromhex(current_eth_address[2:]) +
-        base_eth_message +
-        eth_signature["v"].to_bytes(1, "big") +
-        eth_signature["r"].to_bytes(32, "big") +
-        eth_signature["s"].to_bytes(32, "big") +
-        int_to_bytes32(pq_nonce)
-    )
-
-
 def sign_with_pq_key(message, pq_private_key_file):
     from tempfile import NamedTemporaryFile
     import os
@@ -60,7 +92,7 @@ def sign_with_pq_key(message, pq_private_key_file):
         tmp.flush()
         tmp_path = tmp.name
     sign_cli = PROJECT_ROOT / "ETHFALCON/python-ref/sign_cli.py"
-    privkey_path = PROJECT_ROOT / "test_keys" / pq_private_key_file
+    privkey_path = PROJECT_ROOT / "test/test_keys" / pq_private_key_file
     venv_python = PROJECT_ROOT / "ETHFALCON/python-ref/myenv/bin/python3"
     cmd = [
         str(venv_python), str(sign_cli), "sign",
@@ -101,31 +133,70 @@ def main():
         eth_private_key = actor["eth_private_key"]
         pq_private_key_file = actor["pq_private_key_file"]
         pq_fingerprint = actor["pq_fingerprint"]
-        eth_nonce = 0
-        pq_nonce = 0
-        # 1. Build base ETH unregistration intent message
-        base_eth_message = build_base_eth_unregistration_intent_message(DOMAIN_SEPARATOR, pq_fingerprint, eth_nonce)
-        # 2. ETH sign
-        eth_sig = sign_with_eth_key(base_eth_message, eth_private_key)
-        # 3. Build PQ unregistration intent message
-        pq_message = build_pq_unregistration_intent_message(
+        eth_nonce = 2  # Use nonce 2 to match current contract state
+        pq_nonce = 2   # Use current PQ nonce (2 after registration)
+        
+        # 1. Build base ETH unregistration intent message (for inclusion in PQ message)
+        base_eth_message = create_base_eth_message(DOMAIN_SEPARATOR, pq_fingerprint, eth_nonce)
+        
+        # 2. Create PQ message without ETH signature components (this is what ETH signs)
+        # Format: DOMAIN_SEPARATOR + pattern + ethAddress + baseETHMessage + pqNonce
+        pattern = b"Intent to unregister from Epervier Fingerprint from address "
+        pq_message_without_eth_sig = (
+            DOMAIN_SEPARATOR +
+            pattern +
+            bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix
+            base_eth_message +
+            pq_nonce.to_bytes(32, 'big')
+        )
+        
+        # 3. Create the ETH message that includes the PQ message without ETH signature
+        # Format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint from address " + ethNonce + pqMessageWithoutSignature
+        eth_message = (
+            DOMAIN_SEPARATOR +
+            b"Intent to unregister from Epervier Fingerprint from address " +
+            eth_nonce.to_bytes(32, 'big') +
+            pq_message_without_eth_sig
+        )
+        
+        # 4. Sign the baseETHMessage using eth_account (Ethereum style)
+        # The ETH signature should sign the baseETHMessage directly (BaseETHUnregistrationIntentMessage)
+        # If eth_private_key is a hex string, convert to bytes
+        if isinstance(eth_private_key, str):
+            if eth_private_key.startswith("0x"):
+                eth_private_key_bytes = bytes.fromhex(eth_private_key[2:])
+            else:
+                eth_private_key_bytes = bytes.fromhex(eth_private_key)
+        else:
+            eth_private_key_bytes = eth_private_key
+
+        account = Account.from_key(eth_private_key_bytes)
+        eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(len(base_eth_message)).encode() + base_eth_message
+        eth_signed_message_hash = keccak(eth_signed_message)
+        sig = Account._sign_hash(eth_signed_message_hash, private_key=account.key)
+        v, r, s = sig.v, sig.r, sig.s
+        
+        # 5. Build complete PQ message with ETH signature components
+        pq_message = create_base_pq_message(
             DOMAIN_SEPARATOR, eth_address, base_eth_message,
-            {"v": eth_sig["v"], "r": int(eth_sig["r"]), "s": int(eth_sig["s"])}, pq_nonce)
-        # 4. PQ sign
+            v, r, s, pq_nonce)
+        
+        # 6. PQ sign the final PQ message
         pq_sig = sign_with_pq_key(pq_message, pq_private_key_file)
         if pq_sig is None:
             print(f"Failed to generate PQ signature for {actor_name}!")
             continue
-        # 5. Collect all fields
+            
+        # 7. Collect all fields
         vector = {
             "actor": actor_name,
             "eth_address": eth_address,
             "pq_fingerprint": pq_fingerprint,
             "base_eth_message": base_eth_message.hex(),
             "eth_signature": {
-                "v": eth_sig["v"],
-                "r": hex(eth_sig["r"]),
-                "s": hex(eth_sig["s"])
+                "v": v,
+                "r": hex(r),
+                "s": hex(s)
             },
             "pq_message": pq_message.hex(),
             "pq_signature": {

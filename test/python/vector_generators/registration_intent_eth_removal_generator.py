@@ -18,83 +18,41 @@ DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae
 
 def get_actor_config():
     """Load actor configuration from JSON file"""
-    config_file = project_root / "test" / "test_keys" / "actors_config.json"
+    config_file = Path(__file__).parent.parent.parent / "test_keys" / "actors_config.json"
     with open(config_file, 'r') as f:
         config = json.load(f)
         return config["actors"]
 
-def create_cancel_registration_message(domain_separator, eth_address, pq_nonce):
+def create_remove_registration_message(domain_separator, pq_fingerprint, eth_nonce):
     """
-    Create PQ message for canceling registration intent
-    Format: DOMAIN_SEPARATOR + "Cancel registration intent for " + ethAddress + pqNonce
-    This is signed by the PQ key
+    Create ETH message for removing registration intent
+    Format: DOMAIN_SEPARATOR + "Remove registration intent from Epervier Fingerprint " + pqFingerprint + ethNonce
+    This is signed by the ETH Address
     """
-    pattern = b"Cancel registration intent for "
+    pattern = b"Remove registration intent from Epervier Fingerprint "
     message = (
         domain_separator +
         pattern +
-        bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix
-        pq_nonce.to_bytes(32, "big")
+        bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
+        eth_nonce.to_bytes(32, "big")
     )
     return message
 
-def sign_pq_message(message, pq_private_key_file):
-    """Sign a message with PQ private key using sign_cli.py"""
-    import subprocess
+def sign_eth_message(message, eth_private_key):
+    """Sign a message with ETH private key"""
+    from eth_account import Account
     
-    try:
-        # Sign with PQ key using sign_cli.py
-        sign_cli = str(project_root / "ETHFALCON" / "python-ref" / "sign_cli.py")
-        privkey_path = str(project_root / "test" / "test_keys" / pq_private_key_file)
-        
-        cmd = [
-            "python3", sign_cli, "sign",
-            f"--privkey={privkey_path}",
-            f"--data={message.hex()}",
-            "--version=epervier"
-        ]
-        
-        print(f"Running command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_root / "ETHFALCON" / "python-ref")
-        
-        if result.returncode != 0:
-            print(f"Error signing message: {result.stderr}")
-            return None
-        
-        print(f"PQ sign_cli output:")
-        print(result.stdout)
-        
-        # Parse the signature components from stdout
-        lines = result.stdout.splitlines()
-        signature_data = {}
-        for line in lines:
-            if line.startswith("salt:"):
-                signature_data["salt"] = bytes.fromhex(line.split()[1])
-            elif line.startswith("hint:"):
-                signature_data["hint"] = int(line.split()[1])
-            elif line.startswith("cs1:"):
-                signature_data["cs1"] = [int(x, 16) for x in line.split()[1:]]
-            elif line.startswith("cs2:"):
-                signature_data["cs2"] = [int(x, 16) for x in line.split()[1:]]
-        
-        if not all(key in signature_data for key in ["salt", "hint", "cs1", "cs2"]):
-            print(f"Failed to parse signature components")
-            return None
-        
-        return {
-            "salt": signature_data["salt"].hex(),
-            "hint": signature_data["hint"],
-            "cs1": [hex(x) for x in signature_data["cs1"]],
-            "cs2": [hex(x) for x in signature_data["cs2"]]
-        }
-        
-    except Exception as e:
-        print(f"Error in PQ signing: {e}")
-        return None
+    # Use Ethereum's personal_sign format
+    eth_message_length = len(message)
+    eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(eth_message_length).encode() + message
+    eth_message_hash = keccak(eth_signed_message)
+    account = Account.from_key(eth_private_key)
+    sig = Account._sign_hash(eth_message_hash, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
 
-def generate_cancel_registration_intent_vectors():
-    """Generate test vectors for canceling registration intents for all 10 actors"""
-    cancel_vectors = []
+def generate_remove_registration_intent_vectors():
+    """Generate test vectors for removing registration intents for all 10 actors"""
+    remove_vectors = []
     actors = get_actor_config()
     actor_names = list(actors.keys())
     num_actors = len(actor_names)
@@ -103,59 +61,57 @@ def generate_cancel_registration_intent_vectors():
         current_actor_name = actor_names[i]
         current_actor = actors[current_actor_name]
 
-        print(f"Generating cancel registration intent vector for {current_actor_name}...")
+        print(f"Generating remove registration intent vector for {current_actor_name}...")
 
         eth_address = current_actor["eth_address"]
         pq_fingerprint = current_actor["pq_fingerprint"]
+        eth_private_key = current_actor["eth_private_key"]
 
-        # Nonces for cancel operation
-        pq_nonce = 3  # PQ nonce for cancel operation
-        eth_nonce = 1  # ETH nonce for cancel operation
+        # Nonces for remove operation
+        eth_nonce = 1  # ETH nonce for remove operation
 
-        # Create the PQ cancel message and sign it with PQ key
-        pq_message = create_cancel_registration_message(DOMAIN_SEPARATOR, eth_address, pq_nonce)
-        pq_signature = sign_pq_message(pq_message, current_actor["pq_private_key_file"])
+        # Create the ETH remove message and sign it with ETH key
+        eth_message = create_remove_registration_message(DOMAIN_SEPARATOR, pq_fingerprint, eth_nonce)
+        eth_signature = sign_eth_message(eth_message, eth_private_key)
         
-        if pq_signature is None:
-            print(f"Failed to generate PQ signature for {current_actor_name}")
+        if eth_signature is None:
+            print(f"Failed to generate ETH signature for {current_actor_name}")
             continue
 
-        cancel_vector = {
+        remove_vector = {
             "current_actor": current_actor_name,
             "eth_address": eth_address,
             "pq_fingerprint": pq_fingerprint,
-            "pq_message": pq_message.hex(),
-            "pq_signature": pq_signature,
-            "pq_nonce": pq_nonce,
+            "eth_message": eth_message.hex(),
+            "eth_signature": eth_signature,
             "eth_nonce": eth_nonce
         }
-        cancel_vectors.append(cancel_vector)
+        remove_vectors.append(remove_vector)
 
-    return cancel_vectors
+    return remove_vectors
 
 def main():
     """Main function to generate and save test vectors"""
-    print("Generating cancel registration intent test vectors...")
+    print("Generating remove registration intent test vectors...")
     
     try:
-        vectors = generate_cancel_registration_intent_vectors()
+        vectors = generate_remove_registration_intent_vectors()
         
         # Save to JSON file
-        output_file = project_root / "test" / "test_vectors" / "cancel_registration_intent_vectors.json"
+        output_file = Path(__file__).parent.parent.parent / "test_vectors" / "remove_registration_intent_vectors.json"
         with open(output_file, 'w') as f:
-            json.dump({"cancel_registration_intent": vectors}, f, indent=2)
+            json.dump({"remove_registration_intent": vectors}, f, indent=2)
         
-        print(f"Generated {len(vectors)} cancel registration intent vectors")
+        print(f"Generated {len(vectors)} remove registration intent vectors")
         print(f"Vectors saved to {output_file}")
         
         # Print sample vector for verification
         if vectors:
-            print("\nSample cancel registration intent vector:")
+            print("\nSample remove registration intent vector:")
             vector = vectors[0]
             print(f"Current Actor: {vector['current_actor']}")
             print(f"ETH Address: {vector['eth_address']}")
             print(f"PQ Fingerprint: {vector['pq_fingerprint']}")
-            print(f"PQ Nonce: {vector['pq_nonce']}")
             print(f"ETH Nonce: {vector['eth_nonce']}")
         
     except Exception as e:

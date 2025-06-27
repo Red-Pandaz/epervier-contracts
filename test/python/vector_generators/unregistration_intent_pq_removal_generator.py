@@ -8,8 +8,8 @@ print("Script loaded successfully!")
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
-ACTORS_CONFIG_PATH = PROJECT_ROOT / "test_keys/actors_config.json"
-OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/unregistration_intent_pq_removal_vectors.json"
+ACTORS_CONFIG_PATH = PROJECT_ROOT / "test/test_keys/actors_config.json"
+OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/unregistration_removal_vectors.json"
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
 # Helper to convert int to bytes32
@@ -23,9 +23,9 @@ def load_actors_config():
 
 
 def build_pq_remove_unregistration_intent_message(domain_separator, eth_address, pq_nonce):
-    # DOMAIN_SEPARATOR + "Remove unregistration intent from ETH address " + ethAddress + pqNonce
+    # DOMAIN_SEPARATOR + "Remove unregistration intent from ETH Address " + ethAddress + pqNonce
     # This matches PQRemoveUnregistrationIntentMessage in schema
-    pattern = b"Remove unregistration intent from ETH address "
+    pattern = b"Remove unregistration intent from ETH Address "
     return domain_separator + pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
 
 
@@ -40,7 +40,7 @@ def sign_with_pq_key(pq_message, pq_private_key_file):
         tmp_path = tmp.name
     
     sign_cli = PROJECT_ROOT / "ETHFALCON/python-ref/sign_cli.py"
-    privkey_path = PROJECT_ROOT / "test_keys" / pq_private_key_file
+    privkey_path = PROJECT_ROOT / "test/test_keys" / pq_private_key_file
     venv_python = PROJECT_ROOT / "ETHFALCON/python-ref/myenv/bin/python3"
 
     cmd = [
@@ -83,7 +83,7 @@ def main():
         eth_address = actor["eth_address"]
         pq_private_key_file = actor["pq_private_key_file"]
         pq_fingerprint = actor["pq_fingerprint"]
-        pq_nonce = 0
+        pq_nonce = 3  # After unregistration intent submission
         
         # Generate PQ-controlled remove unregistration intent
         print("Generating PQ remove unregistration intent...")
@@ -114,7 +114,7 @@ def main():
     
     print(f"Writing {len(vectors)} vectors to {OUTPUT_PATH}")
     with open(OUTPUT_PATH, "w") as f:
-        json.dump({"unregistration_intent_pq_removal": vectors}, f, indent=2)
+        json.dump({"remove_intent": vectors}, f, indent=2)
     print("PQ-controlled unregistration intent removal vector generation complete!")
 
 if __name__ == "__main__":

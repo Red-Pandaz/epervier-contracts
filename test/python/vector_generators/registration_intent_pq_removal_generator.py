@@ -37,15 +37,19 @@ DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 # Helper to convert int to bytes32
 int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
 
-def create_pq_removal_message(actor_data, pq_nonce):
+def create_remove_registration_message(domain_separator, eth_address, pq_nonce):
     """
-    Create PQ-side removal message for registration intent
-    Format: DOMAIN_SEPARATOR (32 bytes) + "Remove registration intent from ETH address " (44 bytes) + ethAddress (20 bytes) + pqNonce (32 bytes)
+    Create PQ message for removing registration intent
+    Format: DOMAIN_SEPARATOR + "Remove registration intent from ETH Address " + ethAddress + pqNonce
+    This is signed by the PQ key
     """
-    pattern = b"Remove registration intent from ETH address "
-    eth_address_bytes = bytes.fromhex(actor_data["eth_address"][2:])
-    nonce_bytes = int_to_bytes32(pq_nonce)
-    message = DOMAIN_SEPARATOR + pattern + eth_address_bytes + nonce_bytes
+    pattern = b"Remove registration intent from ETH Address "
+    message = (
+        domain_separator +
+        pattern +
+        bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix
+        pq_nonce.to_bytes(32, "big")
+    )
     return message
 
 def sign_pq_message(message, pq_private_key_file):
@@ -117,7 +121,7 @@ def generate_pq_removal_vectors():
         
         # PQ-side removal vector
         pq_nonce = 1  # Nonce after submitting registration intent
-        pq_message = create_pq_removal_message(actor_data, pq_nonce)
+        pq_message = create_remove_registration_message(DOMAIN_SEPARATOR, actor_data["eth_address"], pq_nonce)
         pq_signature = sign_pq_message(pq_message, actor_data["pq_private_key_file"])
         
         if pq_signature is None:

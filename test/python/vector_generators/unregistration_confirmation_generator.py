@@ -22,22 +22,34 @@ def load_actors_config():
 
 def build_base_pq_unregistration_confirm_message(domain_separator, eth_address, pq_nonce):
     # DOMAIN_SEPARATOR + "Confirm unregistration from ETH Address " + ethAddress + pqNonce
-    # This matches BasePQUnregistrationConfirmMessage in schema (35 chars pattern)
+    # This matches BasePQUnregistrationConfirmMessage in schema (40 chars pattern)
+    # Total length should be: 32 + 40 + 20 + 32 = 124 bytes
     pattern = b"Confirm unregistration from ETH Address "
     return domain_separator + pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
 
 
-def build_eth_unregistration_confirmation_message(domain_separator, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
-    # DOMAIN_SEPARATOR + "Confirm unregistration from Epervier fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
-    # This matches ETHUnregistrationConfirmationMessage in schema (28 chars pattern)
-    pattern = b"Confirm unregistration from Epervier fingerprint "
+def create_eth_confirm_message(domain_separator, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
+    """
+    Create ETH message for unregistration confirmation
+    Format: DOMAIN_SEPARATOR + "Confirm unregistration from Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    This is signed by the ETH Address
+    """
+    pattern = b"Confirm unregistration from Epervier Fingerprint "
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
-    return (
-        domain_separator + pattern + bytes.fromhex(pq_fingerprint[2:]) + base_pq_message + salt +
-        pack_uint256_array(cs1) + pack_uint256_array(cs2) +
-        hint.to_bytes(32, 'big') + int_to_bytes32(eth_nonce)
+    
+    message = (
+        domain_separator +
+        pattern +
+        bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
+        base_pq_message +
+        salt +
+        pack_uint256_array(cs1) +
+        pack_uint256_array(cs2) +
+        hint.to_bytes(32, 'big') +
+        eth_nonce.to_bytes(32, 'big')
     )
+    return message
 
 
 def sign_with_pq_key(base_pq_message, pq_private_key_file):
@@ -107,8 +119,8 @@ def main():
         eth_private_key = actor["eth_private_key"]
         pq_private_key_file = actor["pq_private_key_file"]
         pq_fingerprint = actor["pq_fingerprint"]
-        eth_nonce = 0
-        pq_nonce = 0
+        eth_nonce = 3  # After unregistration intent submission
+        pq_nonce = 3   # After unregistration intent submission
         
         # 1. Build base PQ unregistration confirmation message
         print("Building base PQ unregistration confirmation message...")
@@ -125,7 +137,7 @@ def main():
         
         # 3. Build ETH unregistration confirmation message
         print("Building ETH unregistration confirmation message...")
-        eth_confirmation_message = build_eth_unregistration_confirmation_message(
+        eth_confirmation_message = create_eth_confirm_message(
             DOMAIN_SEPARATOR, pq_fingerprint, base_pq_message, 
             pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
         )

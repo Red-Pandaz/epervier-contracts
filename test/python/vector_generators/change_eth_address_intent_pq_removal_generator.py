@@ -10,7 +10,7 @@ from eth_account import Account
 from eth_hash.auto import keccak
 
 # Add the project root to the path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).resolve().parents[3]
 sys.path.append(str(project_root))
 
 # Domain separator (same as in the contract)
@@ -26,10 +26,10 @@ def get_actor_config():
 def create_cancel_change_eth_address_message(domain_separator, current_eth_address, pq_nonce):
     """
     Create PQ message for canceling change ETH address intent
-    Format: DOMAIN_SEPARATOR + "Remove change intent from ETH address " + ethAddress + pqNonce
+    Format: DOMAIN_SEPARATOR + "Remove change intent from ETH Address " + ethAddress + pqNonce
     This is signed by the PQ key
     """
-    pattern = b"Remove change intent from ETH address "
+    pattern = b"Remove change intent from ETH Address "
     message = (
         domain_separator +
         pattern +
@@ -43,19 +43,20 @@ def sign_pq_message(message, pq_private_key_file):
     import subprocess
     
     try:
-        # Sign with PQ key using sign_cli.py
+        # Sign with PQ key using sign_cli.py - use virtual environment like other generators
         sign_cli = str(project_root / "ETHFALCON" / "python-ref" / "sign_cli.py")
         privkey_path = str(project_root / "test" / "test_keys" / pq_private_key_file)
+        venv_python = str(project_root / "ETHFALCON" / "python-ref" / "myenv" / "bin" / "python3")
         
         cmd = [
-            "python3", sign_cli, "sign",
+            venv_python, sign_cli, "sign",
             f"--privkey={privkey_path}",
             f"--data={message.hex()}",
             "--version=epervier"
         ]
         
         print(f"Running command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_root / "ETHFALCON" / "python-ref")
+        result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
             print(f"Error signing message: {result.stderr}")

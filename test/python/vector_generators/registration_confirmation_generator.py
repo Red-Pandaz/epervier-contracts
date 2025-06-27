@@ -26,6 +26,21 @@ def get_actor_config():
     with open(ACTORS_CONFIG_PATH, "r") as f:
         return json.load(f)["actors"]
 
+def create_base_eth_message(domain_separator, pq_fingerprint, eth_nonce):
+    """
+    Create base ETH message for registration confirmation
+    Format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    This is signed by the ETH Address
+    """
+    base_eth_pattern = "Confirm bonding to Epervier Fingerprint "
+    message = (
+        domain_separator +
+        base_eth_pattern.encode() +
+        bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
+        eth_nonce.to_bytes(32, 'big')
+    )
+    return message
+
 def generate_registration_confirmation_vector(actor_name):
     """Generate registration confirmation vector for a specific actor."""
     
@@ -54,16 +69,8 @@ def generate_registration_confirmation_vector(actor_name):
     eth_nonce = 1
     
     # Construct the BaseETHRegistrationConfirmationMessage according to schema
-    # DOMAIN_SEPARATOR + "Confirm bonding to Epervier fingerprint " + pqFingerprint + ethNonce
-    base_eth_pattern = "Confirm bonding to Epervier fingerprint "
-    pq_fingerprint_bytes = bytes.fromhex(actor["pq_fingerprint"][2:])  # Remove 0x prefix
-    
-    base_eth_message = (
-        DOMAIN_SEPARATOR +
-        base_eth_pattern.encode() +
-        pq_fingerprint_bytes +
-        eth_nonce.to_bytes(32, 'big')
-    )
+    # DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    base_eth_message = create_base_eth_message(DOMAIN_SEPARATOR, actor["pq_fingerprint"], eth_nonce)
     
     print(f"Generated base ETH message: {base_eth_message.hex()}")
     print(f"Length of base ETH message (bytes): {len(base_eth_message)}")
@@ -129,19 +136,20 @@ def generate_registration_confirmation_vector(actor_name):
         f.write(message.hex())
     
     try:
-        # Sign with PQ key using sign_cli.py like the intent generator
+        # Sign with PQ key using sign_cli.py - use virtual environment like registration intent generator
         sign_cli = str(project_root / "ETHFALCON" / "python-ref" / "sign_cli.py")
         privkey_path = str(project_root / "test" / "test_keys" / pq_private_key_file)
+        venv_python = str(project_root / "ETHFALCON" / "python-ref" / "myenv" / "bin" / "python3")
         
         cmd = [
-            "python3", sign_cli, "sign",
+            venv_python, sign_cli, "sign",
             f"--privkey={privkey_path}",
             f"--data={message.hex()}",
             "--version=epervier"
         ]
         
         print(f"Running command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_root / "ETHFALCON" / "python-ref")
+        result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.returncode != 0:
             print(f"Error signing message: {result.stderr}")

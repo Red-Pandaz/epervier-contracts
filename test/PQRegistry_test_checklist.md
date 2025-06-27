@@ -294,44 +294,33 @@ ls
 - [ ] **Registration validation**
   - [ ] Rejects if ETH address not registered to PQ fingerprint
 
-### 11. removeUnregistrationIntent (ETH controlled)
-**Function**: `removeUnregistrationIntent(bytes calldata ethMessage, uint8 v, bytes32 r, bytes32 s)`
-- [ ] **Valid removal with correct ETH signature**
-  - [ ] ETH signature is valid and from the ETH address
-  - [ ] PQ fingerprint in message matches stored intent
-  - [ ] ETH nonce is correct
-  - [ ] Intent is cleared
-  - [ ] Event is emitted
+### 11. removeUnregistrationIntent (PQ controlled)
+**Function**: `removeUnregistrationIntent(bytes calldata pqMessage, bytes calldata salt, uint256[] calldata cs1, uint256[] calldata cs2, uint256 hint)`
 
-- [ ] **Invalid ETH signature**
-  - [ ] Rejects with invalid signature components
+**Purpose**: Remove a pending unregistration intent using PQ signature
 
-- [ ] **Intent validation**
-  - [ ] Rejects if no pending unregistration intent exists
-  - [ ] Rejects if PQ fingerprint doesn't match
+**Security Model**: PQ-controlled (only the PQ key can cancel its own unregistration intent)
 
-- [ ] **Nonce validation**
-  - [ ] Rejects with incorrect ETH nonce
+**Parameters**:
+- `pqMessage`: PQ message containing the removal request
+- `salt`: PQ signature salt (40 bytes)
+- `cs1`: PQ signature cs1 component (32 uint256 array)
+- `cs2`: PQ signature cs2 component (32 uint256 array)
+- `hint`: PQ signature hint
 
-### 12. removeUnregistrationIntentByPQ (PQ controlled)
-**Function**: `removeUnregistrationIntentByPQ(bytes calldata pqMessage, bytes calldata salt, uint256[] calldata cs1, uint256[] calldata cs2, uint256 hint)`
-- [ ] **Valid removal with correct PQ signature**
-  - [ ] PQ signature is valid
-  - [ ] Recovered fingerprint matches stored intent
-  - [ ] ETH address in message matches stored intent
-  - [ ] PQ nonce is correct
-  - [ ] Intent is cleared
-  - [ ] Event is emitted
+**Message Format**: `DOMAIN_SEPARATOR + "Remove unregistration intent from ETH Address " + ethAddress + pqNonce`
 
-- [ ] **Invalid PQ signature**
-  - [ ] Rejects with invalid signature components
+**Validation**:
+- Verify PQ signature and recover fingerprint
+- Parse ETH Address from PQ message
+- Check if there's a pending unregistration intent
+- Verify the public key address matches the intent
+- Verify the PQ message contains the correct removal text
+- Clear the intent
 
-- [ ] **Intent validation**
-  - [ ] Rejects if no pending unregistration intent exists
-  - [ ] Rejects if addresses don't match
+**Events**: `UnregistrationIntentRemoved(address indexed ethAddress)`
 
-- [ ] **Nonce validation**
-  - [ ] Rejects with incorrect PQ nonce
+**Nonce Management**: None (PQ nonce not incremented for removal)
 
 ## Edge Cases and Security Tests
 

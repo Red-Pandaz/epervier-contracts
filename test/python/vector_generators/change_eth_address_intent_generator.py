@@ -37,26 +37,26 @@ DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
 def create_base_eth_message(domain_separator, pq_fingerprint, new_eth_address, eth_nonce):
     """
-    Create base ETH message for change ETH address intent
-    Format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
-    This is signed by Bob (new ETH address)
+    Create base ETH message for change ETH Address intent
+    Format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+    This is signed by Bob (new ETH Address)
     """
-    pattern = b"Intent to change ETH Address and bond with Epervier fingerprint "
+    pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
     message = (
         domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
         b" to " +
         bytes.fromhex(new_eth_address[2:]) +  # Remove "0x" prefix
-        eth_nonce.to_bytes(32, "big")
+        eth_nonce.to_bytes(32, 'big')
     )
     return message
 
-def create_base_pq_message(domain_separator, old_eth_address, new_eth_address, base_eth_message, eth_signature, pq_nonce):
+def create_base_pq_message(domain_separator, old_eth_address, new_eth_address, base_eth_message, v, r, s, pq_nonce):
     """
-    Create base PQ message for change ETH address intent
+    Create base PQ message for change ETH Address intent
     Format: DOMAIN_SEPARATOR + "Intent to change bound ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
-    This is signed by Alice's PQ key
+    This is signed by Alice (PQ key)
     """
     pattern = b"Intent to change bound ETH Address from "
     message = (
@@ -66,10 +66,10 @@ def create_base_pq_message(domain_separator, old_eth_address, new_eth_address, b
         b" to " +
         bytes.fromhex(new_eth_address[2:]) +  # Remove "0x" prefix
         base_eth_message +
-        eth_signature["v"].to_bytes(1, "big") +
-        eth_signature["r"].to_bytes(32, "big") +
-        eth_signature["s"].to_bytes(32, "big") +
-        pq_nonce.to_bytes(32, "big")
+        v.to_bytes(1, 'big') +
+        r.to_bytes(32, 'big') +
+        s.to_bytes(32, 'big') +
+        pq_nonce.to_bytes(32, 'big')
     )
     return message
 
@@ -91,12 +91,13 @@ def sign_pq_message(message, pq_private_key_file):
     import subprocess
     
     try:
-        # Sign with PQ key using sign_cli.py
+        # Sign with PQ key using sign_cli.py - use virtual environment like registration intent generator
         sign_cli = str(project_root / "ETHFALCON" / "python-ref" / "sign_cli.py")
         privkey_path = str(project_root / "test" / "test_keys" / pq_private_key_file)
+        venv_python = str(project_root / "ETHFALCON" / "python-ref" / "myenv" / "bin" / "python3")
         
         cmd = [
-            "python3", sign_cli, "sign",
+            venv_python, sign_cli, "sign",
             f"--privkey={privkey_path}",
             f"--data={message.hex()}",
             "--version=epervier"
@@ -174,7 +175,7 @@ def generate_change_eth_address_intent_vectors():
         # Step 2: Current actor's PQ key signs the complete message containing next actor's signature
         base_pq_message = create_base_pq_message(
             DOMAIN_SEPARATOR, old_eth_address, new_eth_address, base_eth_message,
-            {"v": eth_signature["v"], "r": int(eth_signature["r"], 16), "s": int(eth_signature["s"], 16)}, pq_nonce)
+            eth_signature["v"], int(eth_signature["r"], 16), int(eth_signature["s"], 16), pq_nonce)
         pq_signature = sign_pq_message(base_pq_message, current_actor["pq_private_key_file"])  # Current actor's PQ key signs
         
         if pq_signature is None:
@@ -198,7 +199,7 @@ def generate_change_eth_address_intent_vectors():
         
         eth_message = (
             DOMAIN_SEPARATOR +
-            b"Intent to change ETH Address and bond with Epervier fingerprint " +
+            b"Intent to change ETH Address and bond with Epervier Fingerprint " +
             bytes.fromhex(pq_fingerprint[2:]) +
             base_pq_message_for_contract +
             bytes.fromhex(pq_signature["salt"]) +

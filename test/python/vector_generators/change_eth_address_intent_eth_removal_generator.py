@@ -10,7 +10,7 @@ from eth_account import Account
 from eth_hash.auto import keccak
 
 # Add the project root to the path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).resolve().parents[3]
 sys.path.append(str(project_root))
 
 # Domain separator (same as in the contract)
@@ -26,10 +26,10 @@ def get_actor_config():
 def create_eth_cancel_change_eth_address_message(domain_separator, pq_fingerprint, eth_nonce):
     """
     Create ETH message for canceling change ETH address intent
-    Format: DOMAIN_SEPARATOR + "Remove change intent from Epervier fingerprint " + pqFingerprint + ethNonce
+    Format: DOMAIN_SEPARATOR + "Remove change intent from Epervier Fingerprint " + pqFingerprint + ethNonce
     This is signed by the ETH key
     """
-    pattern = b"Remove change intent from Epervier fingerprint "
+    pattern = b"Remove change intent from Epervier Fingerprint "
     message = (
         domain_separator +
         pattern +
@@ -60,29 +60,33 @@ def generate_eth_cancel_change_eth_address_intent_vectors():
 
     for i in range(num_actors):
         current_actor_name = actor_names[i]
+        next_actor_name = actor_names[(i + 1) % num_actors]  # Get the next actor (Bob)
         current_actor = actors[current_actor_name]
+        next_actor = actors[next_actor_name]  # Bob, who is the new ETH address
 
-        print(f"Generating ETH cancel change ETH address intent vector for {current_actor_name}...")
+        print(f"Generating ETH cancel change ETH address intent vector for {current_actor_name} -> {next_actor_name}...")
 
-        current_eth_address = current_actor["eth_address"]
-        pq_fingerprint = current_actor["pq_fingerprint"]
-        eth_private_key = current_actor["eth_private_key"]
+        current_eth_address = current_actor["eth_address"]  # Alice's address
+        next_eth_address = next_actor["eth_address"]  # Bob's address
+        pq_fingerprint = current_actor["pq_fingerprint"]  # Alice's PQ fingerprint
+        eth_private_key = next_actor["eth_private_key"]  # Bob's ETH private key (the new address)
 
         # Nonces for cancel operation
         pq_nonce = 3  # PQ nonce for cancel operation
-        eth_nonce = 1  # ETH nonce for cancel operation
+        eth_nonce = 1  # ETH nonce for cancel operation (Bob's nonce)
 
         # Create the ETH cancel message and sign it with ETH key
         eth_message = create_eth_cancel_change_eth_address_message(DOMAIN_SEPARATOR, pq_fingerprint, eth_nonce)
         eth_signature = sign_eth_message(eth_message, eth_private_key)
         
         if eth_signature is None:
-            print(f"Failed to generate ETH signature for {current_actor_name}")
+            print(f"Failed to generate ETH signature for {current_actor_name} -> {next_actor_name}")
             continue
 
         cancel_vector = {
             "current_actor": current_actor_name,
             "current_eth_address": current_eth_address,
+            "next_eth_address": next_eth_address,
             "pq_fingerprint": pq_fingerprint,
             "eth_message": eth_message.hex(),
             "eth_signature": eth_signature,
@@ -114,6 +118,7 @@ def main():
             vector = vectors[0]
             print(f"Current Actor: {vector['current_actor']}")
             print(f"Current ETH Address: {vector['current_eth_address']}")
+            print(f"Next ETH Address: {vector['next_eth_address']}")
             print(f"PQ Fingerprint: {vector['pq_fingerprint']}")
             print(f"PQ Nonce: {vector['pq_nonce']}")
             print(f"ETH Nonce: {vector['eth_nonce']}")
