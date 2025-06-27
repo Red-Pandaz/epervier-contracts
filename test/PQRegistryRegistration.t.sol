@@ -96,9 +96,6 @@ contract PQRegistryRegistrationTest is Test {
         // Use Alice's data from the centralized config
         Actor memory alice = getActor("alice");
         
-        // Get the domain separator from the deployed contract
-        bytes32 domainSeparator = registry.DOMAIN_SEPARATOR();
-        
         // Load test data from the comprehensive registration vectors
         string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
         
@@ -126,12 +123,9 @@ contract PQRegistryRegistrationTest is Test {
         // Load the real ETH intent message from test vector
         bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
         
-        // Hash the message with the domain separator (EIP-712 format)
-        bytes32 messageHash = keccak256(ethIntentMessage);
-        bytes32 finalHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, messageHash));
-        
-        // Sign the final hash with Alice's private key
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, finalHash);
+        // Sign the message with legacy Ethereum signed message format
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, ethSignedMessageHash);
         
         // Check initial nonces before submitting intent
         assertEq(registry.ethNonces(alice.ethAddress), 0, "Initial ETH nonce should be 0");
@@ -151,10 +145,7 @@ contract PQRegistryRegistrationTest is Test {
         assertEq(registry.pqFingerprintToPendingIntentAddress(alice.pqFingerprint), alice.ethAddress, "Bidirectional mapping should be set");
     }
 
-       function testSubmitRegistrationIntent_AllActors_Success() public {
-        // Get the domain separator from the deployed contract
-        bytes32 domainSeparator = registry.DOMAIN_SEPARATOR();
-        
+    function testSubmitRegistrationIntent_AllActors_Success() public {
         // Load comprehensive test vectors
         string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
         
@@ -184,12 +175,9 @@ contract PQRegistryRegistrationTest is Test {
             // Load the ETH intent message from test vector
             bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_message")));
             
-            // Hash the message with the domain separator (EIP-712 format)
-            bytes32 messageHash = keccak256(ethIntentMessage);
-            bytes32 finalHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, messageHash));
-            
-            // Sign the final hash with the actor's private key
-            (uint8 v, bytes32 r, bytes32 s) = vm.sign(actor.ethPrivateKey, finalHash);
+            // Sign the message with legacy Ethereum signed message format
+            bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(actor.ethPrivateKey, ethSignedMessageHash);
             
             // Mock the Epervier verifier to return the correct fingerprint
             vm.mockCall(
@@ -211,19 +199,13 @@ contract PQRegistryRegistrationTest is Test {
         // Use Alice's data
         Actor memory alice = getActor("alice");
         
-        // Get the domain separator from the deployed contract
-        bytes32 domainSeparator = registry.DOMAIN_SEPARATOR();
-        
         // First submit a registration intent
         string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
         bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
         
-        // Hash the message with the domain separator (EIP-712 format)
-        bytes32 messageHash = keccak256(ethIntentMessage);
-        bytes32 finalHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, messageHash));
-        
-        // Sign the final hash with Alice's private key
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, finalHash);
+        // Sign the message with legacy Ethereum signed message format
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, ethSignedMessageHash);
         
         // Mock the Epervier verifier for intent submission
         vm.mockCall(
