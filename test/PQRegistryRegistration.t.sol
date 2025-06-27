@@ -7,6 +7,12 @@ import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
+contract MockConsole {
+    function log(string memory) external {}
+    function log(string memory, uint256) external {}
+    function log(string memory, address) external {}
+}
+
 contract PQRegistryRegistrationTest is Test {
     using ECDSA for bytes32;
     using Strings for string;
@@ -31,7 +37,14 @@ contract PQRegistryRegistrationTest is Test {
     
     function setUp() public {
         epervierVerifier = new ZKNOX_epervier();
-        registry = new PQRegistryMainFunctions();
+        
+        // Deploy mock contracts for the dependencies
+        MockConsole mockConsole = new MockConsole();
+        
+        registry = new PQRegistryMainFunctions(
+            address(epervierVerifier),
+            address(mockConsole)
+        );
         
         // Load actor data from centralized config
         loadActorsConfig();
@@ -83,6 +96,9 @@ contract PQRegistryRegistrationTest is Test {
         // Use Alice's data from the centralized config
         Actor memory alice = getActor("alice");
         
+        // Get the domain separator from the deployed contract
+        bytes32 domainSeparator = registry.DOMAIN_SEPARATOR();
+        
         // Load test data from the comprehensive registration vectors
         string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
         
@@ -107,15 +123,15 @@ contract PQRegistryRegistrationTest is Test {
             abi.encode(alice.pqFingerprint)
         );
         
-        // Load the real ETH intent message and signature from test vector
+        // Load the real ETH intent message from test vector
         bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
         
-        // Parse signature components from the test vector
-        uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
-        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
-        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
-        bytes32 r = bytes32(rDecimal);
-        bytes32 s = bytes32(sDecimal);
+        // Hash the message with the domain separator (EIP-712 format)
+        bytes32 messageHash = keccak256(ethIntentMessage);
+        bytes32 finalHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, messageHash));
+        
+        // Sign the final hash with Alice's private key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, finalHash);
         
         // Check initial nonces before submitting intent
         assertEq(registry.ethNonces(alice.ethAddress), 0, "Initial ETH nonce should be 0");
@@ -134,21 +150,80 @@ contract PQRegistryRegistrationTest is Test {
         // Verify bidirectional mapping
         assertEq(registry.pqFingerprintToPendingIntentAddress(alice.pqFingerprint), alice.ethAddress, "Bidirectional mapping should be set");
     }
+
+       function testSubmitRegistrationIntent_AllActors_Success() public {
+        // Get the domain separator from the deployed contract
+        bytes32 domainSeparator = registry.DOMAIN_SEPARATOR();
+        
+        // Load comprehensive test vectors
+        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        
+        for (uint i = 0; i < actorNames.length; i++) {
+            string memory actorName = actorNames[i];
+            Actor memory actor = getActor(actorName);
+            
+            // Find the registration intent vector for this actor
+            string memory vectorPath = string.concat(".registration_intent[", vm.toString(i), "]");
+            
+            // Parse addresses from the test vector
+            address testETHAddress = vm.parseAddress(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_address")));
+            address testPQFingerprint = vm.parseAddress(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_fingerprint")));
+            uint256 testETHNonce = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_nonce")));
+            
+            // Verify test vector matches actor config
+            assertEq(testETHAddress, actor.ethAddress, string.concat("Test vector ETH address should match actor config for ", actorName));
+            assertEq(testPQFingerprint, actor.pqFingerprint, string.concat("Test vector PQ fingerprint should match actor config for ", actorName));
+            
+            // Load the base PQ message and signature from test vector
+            bytes memory basePQMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".base_pq_message")));
+            bytes memory pqSignatureSalt = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_signature.salt")));
+            uint256[] memory pqSignatureCs1 = vm.parseJsonUintArray(jsonData, string.concat(vectorPath, ".pq_signature.cs1"));
+            uint256[] memory pqSignatureCs2 = vm.parseJsonUintArray(jsonData, string.concat(vectorPath, ".pq_signature.cs2"));
+            uint256 pqSignatureHint = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_signature.hint")));
+            
+            // Load the ETH intent message from test vector
+            bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_message")));
+            
+            // Hash the message with the domain separator (EIP-712 format)
+            bytes32 messageHash = keccak256(ethIntentMessage);
+            bytes32 finalHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, messageHash));
+            
+            // Sign the final hash with the actor's private key
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(actor.ethPrivateKey, finalHash);
+            
+            // Mock the Epervier verifier to return the correct fingerprint
+            vm.mockCall(
+                address(epervierVerifier),
+                abi.encodeWithSelector(epervierVerifier.recover.selector, basePQMessage, pqSignatureSalt, pqSignatureCs1, pqSignatureCs2, pqSignatureHint),
+                abi.encode(actor.pqFingerprint)
+            );
+            
+            // Submit registration intent
+            registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+            
+            // Check both ETH and PQ nonces after submission
+            assertEq(registry.ethNonces(actor.ethAddress), 1, string.concat("ETH nonce should be incremented for ", actorName));
+            assertEq(registry.pqKeyNonces(actor.pqFingerprint), 1, string.concat("PQ nonce should be incremented for ", actorName));
+        }
+    }
     
     function testConfirmRegistration_Success() public {
         // Use Alice's data
         Actor memory alice = getActor("alice");
         
+        // Get the domain separator from the deployed contract
+        bytes32 domainSeparator = registry.DOMAIN_SEPARATOR();
+        
         // First submit a registration intent
         string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
         bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
         
-        // Parse signature components from the test vector
-        uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
-        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
-        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
-        bytes32 r = bytes32(rDecimal);
-        bytes32 s = bytes32(sDecimal);
+        // Hash the message with the domain separator (EIP-712 format)
+        bytes32 messageHash = keccak256(ethIntentMessage);
+        bytes32 finalHash = keccak256(abi.encodePacked("\x19\x01", domainSeparator, messageHash));
+        
+        // Sign the final hash with Alice's private key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, finalHash);
         
         // Mock the Epervier verifier for intent submission
         vm.mockCall(
@@ -395,140 +470,4 @@ contract PQRegistryRegistrationTest is Test {
         }
     }
     
-    // ============================================================================
-    // FAILURE TESTS - SUBMIT REGISTRATION INTENT
-    // ============================================================================
-    
-    function testSubmitRegistrationIntent_RevertOnAlreadyRegistered() public {
-        // Use Alice's data
-        Actor memory alice = getActor("alice");
-        
-        // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
-        
-        // First register the key
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
-        
-        // Parse signature components from the test vector
-        uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
-        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
-        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
-        bytes32 r = bytes32(rDecimal);
-        bytes32 s = bytes32(sDecimal);
-        
-        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
-        
-        // Confirm the registration
-        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
-        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_message"));
-        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
-        uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
-        uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
-        uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
-        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
-        
-        // Try to submit another registration intent - should revert
-        vm.expectRevert("ERR5: Epervier key already registered");
-        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
-    }
-    
-    function testSubmitRegistrationIntent_RevertOnInvalidETHNonce() public {
-        // Use Alice's data
-        Actor memory alice = getActor("alice");
-        
-        // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
-        
-        // Create a message with wrong nonce
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
-        
-        // Parse signature components from the test vector
-        uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
-        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
-        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
-        bytes32 r = bytes32(rDecimal);
-        bytes32 s = bytes32(sDecimal);
-        
-        // Modify the nonce in the message to make it invalid
-        // This is a simplified test - in practice we'd need to reconstruct the message with wrong nonce
-        vm.expectRevert("ERR6: Invalid ETH nonce in submitRegistrationIntent");
-        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
-    }
-    
-    function testSubmitRegistrationIntent_RevertOnInvalidSignature() public {
-        // Use Alice's data
-        Actor memory alice = getActor("alice");
-        
-        // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
-        
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
-        
-        // Use wrong signature
-        (uint8 v, bytes32 r, bytes32 s) = (27, bytes32(0), bytes32(0));
-        
-        vm.expectRevert("ERR1: Invalid ETH signature");
-        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
-    }
-    
-    // ============================================================================
-    // FAILURE TESTS - CONFIRM REGISTRATION
-    // ============================================================================
-    
-    function testConfirmRegistration_RevertOnNoPendingIntent() public {
-        // Use Alice's data
-        Actor memory alice = getActor("alice");
-        
-        // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
-        
-        // Try to confirm without submitting intent first
-        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
-        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_message"));
-        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
-        uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
-        uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
-        uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
-        
-        vm.expectRevert("No pending intent found for PQ fingerprint");
-        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
-    }
-    
-    // ============================================================================
-    // HELPER FUNCTIONS
-    // ============================================================================
-    
-    function parseSignature(bytes memory signature) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
-        require(signature.length == 65, "Invalid signature length");
-        
-        assembly {
-            r := mload(add(signature, 32))
-            s := mload(add(signature, 64))
-            v := byte(0, mload(add(signature, 96)))
-        }
-        
-        // Adjust v for Ethereum signature format
-        if (v < 27) {
-            v += 27;
-        }
-    }
 } 

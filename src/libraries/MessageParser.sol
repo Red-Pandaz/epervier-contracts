@@ -1154,7 +1154,7 @@ library MessageParser {
     
     /**
      * @dev Validate that ETH message contains confirmation text for unregistration
-     * Expected format: DOMAIN_SEPARATOR + "Confirm unregistration from Epervier Fingerprint " + ethNonce + pqMessage
+     * Expected format: DOMAIN_SEPARATOR + "Confirm unregistration from Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function validateETHUnregistrationConfirmationMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Confirm unregistration from Epervier Fingerprint ";
@@ -1178,13 +1178,130 @@ library MessageParser {
         bytes memory pattern = "Remove unregistration intent from ETH Address ";
         return findPattern(message, pattern, true) != type(uint).max;
     }
-    
+
     /**
      * @dev Validate that PQ message contains removal text for registration intent
      * Expected format: DOMAIN_SEPARATOR + "Remove registration intent from ETH Address " + address + pqNonce
      */
     function validatePQRemoveIntentMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Remove registration intent from ETH Address ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that PQ message contains removal text for change ETH Address intent
+     * Expected format: DOMAIN_SEPARATOR + "Remove change intent from ETH Address " + ethAddress + pqNonce
+     */
+    function validatePQChangeAddressRemovalMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Remove change intent from ETH Address ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that ETH message contains intent text for registration
+     * Expected format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     */
+    function validateETHRegistrationIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Intent to pair Epervier Key";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that PQ message contains intent text for registration
+     * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + ethAddress + pqNonce
+     */
+    function validatePQRegistrationIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Intent to pair ETH Address ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that ETH message contains confirmation text for registration
+     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+     */
+    function validateETHRegistrationConfirmationMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Confirm bonding to Epervier Fingerprint ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that PQ message contains confirmation text for registration
+     * Expected format: DOMAIN_SEPARATOR + "Confirm binding ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+     */
+    function validatePQRegistrationConfirmationMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Confirm binding ETH Address ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that ETH message contains removal text for registration intent
+     * Expected format: DOMAIN_SEPARATOR + "Remove registration intent from Epervier Fingerprint " + pqFingerprint + ethNonce
+     */
+    function validateETHRemoveRegistrationIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Remove registration intent from Epervier Fingerprint ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that ETH message contains intent text for change ETH Address
+     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+     */
+    function validateETHChangeETHAddressIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Intent to change ETH Address and bond with Epervier Fingerprint ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that PQ message contains intent text for change ETH Address
+     * Expected format: DOMAIN_SEPARATOR + "Intent to change bound ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
+     */
+    function validatePQChangeETHAddressIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Intent to change bound ETH Address from ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that PQ message contains confirmation text for change ETH Address
+     * Expected format: DOMAIN_SEPARATOR + "Confirm changing bound ETH Address for Epervier Fingerprint from " + oldEthAddress + " to " + newEthAddress + pqNonce
+     */
+    function validatePQChangeETHAddressConfirmationMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Confirm changing bound ETH Address for Epervier Fingerprint from ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that ETH message contains confirmation text for change ETH Address
+     * Expected format: DOMAIN_SEPARATOR + "Confirm change ETH Address for Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     */
+    function validateETHChangeETHAddressConfirmationMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Confirm change ETH Address for Epervier Fingerprint ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that ETH message contains removal text for change ETH Address intent
+     * Expected format: DOMAIN_SEPARATOR + "Remove change intent from Epervier Fingerprint " + pqFingerprint + ethNonce
+     */
+    function validateETHRemoveChangeIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Remove change intent from Epervier Fingerprint ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that ETH message contains intent text for unregistration
+     * Expected format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint " + pqFingerprint + ethNonce
+     */
+    function validateETHUnregistrationIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Intent to unregister from Epervier Fingerprint ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that PQ message contains intent text for unregistration
+     * Expected format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint from address " + currentEthAddress + baseETHMessage + v + r + s + pqNonce
+     */
+    function validatePQUnregistrationIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Intent to unregister from Epervier Fingerprint from address ";
         return findPattern(message, pattern, true) != type(uint).max;
     }
 

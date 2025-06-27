@@ -7,6 +7,12 @@ import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
+contract MockConsole {
+    function log(string memory) external {}
+    function log(string memory, uint256) external {}
+    function log(string memory, address) external {}
+}
+
 contract PQRegistryUnregistrationTest is Test {
     using ECDSA for bytes32;
     using Strings for string;
@@ -31,7 +37,14 @@ contract PQRegistryUnregistrationTest is Test {
     
     function setUp() public {
         epervierVerifier = new ZKNOX_epervier();
-        registry = new PQRegistryMainFunctions();
+        
+        // Deploy mock contracts for the dependencies
+        MockConsole mockConsole = new MockConsole();
+        
+        registry = new PQRegistryMainFunctions(
+            address(epervierVerifier),
+            address(mockConsole)
+        );
         
         // Load actor data from centralized config
         loadActorsConfig();
@@ -345,7 +358,12 @@ contract PQRegistryUnregistrationTest is Test {
             Actor memory actor = getActor(actorName);
             
             // Reset contract state by redeploying for each actor
-            registry = new PQRegistryMainFunctions();
+            MockConsole mockConsole = new MockConsole();
+            
+            registry = new PQRegistryMainFunctions(
+                address(epervierVerifier),
+                address(mockConsole)
+            );
             
             // First register the actor
             registerActor(actor, actorName);
@@ -387,7 +405,7 @@ contract PQRegistryUnregistrationTest is Test {
             assertEq(registry.addressToEpervierKey(actor.ethAddress), address(0), string.concat("Registration should be removed for ", actorName));
             
             // Verify unregistration intent has been cleared
-            (,,uint256 timestamp) = registry.unregistrationIntents(actor.ethAddress);
+            (uint256 timestamp,,) = registry.unregistrationIntents(actor.ethAddress);
             assertEq(timestamp, 0, string.concat("Unregistration intent should be cleared for ", actorName));
             
             // Clear the mock for the next iteration

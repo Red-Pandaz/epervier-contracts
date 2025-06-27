@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+import "./src/libraries/MessageParser.sol";
+import "./src/libraries/MessageValidation.sol";
+import "./src/libraries/SignatureExtractor.sol";
+import "./src/libraries/AddressUtils.sol";
+
 interface IEpervierVerifier {
     function recover(bytes memory, bytes memory, uint256[] memory, uint256[] memory, uint256) external returns (address);
 }
@@ -11,44 +18,10 @@ interface IConsole {
     function log(string memory, address) external;
 }
 
-interface IMessageParser {
-    function parseETHRegistrationIntentMessage(bytes memory) external returns (uint256, bytes memory, uint256[] memory, uint256[] memory, uint256, bytes memory);
-    function parseBasePQRegistrationIntentMessage(bytes memory) external returns (address, uint256);
-    function parsePQRegistrationConfirmationMessage(bytes memory) external returns (address, bytes memory, uint8, bytes32, bytes32, uint256);
-    function parseBaseETHRegistrationConfirmationMessage(bytes memory) external returns (address, uint256);
-    function parseETHRemoveRegistrationIntentMessage(bytes memory) external returns (address, uint256);
-    function parseETHRemoveChangeIntentMessage(bytes memory) external returns (address, uint256);
-    function parsePQChangeETHAddressIntentMessage(bytes memory) external returns (address, address, uint256, bytes memory, uint8, bytes32, bytes32);
-    function parseBasePQChangeETHAddressConfirmMessage(bytes memory) external returns (address, address, uint256);
-    function parseBaseETHChangeETHAddressIntentMessage(bytes memory) external returns (address, address, uint256);
-    function parseETHChangeETHAddressConfirmationMessage(bytes memory) external returns (address, uint256, bytes memory, uint256[] memory, uint256[] memory, uint256, bytes memory);
-    function parsePQUnregistrationIntentMessage(bytes memory) external returns (address, uint256, bytes memory, uint8, bytes32, bytes32);
-    function parseBasePQUnregistrationConfirmMessage(bytes memory) external returns (address, uint256);
-    function parsePQRemoveUnregistrationIntentMessage(bytes memory) external returns (address, uint256);
-    function validateETHUnregistrationConfirmationMessage(bytes memory) external returns (bool);
-    function validatePQUnregistrationConfirmationMessage(bytes memory) external returns (bool);
-    function validatePQUnregistrationRemovalMessage(bytes memory) external returns (bool);
-    function extractEthNonce(bytes memory, uint8) external pure returns (uint256);
-    function extractPQSalt(bytes memory, uint8) external pure returns (bytes memory);
-    function extractPQCs1(bytes memory, uint8) external pure returns (uint256[] memory);
-    function extractPQCs2(bytes memory, uint8) external pure returns (uint256[] memory);
-    function extractPQHint(bytes memory, uint8) external pure returns (uint256);
-    function extractBasePQMessage(bytes memory, uint8) external pure returns (bytes memory);
-    function parseETHAddressFromETHUnregistrationConfirmationMessage(bytes memory) external returns (address);
-    function extractPQNonce(bytes memory, uint8) external pure returns (uint256);
-    function extractPQNonceFromRemoveMessage(bytes memory) external pure returns (uint256);
-    function validatePQRemoveIntentMessage(bytes memory) external returns (bool);
-}
-
-interface IECDSA {
-    function recover(bytes32, uint8, bytes32, bytes32) external pure returns (address);
-}
-
-interface IStrings {
-    function toString(uint256) external pure returns (string memory);
-}
-
 contract PQRegistryMainFunctions {
+    using ECDSA for bytes32;
+    using Strings for string;
+    
     // --- State variables and structs needed by the main functions ---
     struct Intent {
         address pqFingerprint;
@@ -69,9 +42,6 @@ contract PQRegistryMainFunctions {
     mapping(address => address) public ethAddressToChangeIntentFingerprint;
     // Map ETH address to PQ fingerprint for unregistration intents (reverse of unregistrationIntents)
     mapping(address => address) public ethAddressToUnregistrationFingerprint;
-    
-    // Domain separator for replay protection
-    bytes32 public constant DOMAIN_SEPARATOR = keccak256("PQRegistry");
     
     // Fixed struct definition to match the original
     struct ChangeETHAddressIntent { 
@@ -107,10 +77,41 @@ contract PQRegistryMainFunctions {
     
     // --- External dependencies (mocked as interfaces for this extraction) ---
     IEpervierVerifier public epervierVerifier;
-    IMessageParser public MessageParser;
-    IECDSA public ECDSA;
-    IStrings public Strings;
     IConsole public console;
+    
+    // EIP-712 Domain Separator
+    string public constant DOMAIN_NAME = "PQRegistry";
+    string public constant DOMAIN_VERSION = "1";
+    bytes32 public DOMAIN_SEPARATOR;
+    
+    constructor(
+        address _epervierVerifier,
+        address _console
+    ) {
+        require(_epervierVerifier != address(0), "Epervier verifier cannot be zero address");
+        require(_console != address(0), "Console cannot be zero address");
+        
+        epervierVerifier = IEpervierVerifier(_epervierVerifier);
+        console = IConsole(_console);
+        
+        // Compute EIP-712 domain separator
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(DOMAIN_NAME)),
+                keccak256(bytes(DOMAIN_VERSION)),
+                11155420, // Optimism Sepolia chain ID
+                address(this)
+            )
+        );
+    }
+    
+    /**
+     * @dev Returns the EIP-712 domain separator
+     */
+    function getDomainSeparator() external view returns (bytes32) {
+        return DOMAIN_SEPARATOR;
+    }
     
     // --- Main functions ---
     function submitRegistrationIntent(
@@ -125,6 +126,12 @@ contract PQRegistryMainFunctions {
         
         address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
+        
+        // Debug logging
+        emit DebugParseStep("eth_message_length", ethMessage.length);
+        emit DebugParseStep("eth_message_hash", uint256(ethMessageHash));
+        emit DebugParseStep("eth_signed_message_hash", uint256(ethSignedMessageHash));
+        emit DebugParseStep("eth_signature_recovered", uint256(uint160(recoveredETHAddress)));
     
         // STEP 2: Parse the ETH registration intent message
         (
@@ -138,6 +145,11 @@ contract PQRegistryMainFunctions {
         
         // STEP 3: Parse the base PQ message
         (address intentAddress, uint256 pqNonce) = MessageParser.parseBasePQRegistrationIntentMessage(basePQMessage);
+        
+        // Debug logging for address comparison
+        emit DebugParseStep("recovered_eth_address", uint256(uint160(recoveredETHAddress)));
+        emit DebugParseStep("parsed_intent_address", uint256(uint160(intentAddress)));
+        emit DebugParseStep("addresses_equal", uint256(uint160(recoveredETHAddress == intentAddress ? 1 : 0)));
         
         // STEP 4: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
@@ -207,17 +219,18 @@ contract PQRegistryMainFunctions {
         require(ethAddress == recoveredETHAddress, "ETH Address mismatch: PQ message vs recovered ETH signature");
         require(pqFingerprint == recoveredFingerprint, "PQ fingerprint mismatch: ETH message vs recovered PQ signature");
         
-        // STEP 6: State validation
-        Intent storage intent = pendingIntents[ethAddress];
+        // STEP 6: State validation - Check PQ fingerprint mapping first
+        address intentAddress = pqFingerprintToPendingIntentAddress[recoveredFingerprint];
+        require(intentAddress != address(0), "No pending intent found for PQ fingerprint");
+        
+        Intent storage intent = pendingIntents[intentAddress];
         require(intent.timestamp != 0, "No pending intent found for ETH Address");
-        require(pqFingerprintToPendingIntentAddress[recoveredFingerprint] == ethAddress, "ETH Address mismatch: PQ message vs stored intent");
+        require(intentAddress == recoveredETHAddress, "ETH Address mismatch: PQ message vs stored intent");
         require(intent.pqFingerprint == pqFingerprint, "PQ fingerprint mismatch: ETH message vs stored intent");
         require(intent.pqFingerprint == recoveredFingerprint, "PQ fingerprint mismatch: recovered vs stored intent");
         
         // STEP 7: Comprehensive conflict prevention check
-        // Ensure this is the only intent open for either address
-        require(pendingIntents[ethAddress].timestamp != 0, "ETH Address does not have pending registration intent");
-        require(pendingIntents[recoveredFingerprint].timestamp != 0, "PQ fingerprint does not have pending registration intent");
+        require(pqFingerprintToPendingIntentAddress[recoveredFingerprint] != address(0), "PQ fingerprint does not have pending registration intent");
         
         // STEP 8: Nonce validation
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
@@ -269,7 +282,7 @@ contract PQRegistryMainFunctions {
         
         // STEP 4: Comprehensive conflict prevention check
         require(pendingIntents[recoveredETHAddress].timestamp != 0, "ETH Address does not have pending registration intent");
-        require(pendingIntents[recoveredFingerprint].timestamp != 0, "PQ fingerprint does not have pending registration intent");
+        require(pqFingerprintToPendingIntentAddress[pqFingerprint] != address(0), "PQ fingerprint does not have pending registration intent");
         
         // STEP 5: Nonce validation
         require(ethNonces[recoveredETHAddress] == ethNonce, "Invalid ETH nonce");
@@ -319,7 +332,7 @@ contract PQRegistryMainFunctions {
         
         // STEP 4: Comprehensive conflict prevention check
         require(pendingIntents[intentAddress].timestamp != 0, "ETH Address does not have pending registration intent");
-        require(pendingIntents[recoveredFingerprint].timestamp != 0, "PQ fingerprint does not have pending registration intent");
+        require(pqFingerprintToPendingIntentAddress[recoveredFingerprint] != address(0), "PQ fingerprint does not have pending registration intent");
         
         // STEP 5: Nonce validation
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
@@ -401,27 +414,59 @@ contract PQRegistryMainFunctions {
         // STEP 1: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
         
-        // STEP 2: Extract PQ nonce from the PQ message
-        uint256 pqNonce = MessageParser.extractPQNonceFromRemoveMessage(pqMessage);
+        // STEP 2: Validate the PQ remove change intent message format
+        require(MessageParser.validatePQChangeAddressRemovalMessage(pqMessage), "Invalid PQ remove change intent message format");
         
-        // STEP 3: State validation
+        // STEP 3: Parse the PQ remove change intent message
+        // Format: DOMAIN_SEPARATOR + "Remove change intent from ETH Address " + ethAddress + pqNonce
+        bytes memory domainSeparator = abi.encodePacked(keccak256("PQRegistry"));
+        bytes memory pattern = "Remove change intent from ETH Address ";
+        
+        require(pqMessage.length >= domainSeparator.length + pattern.length + 20 + 32, "Invalid message length");
+        
+        // Extract ETH address and PQ nonce
+        uint256 ethAddressStart = domainSeparator.length + pattern.length;
+        
+        // Extract ETH address (20 bytes)
+        bytes memory ethAddressBytes = new bytes(20);
+        for (uint i = 0; i < 20; i++) {
+            ethAddressBytes[i] = pqMessage[ethAddressStart + i];
+        }
+        
+        // Convert bytes to address properly
+        uint256 addr = 0;
+        for (uint i = 0; i < 20; i++) {
+            addr = (addr << 8) | uint8(ethAddressBytes[i]);
+        }
+        address ethAddress = address(uint160(addr));
+        
+        // Extract PQ nonce (last 32 bytes)
+        bytes memory nonceBytes = new bytes(32);
+        for (uint i = 0; i < 32; i++) {
+            nonceBytes[i] = pqMessage[pqMessage.length - 32 + i];
+        }
+        uint256 pqNonce = uint256(bytes32(nonceBytes));
+        
+        // STEP 4: State validation
         ChangeETHAddressIntent storage intent = changeETHAddressIntents[recoveredFingerprint];
         require(intent.timestamp != 0, "No pending change intent found for PQ fingerprint");
         
-        // STEP 4: Nonce validation
+        // STEP 5: Verify ETH address is registered to this PQ fingerprint
+        require(epervierKeyToAddress[recoveredFingerprint] == ethAddress, "ETH address not registered to PQ fingerprint");
+        
+        // STEP 6: Verify there's a pending change intent
+        require(intent.newETHAddress != address(0), "No pending change intent");
+        require(intent.timestamp > 0, "No pending change intent");
+        
+        // STEP 7: Nonce validation
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         
-        // STEP 5: Verify the PQ message contains the correct removal text
-        require(MessageParser.validatePQRemoveIntentMessage(pqMessage), "Invalid PQ removal message");
-        
-        // STEP 6: Clear the intent
-        address oldEthAddress = epervierKeyToAddress[recoveredFingerprint];
-        address newEthAddress = intent.newETHAddress;
+        // STEP 8: Clear the intent
         delete changeETHAddressIntents[recoveredFingerprint];
-        delete ethAddressToChangeIntentFingerprint[oldEthAddress];
-        delete ethAddressToChangeIntentFingerprint[newEthAddress];
+        delete ethAddressToChangeIntentFingerprint[ethAddress];
+        delete ethAddressToChangeIntentFingerprint[intent.newETHAddress];
         
-        // STEP 7: Increment nonce
+        // STEP 9: Increment nonce
         pqKeyNonces[recoveredFingerprint]++;
         
         emit ChangeETHAddressIntentRemoved(recoveredFingerprint);
@@ -464,7 +509,7 @@ contract PQRegistryMainFunctions {
         require(addressToEpervierKey[newEthAddress] == address(0), "New ETH Address already has registered PQ key");
         
         // STEP 7: Conflict prevention
-        require(changeETHAddressIntents[recoveredFingerprint].timestamp != 0, "PQ fingerprint has pending change intent");
+        require(changeETHAddressIntents[recoveredFingerprint].timestamp == 0, "PQ fingerprint has pending change intent");
         require(ethAddressToChangeIntentFingerprint[oldEthAddress] == address(0), "Old ETH Address has pending change intent");
         require(ethAddressToChangeIntentFingerprint[newEthAddress] == address(0), "New ETH Address has pending change intent");
         

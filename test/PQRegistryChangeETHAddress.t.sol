@@ -7,6 +7,13 @@ import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
+// Mock contracts for testing
+contract MockConsole {
+    function log(string memory) external {}
+    function log(string memory, uint256) external {}
+    function log(string memory, address) external {}
+}
+
 contract PQRegistryChangeETHAddressTest is Test {
     using ECDSA for bytes32;
     using Strings for string;
@@ -34,13 +41,20 @@ contract PQRegistryChangeETHAddressTest is Test {
     
     function setUp() public {
         epervierVerifier = new ZKNOX_epervier();
-        registry = new PQRegistryMainFunctions();
         
-        // Set a timestamp for the test environment
-        vm.warp(1640995200); // January 1, 2022 00:00:00 UTC
+        // Deploy mock contracts for the dependencies
+        MockConsole mockConsole = new MockConsole();
+        
+        registry = new PQRegistryMainFunctions(
+            address(epervierVerifier),
+            address(mockConsole)
+        );
         
         // Load actor data from centralized config
         loadActorsConfig();
+        
+        // Mock the Epervier verifier to return the correct fingerprint for each actor
+        // We'll set up specific mocks in each test as needed
     }
     
     function loadActorsConfig() internal {

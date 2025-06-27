@@ -1,0 +1,188 @@
+{
+    "BasePQRegistrationIntentMessage": {
+      "description": "Base PQ message structure for registration intent that appears in nested ETH messages.",
+      "fields": [
+        {"name": "DOMAIN_SEPARATOR", "type": "bytes32", "length": 32},
+        {"name": "pattern", "type": "string", "length": 27, "value": "Intent to pair ETH Address "},
+        {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address that will be paired with the PQ key"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 111
+    },
+    "ETHRegistrationIntentMessage": {
+      "description": "ETH message containing nested PQ signature components and base PQ message for registration intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 27, "value": "Intent to pair Epervier Key"},
+        {"name": "basePQMessage", "type": "BasePQRegistrationIntentMessage", "length": 111, "description": "Base PQ message that was signed"},
+        {"name": "salt", "type": "bytes", "length": 40, "description": "PQ signature salt component"},
+        {"name": "cs1", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs1 component"},
+        {"name": "cs2", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs2 component"},
+        {"name": "hint", "type": "uint256", "length": 32, "description": "PQ signature hint component"},
+        {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
+      ],
+      "total_length": 2376
+    },
+    "BaseETHRegistrationConfirmationMessage": {
+      "description": "ETH message that gets signed and embedded in the PQ confirmation message.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 40, "value": "Confirm bonding to Epervier Fingerprint "},
+        {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint (derived from PQ public key)"},
+        {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
+      ],
+      "total_length": 92
+    },
+    "PQRegistrationConfirmationMessage": {
+      "description": "PQ-controlled confirmation of registration, with nested ETH signature and message.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 28, "value": "Confirm binding ETH Address "},
+        {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address being bound to the PQ Fingerprint"},
+        {"name": "baseETHMessage", "type": "BaseETHRegistrationConfirmationMessage", "length": 124, "description": "Base ETH message that was signed"},
+        {"name": "v", "type": "uint8", "length": 1, "description": "ETH signature v component"},
+        {"name": "r", "type": "bytes32", "length": 32, "description": "ETH signature r component"},
+        {"name": "s", "type": "bytes32", "length": 32, "description": "ETH signature s component"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 269
+    },
+    "ETHRemoveRegistrationIntentMessage": {
+      "description": "ETH-controlled removal of a pending registration intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 53, "value": "Remove registration intent from Epervier Fingerprint "},
+        {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint to remove registration intent for"},
+        {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
+      ],
+      "total_length": 105
+    },
+    "PQRemoveRegistrationIntentMessage": {
+      "description": "PQ-controlled removal of a pending registration intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 44, "value": "Remove registration intent from ETH Address "},
+        {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address to remove registration intent for"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 96
+    },
+    "BaseETHChangeETHAddressIntentMessage": {
+      "description": "ETH message that gets signed and embedded in the PQ change address intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 64, "value": "Intent to change ETH Address and bond with Epervier Fingerprint "},
+        {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint to change ETH Address for"},
+        {"name": "pattern2", "type": "string", "length": 4, "value": " to "},
+        {"name": "newEthAddress", "type": "address", "length": 20, "description": "New ETH Address to bind to the PQ Fingerprint"},
+        {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
+      ],
+      "total_length": 140
+    },
+    "PQChangeETHAddressIntentMessage": {
+      "description": "PQ message containing nested ETH signature and message for change ETH Address intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 40, "value": "Intent to change bound ETH Address from "},
+        {"name": "oldEthAddress", "type": "address", "length": 20, "description": "Current ETH Address bound to the PQ Fingerprint"},
+        {"name": "pattern2", "type": "string", "length": 4, "value": " to "},
+        {"name": "newEthAddress", "type": "address", "length": 20, "description": "New ETH Address to bind to the PQ Fingerprint"},
+        {"name": "baseETHMessage", "type": "BaseETHChangeETHAddressIntentMessage", "length": 172, "description": "Base ETH message that was signed"},
+        {"name": "v", "type": "uint8", "length": 1, "description": "ETH signature v component"},
+        {"name": "r", "type": "bytes32", "length": 32, "description": "ETH signature r component"},
+        {"name": "s", "type": "bytes32", "length": 32, "description": "ETH signature s component"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 344
+    },
+    "BasePQChangeETHAddressConfirmMessage": {
+      "description": "Base PQ message structure for change ETH Address confirmation.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 65, "value": "Confirm changing bound ETH Address for Epervier Fingerprint from "},
+        {"name": "oldEthAddress", "type": "address", "length": 20, "description": "Current ETH Address bound to the PQ Fingerprint"},
+        {"name": "pattern2", "type": "string", "length": 4, "value": " to "},
+        {"name": "newEthAddress", "type": "address", "length": 20, "description": "New ETH Address to bind to the PQ Fingerprint"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 141
+    },
+    "ETHChangeETHAddressConfirmationMessage": {
+      "description": "ETH message containing nested PQ signature components and base PQ message for change ETH Address confirmation.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 52, "value": "Confirm change ETH Address for Epervier Fingerprint "},
+        {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint to confirm change for"},
+        {"name": "basePQMessage", "type": "BasePQChangeETHAddressConfirmMessage", "length": 173, "description": "Base PQ message that was signed"},
+        {"name": "salt", "type": "bytes", "length": 40, "description": "PQ signature salt component"},
+        {"name": "cs1", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs1 component"},
+        {"name": "cs2", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs2 component"},
+        {"name": "hint", "type": "uint256", "length": 32, "description": "PQ signature hint component"},
+        {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
+      ],
+      "total_length": 2379
+    },
+    "ETHRemoveChangeIntentMessage": {
+      "description": "ETH-controlled removal of a pending change ETH Address intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 47, "value": "Remove change intent from Epervier Fingerprint "},
+        {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint to remove change intent for"},
+        {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
+      ],
+      "total_length": 99
+    },
+    "PQRemoveChangeIntentMessage": {
+      "description": "PQ-controlled removal of a pending change ETH Address intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 38, "value": "Remove change intent from ETH Address "},
+        {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address to remove change intent for"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 90
+    },
+    "PQRemoveUnregistrationIntentMessage": {
+      "description": "PQ-controlled removal of a pending unregistration intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 46, "value": "Remove unregistration intent from ETH Address "},
+        {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address to remove unregistration intent for"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 98
+    },
+    "BaseETHUnregistrationIntentMessage": {
+      "description": "ETH message that gets signed and embedded in the PQ unregistration intent.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 47, "value": "Intent to unregister from Epervier Fingerprint "},
+        {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint to unregister"},
+        {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
+      ],
+      "total_length": 99
+    },
+    "PQUnregistrationIntentMessage": {
+      "description": "PQ-controlled intent to unregister a PQ key.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 60, "value": "Intent to unregister from Epervier Fingerprint from address "},
+        {"name": "currentEthAddress", "type": "address", "length": 20, "description": "Current ETH Address bound to the PQ Fingerprint"},
+        {"name": "baseETHMessage", "type": "BaseETHUnregistrationIntentMessage", "length": 131, "description": "Base ETH message that was signed"},
+        {"name": "v", "type": "uint8", "length": 1, "description": "ETH signature v component"},
+        {"name": "r", "type": "bytes32", "length": 32, "description": "ETH signature r component"},
+        {"name": "s", "type": "bytes32", "length": 32, "description": "ETH signature s component"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 289
+    },
+    "BasePQUnregistrationConfirmMessage": {
+      "description": "Base PQ message structure for unregistration confirmation.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 40, "value": "Confirm unregistration from ETH Address "},
+        {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address to unregister"},
+        {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
+      ],
+      "total_length": 92
+    },
+    "ETHUnregistrationConfirmationMessage": {
+      "description": "ETH message containing nested PQ signature components and base PQ message for unregistration confirmation.",
+      "fields": [
+        {"name": "pattern", "type": "string", "length": 49, "value": "Confirm unregistration from Epervier Fingerprint "},
+        {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint to unregister"},
+        {"name": "basePQMessage", "type": "BasePQUnregistrationConfirmMessage", "length": 123, "description": "Base PQ message that was signed"},
+        {"name": "salt", "type": "bytes", "length": 40, "description": "PQ signature salt component"},
+        {"name": "cs1", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs1 component"},
+        {"name": "cs2", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs2 component"},
+        {"name": "hint", "type": "uint256", "length": 32, "description": "PQ signature hint component"},
+        {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
+      ],
+      "total_length": 2375
+    }
+  } 
