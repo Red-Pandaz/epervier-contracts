@@ -107,8 +107,8 @@ def generate_registration_confirmation_vector(actor_name):
     pq_nonce = 1
     
     # Construct the PQRegistrationConfirmationMessage according to schema
-    # DOMAIN_SEPARATOR + "Confirm binding ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
-    pattern = "Confirm binding ETH Address "
+    # DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+    pattern = "Confirm bonding to ETH Address "
     eth_address_bytes = bytes.fromhex(actor["eth_address"][2:])  # Remove 0x prefix
     
     # Build the message: DOMAIN_SEPARATOR + pattern + ethAddress + baseETHMessage + v + r + s + pqNonce

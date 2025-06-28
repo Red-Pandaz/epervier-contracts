@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../PQRegistry_main_functions.sol";
+import "../src/PQRegistry.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -17,7 +17,7 @@ contract PQRegistryUnregistrationTest is Test {
     using ECDSA for bytes32;
     using Strings for string;
     
-    PQRegistryMainFunctions public registry;
+    PQRegistry public registry;
     ZKNOX_epervier public epervierVerifier;
     
     // Actor data structure
@@ -41,7 +41,7 @@ contract PQRegistryUnregistrationTest is Test {
         // Deploy mock contracts for the dependencies
         MockConsole mockConsole = new MockConsole();
         
-        registry = new PQRegistryMainFunctions(
+        registry = new PQRegistry(
             address(epervierVerifier),
             address(mockConsole)
         );
@@ -136,8 +136,8 @@ contract PQRegistryUnregistrationTest is Test {
         // Print the first 100 bytes of the PQ message for debugging
         bytes memory pqMsg = pqMessage;
         bytes memory first100 = new bytes(pqMsg.length < 100 ? pqMsg.length : 100);
-        for (uint i = 0; i < first100.length; i++) {
-            first100[i] = pqMsg[i];
+        for (uint j = 0; j < first100.length; j++) {
+            first100[j] = pqMsg[j];
         }
         console.logBytes(first100);
         // Submit unregistration intent with real data
@@ -199,8 +199,8 @@ contract PQRegistryUnregistrationTest is Test {
             // Print the first 100 bytes of the PQ message for debugging
             bytes memory pqMsg = pqMessage;
             bytes memory first100 = new bytes(pqMsg.length < 100 ? pqMsg.length : 100);
-            for (uint i = 0; i < first100.length; i++) {
-                first100[i] = pqMsg[i];
+            for (uint j = 0; j < first100.length; j++) {
+                first100[j] = pqMsg[j];
             }
             console.logBytes(first100);
             // Submit unregistration intent with real data
@@ -360,7 +360,7 @@ contract PQRegistryUnregistrationTest is Test {
             // Reset contract state by redeploying for each actor
             MockConsole mockConsole = new MockConsole();
             
-            registry = new PQRegistryMainFunctions(
+            registry = new PQRegistry(
                 address(epervierVerifier),
                 address(mockConsole)
             );

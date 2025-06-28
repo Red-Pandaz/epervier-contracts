@@ -13,14 +13,14 @@ from eth_hash.auto import keccak
 SCRIPT_DIR = Path(__file__).parent.absolute()
 
 # Import the necessary modules for signature parsing
-sys.path.append('../ETHFALCON/python-ref')
+sys.path.append(str(SCRIPT_DIR.parent.parent / 'ETHFALCON' / 'python-ref'))
 from common import falcon_compact, q
 from encoding import decompress
 from polyntt.poly import Poly
 
 def load_actors_config():
     """Load actor configuration from the centralized config file"""
-    config_path = SCRIPT_DIR / "test_keys" / "actors_config.json"
+    config_path = SCRIPT_DIR.parent / "test_keys" / "actors_config.json"
     with open(config_path, 'r') as f:
         config = json.load(f)
     return config["actors"]
@@ -253,10 +253,10 @@ def generate_epervier_signature(message, actor_name):
         # Call the Python CLI to sign the message
         cmd = [
             sys.executable, 
-            str(SCRIPT_DIR / "../ETHFALCON/python-ref/sign_cli.py"), 
+            str(SCRIPT_DIR.parent.parent / "ETHFALCON/python-ref/sign_cli.py"), 
             "sign",
             "--version", "epervier",
-            "--privkey", str(SCRIPT_DIR / f"test_keys/{private_key_file}"),
+            "--privkey", str(SCRIPT_DIR.parent / f"test_keys/{private_key_file}"),
             "--data", message_hex
         ]
         

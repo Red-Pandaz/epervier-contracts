@@ -17,7 +17,7 @@ contract DeployPQRegistry is Script {
         console.log("ZKNOX_epervier deployed at:", address(epervier));
         
         console.log("Deploying PQRegistry contract...");
-        PQRegistry registry = new PQRegistry(address(epervier));
+        PQRegistry registry = new PQRegistry(address(0x1234), address(0x5678));
         console.log("PQRegistry deployed at:", address(registry));
         
         vm.stopBroadcast();

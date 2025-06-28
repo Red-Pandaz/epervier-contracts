@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../PQRegistry_main_functions.sol";
+import "../src/PQRegistry.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -18,7 +18,7 @@ contract PQRegistryChangeETHAddressTest is Test {
     using ECDSA for bytes32;
     using Strings for string;
     
-    PQRegistryMainFunctions public registry;
+    PQRegistry public registry;
     ZKNOX_epervier public epervierVerifier;
     
     // Actor data structure
@@ -45,7 +45,7 @@ contract PQRegistryChangeETHAddressTest is Test {
         // Deploy mock contracts for the dependencies
         MockConsole mockConsole = new MockConsole();
         
-        registry = new PQRegistryMainFunctions(
+        registry = new PQRegistry(
             address(epervierVerifier),
             address(mockConsole)
         );

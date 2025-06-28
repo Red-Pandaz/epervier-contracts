@@ -155,7 +155,7 @@ library MessageParser {
     
     /**
      * @dev Parse a PQRegistrationConfirmationMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Confirm binding ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
      */
     function parsePQRegistrationConfirmationMessage(bytes memory message) public pure returns (
         address ethAddress,
@@ -165,42 +165,41 @@ library MessageParser {
         bytes32 s,
         uint256 pqNonce
     ) {
-        bytes memory pattern = "Confirm binding ETH Address ";
+        bytes memory pattern = "Confirm bonding to ETH Address ";
         uint256[] memory fieldOffsets = new uint256[](6);
         uint256[] memory fieldLengths = new uint256[](6);
         string[] memory fieldTypes = new string[](6);
         
-        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (28) = 60
-        fieldOffsets[0] = 60;
+        // DOMAIN_SEPARATOR (32 bytes) + pattern (31 bytes) + ethAddress (20 bytes) + baseETHMessage (variable) + v (1 byte) + r (32 bytes) + s (32 bytes) + pqNonce (32 bytes)
+        fieldOffsets[0] = 32 + 31; // ethAddress starts after DOMAIN_SEPARATOR + pattern
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // baseETHMessage: starts after ethAddress = 60 + 20 = 80, length = 124
-        fieldOffsets[1] = 80;
-        fieldLengths[1] = 124;
+        // Find the end of baseETHMessage (it's variable length)
+        uint256 baseETHMessageStart = fieldOffsets[0] + fieldLengths[0];
+        uint256 baseETHMessageLength = message.length - baseETHMessageStart - 1 - 32 - 32 - 32; // - v - r - s - pqNonce
+        
+        fieldOffsets[1] = baseETHMessageStart;
+        fieldLengths[1] = baseETHMessageLength;
         fieldTypes[1] = "bytes";
         
-        // v: starts after baseETHMessage = 80 + 124 = 204, length = 1
-        fieldOffsets[2] = 204;
+        fieldOffsets[2] = baseETHMessageStart + baseETHMessageLength; // v
         fieldLengths[2] = 1;
         fieldTypes[2] = "uint8";
         
-        // r: starts after v = 204 + 1 = 205, length = 32
-        fieldOffsets[3] = 205;
+        fieldOffsets[3] = fieldOffsets[2] + fieldLengths[2]; // r
         fieldLengths[3] = 32;
         fieldTypes[3] = "bytes32";
         
-        // s: starts after r = 205 + 32 = 237, length = 32
-        fieldOffsets[4] = 237;
+        fieldOffsets[4] = fieldOffsets[3] + fieldLengths[3]; // s
         fieldLengths[4] = 32;
         fieldTypes[4] = "bytes32";
         
-        // pqNonce: starts after s = 237 + 32 = 269, length = 32
-        fieldOffsets[5] = 269;
+        fieldOffsets[5] = fieldOffsets[4] + fieldLengths[4]; // pqNonce
         fieldLengths[5] = 32;
         fieldTypes[5] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 28, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 31, fieldOffsets, fieldLengths, fieldTypes);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -1226,10 +1225,10 @@ library MessageParser {
 
     /**
      * @dev Validate that PQ message contains confirmation text for registration
-     * Expected format: DOMAIN_SEPARATOR + "Confirm binding ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
      */
     function validatePQRegistrationConfirmationMessage(bytes memory message) internal pure returns (bool) {
-        bytes memory pattern = "Confirm binding ETH Address ";
+        bytes memory pattern = "Confirm bonding to ETH Address ";
         return findPattern(message, pattern, true) != type(uint).max;
     }
 
@@ -1244,6 +1243,7 @@ library MessageParser {
 
     /**
      * @dev Validate that ETH message contains intent text for change ETH Address
+     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
      */
     function validateETHChangeETHAddressIntentMessage(bytes memory message) internal pure returns (bool) {
