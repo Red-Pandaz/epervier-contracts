@@ -196,7 +196,10 @@ contract PQRegistry {
         // STEP 1: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
         
-        // STEP 2: Parse the PQ registration confirmation message
+        // STEP 2: Validate the PQ registration confirmation message format
+        require(MessageParser.validatePQRegistrationConfirmationMessage(pqMessage), "Invalid PQ registration confirmation message");
+        
+        // STEP 3: Parse the PQ registration confirmation message
         (
             address ethAddress,
             bytes memory baseETHMessage,
@@ -206,20 +209,20 @@ contract PQRegistry {
             uint256 pqNonce
         ) = MessageParser.parsePQRegistrationConfirmationMessage(pqMessage);
         
-        // STEP 3: Parse the base ETH confirmation message
+        // STEP 4: Parse the base ETH confirmation message
         (address pqFingerprint, uint256 ethNonce) = MessageParser.parseBaseETHRegistrationConfirmationMessage(baseETHMessage);
         
-        // STEP 4: Verify the ETH signature
+        // STEP 5: Verify the ETH signature
         bytes32 ethMessageHash = keccak256(baseETHMessage);
         bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(baseETHMessage.length), baseETHMessage));
         address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
 
-        // STEP 5: Cross-reference validation
+        // STEP 6: Cross-reference validation
         require(ethAddress == recoveredETHAddress, "ETH Address mismatch: PQ message vs recovered ETH signature");
         require(pqFingerprint == recoveredFingerprint, "PQ fingerprint mismatch: ETH message vs recovered PQ signature");
         
-        // STEP 6: State validation - Check PQ fingerprint mapping first
+        // STEP 7: State validation - Check PQ fingerprint mapping first
         address intentAddress = pqFingerprintToPendingIntentAddress[recoveredFingerprint];
         require(intentAddress != address(0), "No pending intent found for PQ fingerprint");
         
@@ -229,22 +232,22 @@ contract PQRegistry {
         require(intent.pqFingerprint == pqFingerprint, "PQ fingerprint mismatch: ETH message vs stored intent");
         require(intent.pqFingerprint == recoveredFingerprint, "PQ fingerprint mismatch: recovered vs stored intent");
         
-        // STEP 7: Comprehensive conflict prevention check
+        // STEP 8: Comprehensive conflict prevention check
         require(pqFingerprintToPendingIntentAddress[recoveredFingerprint] != address(0), "PQ fingerprint does not have pending registration intent");
         
-        // STEP 8: Nonce validation
+        // STEP 9: Nonce validation
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[ethAddress] == ethNonce, "Invalid ETH nonce");
 
-        // STEP 9: Complete the registration
+        // STEP 10: Complete the registration
         epervierKeyToAddress[recoveredFingerprint] = ethAddress;
         addressToEpervierKey[ethAddress] = recoveredFingerprint;
         
-        // STEP 10: Clear the pending intent and bidirectional mapping
+        // STEP 11: Clear the pending intent and bidirectional mapping
         delete pendingIntents[ethAddress];
         delete pqFingerprintToPendingIntentAddress[recoveredFingerprint];
         
-        // STEP 11: Increment nonces
+        // STEP 12: Increment nonces
         pqKeyNonces[recoveredFingerprint]++;
         ethNonces[ethAddress]++;
         
@@ -376,8 +379,13 @@ contract PQRegistry {
         // STEP 3: State validation
         ChangeETHAddressIntent storage intent = changeETHAddressIntents[pqFingerprint];
         require(intent.timestamp != 0, "No pending change intent found for PQ fingerprint");
-        require(addressToEpervierKey[recoveredETHAddress] == pqFingerprint, "ETH Address not registered to PQ fingerprint");
-        require(epervierKeyToAddress[pqFingerprint] == recoveredETHAddress, "PQ fingerprint not registered to ETH Address");
+        require(ethAddressToChangeIntentFingerprint[recoveredETHAddress] == pqFingerprint, "ETH Address not registered to PQ fingerprint");
+        require(intent.newETHAddress == recoveredETHAddress, "ETH Address not the new address in change intent");
+        
+        // DEBUG: Print addresses for debugging
+        console.log("DEBUG: Recovered ETH address:", recoveredETHAddress);
+        console.log("DEBUG: New ETH address in intent:", intent.newETHAddress);
+        console.log("DEBUG: PQ fingerprint:", pqFingerprint);
         
         // STEP 4: Comprehensive conflict prevention check
         require(changeETHAddressIntents[pqFingerprint].timestamp != 0, "PQ fingerprint does not have pending change intent");
@@ -388,7 +396,7 @@ contract PQRegistry {
         // STEP 6: Clear the intent
         delete changeETHAddressIntents[pqFingerprint];
         delete ethAddressToChangeIntentFingerprint[recoveredETHAddress];
-        delete ethAddressToChangeIntentFingerprint[intent.newETHAddress];
+        delete ethAddressToChangeIntentFingerprint[epervierKeyToAddress[pqFingerprint]];
         
         // STEP 7: Increment nonce
         ethNonces[recoveredETHAddress]++;
@@ -450,6 +458,13 @@ contract PQRegistry {
         // STEP 4: State validation
         ChangeETHAddressIntent storage intent = changeETHAddressIntents[recoveredFingerprint];
         require(intent.timestamp != 0, "No pending change intent found for PQ fingerprint");
+        require(epervierKeyToAddress[recoveredFingerprint] == ethAddress, "ETH Address not the current address for PQ fingerprint");
+        
+        // DEBUG: Print addresses for debugging
+        console.log("DEBUG PQ Cancel: ETH address from message:", ethAddress);
+        console.log("DEBUG PQ Cancel: Current ETH address for PQ fingerprint:", epervierKeyToAddress[recoveredFingerprint]);
+        console.log("DEBUG PQ Cancel: New ETH address in intent:", intent.newETHAddress);
+        console.log("DEBUG PQ Cancel: PQ fingerprint:", recoveredFingerprint);
         
         // STEP 5: Verify ETH address is registered to this PQ fingerprint
         require(epervierKeyToAddress[recoveredFingerprint] == ethAddress, "ETH address not registered to PQ fingerprint");
@@ -464,7 +479,7 @@ contract PQRegistry {
         // STEP 8: Clear the intent
         delete changeETHAddressIntents[recoveredFingerprint];
         delete ethAddressToChangeIntentFingerprint[ethAddress];
-        delete ethAddressToChangeIntentFingerprint[intent.newETHAddress];
+        delete ethAddressToChangeIntentFingerprint[epervierKeyToAddress[recoveredFingerprint]];
         
         // STEP 9: Increment nonce
         pqKeyNonces[recoveredFingerprint]++;

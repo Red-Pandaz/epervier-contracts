@@ -808,6 +808,25 @@ library MessageParser {
         require(fieldOffsets.length == fieldTypes.length, "Field offsets and types must match");
         
         uint256 patternIndex = findPattern(message, expectedPattern, true); // Skip DOMAIN_SEPARATOR
+        
+        // Debug: If pattern not found, we can't emit events from a pure function
+        // But we can encode the debug info in the revert message
+        if (patternIndex == type(uint256).max) {
+            // Create a debug message with pattern and message info
+            string memory debugInfo = string(abi.encodePacked(
+                "Pattern not found. Expected: '",
+                string(expectedPattern),
+                "' (length: ",
+                uint2str(expectedPattern.length),
+                "). Message length: ",
+                uint2str(message.length),
+                ". Message starts with: '",
+                bytesToString(message, 0, 50), // Show first 50 bytes as string
+                "'"
+            ));
+            revert(debugInfo);
+        }
+        
         require(patternIndex != type(uint256).max, "Expected pattern not found in message");
         
         parsedFields = new bytes[](fieldOffsets.length);
@@ -821,6 +840,42 @@ library MessageParser {
             }
         }
         return parsedFields;
+    }
+    
+    /**
+     * @dev Helper function to convert uint to string
+     */
+    function uint2str(uint256 _i) internal pure returns (string memory) {
+        if (_i == 0) {
+            return "0";
+        }
+        uint256 j = _i;
+        uint256 length;
+        while (j != 0) {
+            length++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(length);
+        uint256 k = length;
+        while (_i != 0) {
+            k -= 1;
+            uint8 temp = (48 + uint8(_i - _i / 10 * 10));
+            bytes1 b1 = bytes1(temp);
+            bstr[k] = b1;
+            _i /= 10;
+        }
+        return string(bstr);
+    }
+    
+    /**
+     * @dev Helper function to convert bytes to string (for debug)
+     */
+    function bytesToString(bytes memory data, uint256 start, uint256 length) internal pure returns (string memory) {
+        bytes memory result = new bytes(length);
+        for (uint256 i = 0; i < length && start + i < data.length; i++) {
+            result[i] = data[start + i];
+        }
+        return string(result);
     }
     
     /**

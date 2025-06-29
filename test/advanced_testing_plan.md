@@ -16,32 +16,37 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 **Tests:** PQ can retry after ETH removal, proper nonce progression (0→1→2→3)
 **Functions Tested:** submitRegistrationIntent, removeRegistrationIntentByETH, submitRegistrationIntent, confirmRegistration
 
-### **Test 3: Multiple Actors Conflict Prevention**
-**Flow:** Alice, Bob, Charlie all try to register simultaneously → verify only one succeeds
-**Tests:** Conflict prevention, proper state management with multiple actors
-**Functions Tested:** submitRegistrationIntent (multiple), confirmRegistration
+### **Test 3: Multiple Actors Concurrent Registrations**
+**Flow:** Alice, Bob, Charlie all register their unique ETH/PQ pairs simultaneously → verify all succeed independently
+**Tests:** Concurrent registration handling, proper state management with multiple actors, confirmation order independence
+**Functions Tested:** submitRegistrationIntent (multiple actors), confirmRegistration (different order than intent submission)
 
-### **Test 4a: Change ETH → PQ Cancels → Change to Different ETH → Confirms**
+### **Test 4: Change ETH → PQ Cancels → Change to Different ETH → Confirms**
 **Flow:** AlicePQ tries to change AliceETH to BobETH → AlicePQ cancels → AlicePQ changes to CharlieETH → AlicePQ confirms
 **Tests:** PQ can cancel and retry with different ETH address, proper nonce progression
 **Functions Tested:** submitChangeETHAddressIntent, removeChangeETHAddressIntentByPQ, submitChangeETHAddressIntent, confirmChangeETHAddress
 
-### **Test 4b: Change ETH → ETH Cancels → Change to Different ETH → Confirms**
-**Flow:** AlicePQ tries to change AliceETH to BobETH → AliceETH cancels → AlicePQ changes to CharlieETH → AlicePQ confirms
+### **Test 5: Change ETH → ETH Cancels → Change to Different ETH → Confirms**
+**Flow:** AlicePQ tries to change AliceETH to BobETH → BobETH cancels → AlicePQ changes to CharlieETH → AlicePQ confirms
 **Tests:** ETH can cancel and PQ can retry with different ETH address, proper nonce progression
 **Functions Tested:** submitChangeETHAddressIntent, removeChangeETHAddressIntentByETH, submitChangeETHAddressIntent, confirmChangeETHAddress
 
-### **Test 5: Multiple Change Attempts**
+### **Test 6: Multiple Registration Attempts**
+**Flow:** AlicePQ send register intent for AliceETH → AliceETH cancels → AlicePQ send register intent for BobETH → AlicePQ cancels  →  AlicePQ send register intent for CharlieETH → confirms
+**Tests:** Multiple register attempts, proper state transitions, nonce progression
+**Functions Tested:** submitRegistrationIntent removeRegistrationIntentByETH, removeRegistrationIntentByPQ, ConfirmRegistrationIntent
+
+### **Test 7: Multiple Change Attempts**
 **Flow:** AlicePQ changes AliceETH to BobETH → AlicePQ changes to CharlieETH → AlicePQ changes to DanielleETH → confirms
 **Tests:** Multiple change attempts, proper state transitions, nonce progression
-**Functions Tested:** submitChangeETHAddressIntent (multiple), confirmChangeETHAddress
+**Functions Tested:** submitChangeETHAddressIntent, removeChangeETHAddressIntentByPQ, removeChangeETHAddressIntentBy, confirmChangeETHAddress
 
-### **Test 6: Unregister → Revoke → Unregister Again → Confirm**
+### **Test 8: Unregister → Revoke → Unregister Again → Confirm**
 **Flow:** AlicePQ initiates unregistration → AlicePQ revokes → AlicePQ initiates again → AliceETH confirms
 **Tests:** PQ can revoke and retry unregistration, proper nonce progression
 **Functions Tested:** submitUnregistrationIntent, removeUnregistrationIntent, submitUnregistrationIntent, confirmUnregistration
 
-### **Test 7: Full Lifecycle: Registration → Change → Unregistration → Re-registration**
+### **Test 9: Full Lifecycle: Registration → Change → Unregistration → Re-registration**
 **Flow:** Alice registers → Alice changes ETH address → Alice unregisters → Alice re-registers with new PQ key
 **Tests:** Complete lifecycle, all functions work together, proper nonce progression through entire flow
 **Functions Tested:** All 11 functions in sequence
@@ -75,13 +80,13 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 - ❌ Registration intent vector (bob, ETH nonce 0, PQ nonce 1) - **NEED TO GENERATE**
 - ❌ Registration confirmation vector (bob, ETH nonce 1, PQ nonce 1) - **NEED TO GENERATE**
 
-#### Test 3: Multiple Actors Conflict Prevention
+#### Test 3: Multiple Actors Concurrent Registrations
 - ✅ Registration intent vector (alice, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration intent vector (bob, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration intent vector (charlie, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration confirmation vectors for all three - **AVAILABLE**
 
-#### Test 4a: Change ETH → PQ Cancels → Change to Different ETH → Confirms
+#### Test 4: Change ETH → PQ Cancels → Change to Different ETH → Confirms
 - ✅ Registration intent vector (alice, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration confirmation vector (alice, ETH nonce 1, PQ nonce 1) - **AVAILABLE**
 - ✅ Change ETH intent vector (alice, ETH nonce 1, PQ nonce 2) - **AVAILABLE**
@@ -89,7 +94,7 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 - ❌ Change ETH intent vector (alice, ETH nonce 2, PQ nonce 3) - **NEED TO GENERATE** (different new ETH address)
 - ❌ Change ETH confirmation vector (alice, ETH nonce 3, PQ nonce 4) - **NEED TO GENERATE**
 
-#### Test 4b: Change ETH → ETH Cancels → Change to Different ETH → Confirms
+#### Test 5: Change ETH → ETH Cancels → Change to Different ETH → Confirms
 - ✅ Registration intent vector (alice, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration confirmation vector (alice, ETH nonce 1, PQ nonce 1) - **AVAILABLE**
 - ✅ Change ETH intent vector (alice, ETH nonce 1, PQ nonce 2) - **AVAILABLE**
@@ -97,14 +102,14 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 - ❌ Change ETH intent vector (alice, ETH nonce 2, PQ nonce 3) - **NEED TO GENERATE** (different new ETH address)
 - ❌ Change ETH confirmation vector (alice, ETH nonce 3, PQ nonce 4) - **NEED TO GENERATE**
 
-#### Test 5: Multiple Change Attempts
+#### Test 7: Multiple Change Attempts
 - ✅ Registration intent vector (alice, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration confirmation vector (alice, ETH nonce 1, PQ nonce 1) - **AVAILABLE**
 - ✅ Change ETH intent vector (alice, ETH nonce 1, PQ nonce 2) - **AVAILABLE**
 - ❌ Change ETH intent vector (alice, ETH nonce 2, PQ nonce 3) - **NEED TO GENERATE** (different new ETH address)
 - ❌ Change ETH confirmation vector (alice, ETH nonce 3, PQ nonce 4) - **NEED TO GENERATE**
 
-#### Test 6: Unregister → Revoke → Unregister Again → Confirm
+#### Test 8: Unregister → Revoke → Unregister Again → Confirm
 - ✅ Registration intent vector (alice, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration confirmation vector (alice, ETH nonce 1, PQ nonce 1) - **AVAILABLE**
 - ✅ Unregistration intent vector (alice, ETH nonce 1, PQ nonce 2) - **AVAILABLE**
@@ -112,7 +117,7 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 - ❌ Unregistration intent vector (alice, ETH nonce 1, PQ nonce 3) - **NEED TO GENERATE**
 - ❌ Unregistration confirmation vector (alice, ETH nonce 2, PQ nonce 4) - **NEED TO GENERATE**
 
-#### Test 7: Full Lifecycle: Registration → Change → Unregistration → Re-registration
+#### Test 9: Full Lifecycle: Registration → Change → Unregistration → Re-registration
 - ✅ Registration intent vector (alice, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration confirmation vector (alice, ETH nonce 1, PQ nonce 1) - **AVAILABLE**
 - ✅ Change ETH intent vector (alice, ETH nonce 1, PQ nonce 2) - **AVAILABLE**
