@@ -37,7 +37,7 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 **Functions Tested:** submitRegistrationIntent removeRegistrationIntentByETH, removeRegistrationIntentByPQ, ConfirmRegistrationIntent
 
 ### **Test 7: Multiple Change Attempts**
-**Flow:** AlicePQ changes AliceETH to BobETH → AlicePQ changes to CharlieETH → AlicePQ changes to DanielleETH → confirms
+**Flow:** AlicePQ changes AliceETH to BobETH → BobETH cancels → AlicePQ changes to CharlieETH → AlicePQ cancels → AlicePQ changes to DanielleETH → confirms
 **Tests:** Multiple change attempts, proper state transitions, nonce progression
 **Functions Tested:** submitChangeETHAddressIntent, removeChangeETHAddressIntentByPQ, removeChangeETHAddressIntentBy, confirmChangeETHAddress
 

@@ -4,6 +4,7 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 import "../src/PQRegistry.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
+import "../src/libraries/MessageParser.sol";
 
 // Mock for Console
 contract MockConsole {
@@ -40,6 +41,37 @@ contract PQRegistryAdvancedTests is Test {
         
         // Deploy the registry with real verifier
         registry = new PQRegistry(address(epervierVerifier), address(mockConsole));
+    }
+    
+    /**
+     * @dev Parse hex string array from JSON for signature components
+     */
+    function parseJsonHexArray(string memory jsonData, string memory path) internal pure returns (uint256[] memory) {
+        string memory arrayJson = vm.parseJsonString(jsonData, path);
+        // Remove the outer brackets
+        string memory innerJson = vm.parseJsonString(arrayJson, "$");
+        
+        // Count the number of elements by counting commas + 1
+        uint256 count = 1;
+        for (uint256 i = 0; i < bytes(innerJson).length; i++) {
+            if (bytes(innerJson)[i] == ",") {
+                count++;
+            }
+        }
+        
+        uint256[] memory result = new uint256[](count);
+        
+        for (uint256 i = 0; i < count; i++) {
+            string memory elementPath = string.concat("$[", vm.toString(i), "]");
+            string memory hexString = vm.parseJsonString(innerJson, elementPath);
+            // Remove quotes if present
+            if (bytes(hexString)[0] == '"') {
+                hexString = vm.parseJsonString(hexString, "$");
+            }
+            result[i] = vm.parseUint(hexString);
+        }
+        
+        return result;
     }
     
     /**
@@ -636,6 +668,19 @@ contract PQRegistryAdvancedTests is Test {
         uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJson, ".registration_confirmation[0].pq_signature.cs1");
         uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJson, ".registration_confirmation[0].pq_signature.cs2");
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_signature.hint"));
+        
+        // Debug: Parse the PQ message to extract ETH address using MessageParser
+        (address ethAddressInPQMessage, , , , , ) = MessageParser.parsePQRegistrationConfirmationMessage(confirmMessage);
+        console.log("DEBUG: ETH address in PQ message:", ethAddressInPQMessage);
+        console.log("DEBUG: Expected ETH address (Charlie):", charlie.ethAddress);
+        console.log("DEBUG: ETH addresses match:", ethAddressInPQMessage == charlie.ethAddress);
+        
+        // Debug: Parse the base ETH message to extract signature components
+        (address pqFingerprint, uint256 ethNonce) = MessageParser.parseBaseETHRegistrationConfirmationMessage(confirmMessage);
+        console.log("DEBUG: PQ fingerprint in base ETH message:", pqFingerprint);
+        console.log("DEBUG: Expected PQ fingerprint (Alice):", alice.pqFingerprint);
+        console.log("DEBUG: PQ fingerprints match:", pqFingerprint == alice.pqFingerprint);
+        
         registry.confirmRegistration(confirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
         console.log("Step 6 completed - ETH nonce:", registry.ethNonces(charlie.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 

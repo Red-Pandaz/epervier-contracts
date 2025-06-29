@@ -56,33 +56,55 @@ def generate_epervier_signature(message: bytes, actor: str) -> Dict[str, Any]:
         "--version=epervier"
     ]
     
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"Error signing message: {result.stderr}")
-        return None
+    # Add retry logic with a maximum number of attempts
+    max_retries = 10
+    for attempt in range(max_retries):
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # 30 second timeout
+            if result.returncode != 0:
+                print(f"Error signing message (attempt {attempt + 1}/{max_retries}): {result.stderr}")
+                if attempt == max_retries - 1:
+                    print(f"Failed to generate signature after {max_retries} attempts")
+                    return None
+                continue
+            
+            lines = result.stdout.splitlines()
+            signature_data = {}
+            for line in lines:
+                if line.startswith("salt:"):
+                    signature_data["salt"] = bytes.fromhex(line.split()[1])
+                elif line.startswith("hint:"):
+                    signature_data["hint"] = int(line.split()[1])
+                elif line.startswith("cs1:"):
+                    signature_data["cs1"] = [int(x, 16) for x in line.split()[1:]]
+                elif line.startswith("cs2:"):
+                    signature_data["cs2"] = [int(x, 16) for x in line.split()[1:]]
+            
+            if not all(key in signature_data for key in ["salt", "hint", "cs1", "cs2"]):
+                print(f"Failed to parse signature components (attempt {attempt + 1}/{max_retries})")
+                if attempt == max_retries - 1:
+                    return None
+                continue
+            
+            # If we get here, we have a valid signature
+            return {
+                "salt": signature_data["salt"],
+                "hint": signature_data["hint"],
+                "cs1": signature_data["cs1"],
+                "cs2": signature_data["cs2"]
+            }
+            
+        except subprocess.TimeoutExpired:
+            print(f"Signature generation timed out (attempt {attempt + 1}/{max_retries})")
+            if attempt == max_retries - 1:
+                print("Failed to generate signature due to timeout")
+                return None
+        except Exception as e:
+            print(f"Unexpected error during signature generation (attempt {attempt + 1}/{max_retries}): {e}")
+            if attempt == max_retries - 1:
+                return None
     
-    lines = result.stdout.splitlines()
-    signature_data = {}
-    for line in lines:
-        if line.startswith("salt:"):
-            signature_data["salt"] = bytes.fromhex(line.split()[1])
-        elif line.startswith("hint:"):
-            signature_data["hint"] = int(line.split()[1])
-        elif line.startswith("cs1:"):
-            signature_data["cs1"] = [int(x, 16) for x in line.split()[1:]]
-        elif line.startswith("cs2:"):
-            signature_data["cs2"] = [int(x, 16) for x in line.split()[1:]]
-    
-    if not all(key in signature_data for key in ["salt", "hint", "cs1", "cs2"]):
-        print(f"Failed to parse signature components")
-        return None
-    
-    return {
-        "salt": signature_data["salt"],
-        "hint": signature_data["hint"],
-        "cs1": signature_data["cs1"],
-        "cs2": signature_data["cs2"]
-    }
+    return None
 
 def generate_eth_signature(message: bytes, private_key: str) -> Dict[str, Any]:
     """Generate ETH signature for a message"""
@@ -120,47 +142,51 @@ def abi_encode_packed(*args):
 
 # Message creation functions based on the schema
 def create_base_pq_registration_intent_message(eth_address: str, pq_nonce: int) -> bytes:
-    """Create base PQ registration intent message according to schema"""
+    """Create base PQ registration intent message according to schema - matching working generator format"""
     # BasePQRegistrationIntentMessage: DOMAIN_SEPARATOR + pattern + ethAddress + pqNonce
-    pattern = "Intent to pair ETH Address "
-    return abi_encode_packed(
-        DOMAIN_SEPARATOR,
-        pattern,
-        eth_address,
-        pq_nonce
-    )
+    # Use exact same format as working generator
+    pattern = b"Intent to pair ETH Address "  # bytes, not string
+    return DOMAIN_SEPARATOR + pattern + bytes.fromhex(eth_address[2:]) + pq_nonce.to_bytes(32, 'big')
 
 def create_eth_registration_intent_message(base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int) -> bytes:
-    """Create ETH registration intent message according to schema"""
-    # ETHRegistrationIntentMessage: pattern + basePQMessage + salt
-    # Note: cs1, cs2, hint, and eth_nonce are NOT included in the ETH message
-    # They are only used for the PQ signature
-    pattern = "Intent to pair Epervier Key"
-    return abi_encode_packed(
-        pattern,
-        base_pq_message,
-        salt
+    """Create ETH registration intent message according to schema - matching working generator format"""
+    # ETHRegistrationIntentMessage: DOMAIN_SEPARATOR + pattern + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    # Use exact same format as working generator
+    pattern = b"Intent to pair Epervier Key"  # bytes, not string
+    
+    def pack_uint256_array(arr):
+        return b"".join(x.to_bytes(32, 'big') for x in arr)
+    
+    return (
+        DOMAIN_SEPARATOR + pattern + base_pq_message + salt +
+        pack_uint256_array(cs1) + pack_uint256_array(cs2) +
+        hint.to_bytes(32, 'big') + eth_nonce.to_bytes(32, 'big')
     )
 
 def create_base_eth_registration_confirmation_message(pq_fingerprint: str, eth_nonce: int) -> bytes:
     """Create base ETH registration confirmation message according to schema"""
-    # BaseETHRegistrationConfirmationMessage: pattern + pqFingerprint + ethNonce
-    pattern = "Confirm bonding to Epervier Fingerprint "
-    return abi_encode_packed(
-        pattern,
-        pq_fingerprint,
-        eth_nonce
-    )
-
-def create_pq_registration_confirmation_message(eth_address: str, base_eth_message: bytes, v: int, r: str, s: str, pq_nonce: int) -> bytes:
-    """Create PQ registration confirmation message according to schema"""
-    # PQRegistrationConfirmationMessage: DOMAIN_SEPARATOR + pattern + ethAddress + baseETHMessage + v + r + s + pqNonce
-    pattern = b"Intent to pair Epervier Key"
+    # BaseETHRegistrationConfirmationMessage: DOMAIN_SEPARATOR + pattern + pqFingerprint + ethNonce
+    pattern = b"Confirm bonding to Epervier Fingerprint "
     
     # Manual concatenation to ensure correct format
     message = (
         DOMAIN_SEPARATOR +
         pattern +
+        bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix, convert to raw bytes
+        eth_nonce.to_bytes(32, 'big')
+    )
+    return message
+
+def create_pq_registration_confirmation_message(eth_address: str, base_eth_message: bytes, v: int, r: str, s: str, pq_nonce: int) -> bytes:
+    """Create PQ registration confirmation message according to schema"""
+    # PQRegistrationConfirmationMessage: DOMAIN_SEPARATOR + pattern + ethAddress + baseETHMessage + v + r + s + pqNonce
+    pattern = b"Confirm bonding to ETH Address "  # Correct pattern matching MessageParser.sol
+    
+    # Manual concatenation to ensure correct format
+    message = (
+        DOMAIN_SEPARATOR +
+        pattern +
+        bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix, convert to raw bytes
         base_eth_message +
         v.to_bytes(1, 'big') +
         int(r, 16).to_bytes(32, 'big') +  # Convert hex string to bytes
@@ -383,7 +409,14 @@ def bytes_to_hex(obj):
     if isinstance(obj, bytes):
         return obj.hex()
     elif isinstance(obj, dict):
-        return {k: bytes_to_hex(v) for k, v in obj.items()}
+        result = {}
+        for k, v in obj.items():
+            if k in ["cs1", "cs2"] and isinstance(v, list):
+                # Convert signature components to hex strings like working vectors
+                result[k] = [f"0x{x:064x}" for x in v]
+            else:
+                result[k] = bytes_to_hex(v)
+        return result
     elif isinstance(obj, list):
         return [bytes_to_hex(x) for x in obj]
     else:
@@ -438,17 +471,17 @@ class AdvancedVectorGenerator:
     def generate_registration_intent_vector(self, actor: str, eth_nonce: int, pq_nonce: int) -> Dict[str, Any]:
         """Generate a registration intent vector with custom nonces"""
         actor_data = self.actors[actor]
-        
+
         # Create base PQ message
         base_pq_message = create_base_pq_registration_intent_message(
             actor_data["eth_address"], 
             pq_nonce
         )
-        
+
         # Generate PQ signature
         pq_signature = generate_epervier_signature(base_pq_message, actor)
-        
-        # Create ETH message
+
+        # Create full ETH message (domain separator + pattern + base PQ message + salt + cs1 + cs2 + hint + ethNonce)
         eth_message = create_eth_registration_intent_message(
             base_pq_message,
             pq_signature["salt"],
@@ -457,14 +490,54 @@ class AdvancedVectorGenerator:
             pq_signature["hint"],
             eth_nonce
         )
-        
+
         # Generate ETH signature
         eth_signature = generate_eth_signature(eth_message, actor_data["eth_private_key"])
-        
+
         return {
             "actor": actor,
             "eth_address": actor_data["eth_address"],
             "pq_fingerprint": actor_data["pq_fingerprint"],
+            "base_pq_message": base_pq_message.hex(),
+            "pq_signature": pq_signature,
+            "eth_message": eth_message.hex(),
+            "eth_signature": eth_signature,
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce
+        }
+    
+    def generate_cross_actor_registration_intent_vector(self, pq_actor: str, eth_actor: str, eth_nonce: int, pq_nonce: int) -> Dict[str, Any]:
+        """Generate a registration intent vector where one actor's PQ key signs for another actor's ETH address"""
+        pq_actor_data = self.actors[pq_actor]
+        eth_actor_data = self.actors[eth_actor]
+
+        # Create base PQ message with the target ETH address
+        base_pq_message = create_base_pq_registration_intent_message(
+            eth_actor_data["eth_address"], 
+            pq_nonce
+        )
+
+        # Generate PQ signature using the PQ actor's key
+        pq_signature = generate_epervier_signature(base_pq_message, pq_actor)
+
+        # Create full ETH message
+        eth_message = create_eth_registration_intent_message(
+            base_pq_message,
+            pq_signature["salt"],
+            pq_signature["cs1"],
+            pq_signature["cs2"],
+            pq_signature["hint"],
+            eth_nonce
+        )
+
+        # Generate ETH signature using the ETH actor's key
+        eth_signature = generate_eth_signature(eth_message, eth_actor_data["eth_private_key"])
+
+        return {
+            "pq_actor": pq_actor,
+            "eth_actor": eth_actor,
+            "eth_address": eth_actor_data["eth_address"],
+            "pq_fingerprint": pq_actor_data["pq_fingerprint"],
             "base_pq_message": base_pq_message.hex(),
             "pq_signature": pq_signature,
             "eth_message": eth_message.hex(),
@@ -789,30 +862,82 @@ class AdvancedVectorGenerator:
                 # Handle multiple registration intents
                 vectors["registration_intent"] = []
                 for intent_config in config:
-                    vector = self.generate_registration_intent_vector(
-                        intent_config["actor"],
-                        intent_config["eth_nonce"],
-                        intent_config["pq_nonce"]
-                    )
+                    if "pq_actor" in intent_config and "eth_actor" in intent_config:
+                        # Cross-actor registration intent
+                        vector = self.generate_cross_actor_registration_intent_vector(
+                            intent_config["pq_actor"],
+                            intent_config["eth_actor"],
+                            intent_config["eth_nonce"],
+                            intent_config["pq_nonce"]
+                        )
+                    else:
+                        # Standard registration intent
+                        vector = self.generate_registration_intent_vector(
+                            intent_config["actor"],
+                            intent_config["eth_nonce"],
+                            intent_config["pq_nonce"]
+                        )
                     vectors["registration_intent"].append(vector)
             else:
                 # Handle single registration intent
-                vector = self.generate_registration_intent_vector(
-                    config["actor"],
-                    config["eth_nonce"],
-                    config["pq_nonce"]
-                )
+                if "pq_actor" in config and "eth_actor" in config:
+                    # Cross-actor registration intent
+                    vector = self.generate_cross_actor_registration_intent_vector(
+                        config["pq_actor"],
+                        config["eth_actor"],
+                        config["eth_nonce"],
+                        config["pq_nonce"]
+                    )
+                else:
+                    # Standard registration intent
+                    vector = self.generate_registration_intent_vector(
+                        config["actor"],
+                        config["eth_nonce"],
+                        config["pq_nonce"]
+                    )
                 vectors["registration_intent"] = [vector]
         
         # Generate registration confirmation vectors
         if "registration_confirmation" in scenario_config:
             config = scenario_config["registration_confirmation"]
-            vector = self.generate_registration_confirmation_vector(
-                config["actor"], 
-                config["eth_nonce"], 
-                config["pq_nonce"]
-            )
-            vectors["registration_confirmation"] = [vector]
+            if isinstance(config, list):
+                # Handle multiple registration confirmations
+                vectors["registration_confirmation"] = []
+                for confirm_config in config:
+                    if "eth_actor" in confirm_config and "target_eth_actor" in confirm_config:
+                        # Cross-actor confirmation
+                        vector = self.generate_cross_actor_registration_confirmation_vector(
+                            confirm_config["eth_actor"],
+                            confirm_config["target_eth_actor"],
+                            confirm_config["eth_nonce"],
+                            confirm_config["pq_nonce"]
+                        )
+                    else:
+                        # Standard confirmation
+                        vector = self.generate_registration_confirmation_vector(
+                            confirm_config["actor"], 
+                            confirm_config["eth_nonce"], 
+                            confirm_config["pq_nonce"]
+                        )
+                    vectors["registration_confirmation"].append(vector)
+            else:
+                # Handle single registration confirmation
+                if "eth_actor" in config and "target_eth_actor" in config:
+                    # Cross-actor confirmation
+                    vector = self.generate_cross_actor_registration_confirmation_vector(
+                        config["eth_actor"],
+                        config["target_eth_actor"],
+                        config["eth_nonce"],
+                        config["pq_nonce"]
+                    )
+                else:
+                    # Standard confirmation
+                    vector = self.generate_registration_confirmation_vector(
+                        config["actor"], 
+                        config["eth_nonce"], 
+                        config["pq_nonce"]
+                    )
+                vectors["registration_confirmation"] = [vector]
         
         # Generate change ETH address intent vectors
         if "change_eth_address_intent" in scenario_config:
@@ -866,6 +991,17 @@ class AdvancedVectorGenerator:
                 )
                 vectors["removal_change_eth"].append(vector)
         
+        if "removal_registration_pq" in scenario_config:
+            vectors["removal_registration_pq"] = []
+            for config in scenario_config["removal_registration_pq"]:
+                vector = self.generate_removal_vector(
+                    config["actor"],
+                    "registration_pq",
+                    config["eth_nonce"],
+                    config["pq_nonce"]
+                )
+                vectors["removal_registration_pq"].append(vector)
+        
         return vectors
 
     def generate_bob_confirmation_vector(self) -> Dict[str, Any]:
@@ -906,6 +1042,51 @@ class AdvancedVectorGenerator:
             "pq_fingerprint": actor_data["pq_fingerprint"],
             "pq_message": pq_message.hex(),
             "pq_signature": pq_confirmation_signature
+        }
+
+    def generate_cross_actor_registration_confirmation_vector(self, eth_actor: str, target_eth_actor: str, eth_nonce: int, pq_nonce: int) -> Dict[str, Any]:
+        """Generate a registration confirmation vector where one actor's ETH key confirms for another actor's ETH address"""
+        eth_actor_data = self.actors[eth_actor]
+        target_eth_actor_data = self.actors[target_eth_actor]
+        
+        # For cross-actor confirmation, we need to determine which PQ fingerprint to use
+        # The base ETH message should contain the PQ fingerprint of the actor who has the pending registration intent
+        # In this case, Alice has the pending registration intent, so we use Alice's PQ fingerprint
+        alice_data = self.actors["alice"]
+        
+        # Create base ETH confirmation message with Alice's PQ fingerprint (the one with pending intent)
+        base_eth_message = create_base_eth_registration_confirmation_message(
+            alice_data["pq_fingerprint"],  # Use Alice's PQ fingerprint (the one with pending intent)
+            eth_nonce
+        )
+        
+        # Generate ETH signature using the ETH actor's key
+        eth_signature = generate_eth_signature(base_eth_message, eth_actor_data["eth_private_key"])
+        
+        # Create PQ confirmation message with the target's ETH address
+        pq_message = create_pq_registration_confirmation_message(
+            target_eth_actor_data["eth_address"],  # Use target's ETH address in PQ message
+            base_eth_message,
+            eth_signature["v"],
+            eth_signature["r"],
+            eth_signature["s"],
+            pq_nonce
+        )
+        
+        # Generate PQ signature using Alice's PQ key (the one with pending intent)
+        pq_signature = generate_epervier_signature(pq_message, "alice")
+        
+        return {
+            "eth_actor": eth_actor,
+            "target_eth_actor": target_eth_actor,
+            "eth_address": target_eth_actor_data["eth_address"],
+            "pq_fingerprint": alice_data["pq_fingerprint"],  # Return Alice's PQ fingerprint
+            "base_eth_message": base_eth_message.hex(),
+            "eth_signature": eth_signature,
+            "pq_message": pq_message.hex(),
+            "pq_signature": pq_signature,
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce
         }
 
 def main():
@@ -965,8 +1146,14 @@ def main():
             "config": {
                 "registration_intent": [
                     {"actor": "alice", "eth_nonce": 0, "pq_nonce": 0},
-                    {"actor": "bob", "eth_nonce": 0, "pq_nonce": 1},
-                    {"actor": "charlie", "eth_nonce": 0, "pq_nonce": 3}
+                    {"pq_actor": "alice", "eth_actor": "bob", "eth_nonce": 0, "pq_nonce": 1},
+                    {"pq_actor": "alice", "eth_actor": "charlie", "eth_nonce": 0, "pq_nonce": 3}
+                ],
+                "removal_registration_pq": [
+                    {"actor": "alice", "eth_nonce": 0, "pq_nonce": 2}
+                ],
+                "registration_confirmation": [
+                    {"eth_actor": "charlie", "target_eth_actor": "charlie", "eth_nonce": 1, "pq_nonce": 4}
                 ]
             }
         }
