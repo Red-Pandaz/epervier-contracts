@@ -132,16 +132,14 @@ def create_base_pq_registration_intent_message(eth_address: str, pq_nonce: int) 
 
 def create_eth_registration_intent_message(base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int) -> bytes:
     """Create ETH registration intent message according to schema"""
-    # ETHRegistrationIntentMessage: pattern + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    # ETHRegistrationIntentMessage: pattern + basePQMessage + salt
+    # Note: cs1, cs2, hint, and eth_nonce are NOT included in the ETH message
+    # They are only used for the PQ signature
     pattern = "Intent to pair Epervier Key"
     return abi_encode_packed(
         pattern,
         base_pq_message,
-        salt,
-        cs1,
-        cs2,
-        hint,
-        eth_nonce
+        salt
     )
 
 def create_base_eth_registration_confirmation_message(pq_fingerprint: str, eth_nonce: int) -> bytes:
@@ -787,12 +785,24 @@ class AdvancedVectorGenerator:
         # Generate registration intent vectors
         if "registration_intent" in scenario_config:
             config = scenario_config["registration_intent"]
-            vector = self.generate_registration_intent_vector(
-                config["actor"], 
-                config["eth_nonce"], 
-                config["pq_nonce"]
-            )
-            vectors["registration_intent"] = [vector]
+            if isinstance(config, list):
+                # Handle multiple registration intents
+                vectors["registration_intent"] = []
+                for intent_config in config:
+                    vector = self.generate_registration_intent_vector(
+                        intent_config["actor"],
+                        intent_config["eth_nonce"],
+                        intent_config["pq_nonce"]
+                    )
+                    vectors["registration_intent"].append(vector)
+            else:
+                # Handle single registration intent
+                vector = self.generate_registration_intent_vector(
+                    config["actor"],
+                    config["eth_nonce"],
+                    config["pq_nonce"]
+                )
+                vectors["registration_intent"] = [vector]
         
         # Generate registration confirmation vectors
         if "registration_confirmation" in scenario_config:
@@ -834,7 +844,7 @@ class AdvancedVectorGenerator:
             for config in scenario_config["removal_change_pq"]:
                 vector = self.generate_removal_vector(
                     config["actor"],
-                    "change_eth",
+                    "change_pq",
                     config["eth_nonce"],
                     config["pq_nonce"]
                 )
@@ -843,11 +853,16 @@ class AdvancedVectorGenerator:
         if "removal_change_eth" in scenario_config:
             vectors["removal_change_eth"] = []
             for config in scenario_config["removal_change_eth"]:
+                target_pq_fingerprint = None
+                if "target_pq_fingerprint" in config:
+                    # Get the target PQ fingerprint from the actors config
+                    target_pq_fingerprint = self.actors[config["target_pq_fingerprint"]]["pq_fingerprint"]
                 vector = self.generate_removal_vector(
                     config["actor"],
                     "change_eth",
                     config["eth_nonce"],
-                    config["pq_nonce"]
+                    config["pq_nonce"],
+                    target_pq_fingerprint
                 )
                 vectors["removal_change_eth"].append(vector)
         
@@ -897,9 +912,15 @@ def main():
     """Generate advanced test vectors in working format for specific scenarios"""
     print("Generating advanced test vectors in working format...")
     
-    # Create output directories
-    os.makedirs("test/test_vectors/advanced", exist_ok=True)
-    os.makedirs("test/test_vectors", exist_ok=True)
+    # Get the project root directory (three levels up from this script)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(script_dir)))
+    
+    # Create output directories with absolute paths
+    advanced_dir = os.path.join(project_root, "test", "test_vectors", "advanced")
+    test_vectors_dir = os.path.join(project_root, "test", "test_vectors")
+    os.makedirs(advanced_dir, exist_ok=True)
+    os.makedirs(test_vectors_dir, exist_ok=True)
     
     generator = AdvancedVectorGenerator()
     
@@ -918,7 +939,7 @@ def main():
                     {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 1, "pq_nonce": 5}
                 ],
                 "removal_change_pq": [
-                    {"actor": "alice", "removal_type": "change_eth", "eth_nonce": 2, "pq_nonce": 3}
+                    {"actor": "alice", "removal_type": "change_pq", "eth_nonce": 2, "pq_nonce": 3}
                 ]
             }
         },
@@ -935,7 +956,17 @@ def main():
                     {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 1, "pq_nonce": 5}
                 ],
                 "removal_change_eth": [
-                    {"actor": "alice", "removal_type": "change_eth", "eth_nonce": 1, "pq_nonce": 3}
+                    {"actor": "bob", "removal_type": "change_eth", "eth_nonce": 1, "pq_nonce": 3, "target_pq_fingerprint": "alice"}
+                ]
+            }
+        },
+        {
+            "name": "multiple_registration_attempts_alice_pq_switches_targets",
+            "config": {
+                "registration_intent": [
+                    {"actor": "alice", "eth_nonce": 0, "pq_nonce": 0},
+                    {"actor": "bob", "eth_nonce": 0, "pq_nonce": 1},
+                    {"actor": "charlie", "eth_nonce": 0, "pq_nonce": 3}
                 ]
             }
         }
@@ -948,7 +979,7 @@ def main():
         # Save individual vector files
         for vector_type, vector_data in vectors.items():
             if vector_data:
-                output_file = f"test/test_vectors/advanced/{scenario['name']}_{vector_type}_vectors.json"
+                output_file = os.path.join(advanced_dir, f"{scenario['name']}_{vector_type}_vectors.json")
                 # If vector_data is a list, apply bytes_to_hex to each element
                 if isinstance(vector_data, list):
                     vector_data_hex = [bytes_to_hex(v) for v in vector_data]
@@ -962,7 +993,7 @@ def main():
                 print(f"Saved {vector_type} vectors to: {output_file}")
         
         # Save combined scenario file
-        combined_file = f"test/test_vectors/advanced/{scenario['name']}_vectors.json"
+        combined_file = os.path.join(advanced_dir, f"{scenario['name']}_vectors.json")
         vectors_hex = {k: ([bytes_to_hex(v) for v in vlist] if isinstance(vlist, list) else bytes_to_hex(vlist)) for k, vlist in vectors.items()}
         if find_bytes(vectors_hex):
             print(f"ERROR: Still found bytes in {combined_file}")
@@ -976,7 +1007,7 @@ def main():
     bob_confirmation_vector_hex = bytes_to_hex(bob_confirmation_vector)
     if find_bytes(bob_confirmation_vector_hex):
         print("ERROR: Still found bytes in pq_registration_eth_removal_retry_vector.json")
-    output_file = "test/test_vectors/pq_registration_eth_removal_retry_vector.json"
+    output_file = os.path.join(test_vectors_dir, "pq_registration_eth_removal_retry_vector.json")
     with open(output_file, 'w') as f:
         json.dump({"pq_registration_eth_removal_retry_vector": [bob_confirmation_vector_hex]}, f, indent=2)
     print(f"Saved pq_registration_eth_removal_retry_vector to: {output_file}")

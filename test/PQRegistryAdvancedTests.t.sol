@@ -555,4 +555,90 @@ contract PQRegistryAdvancedTests is Test {
         assertEq(aliceBoundETH, charlie.ethAddress, "Alice should now be bound to Charlie's ETH address");
         console.log("\n=== Test 5 PASSED ===");
     }
+
+    // Advanced Test 6: Multiple Registration Attempts
+    function testMultipleRegistrationAttemptsAlicePQSwitchesTargets() public {
+        // Get actor configurations
+        Actor memory alice = getActor("alice");
+        Actor memory bob = getActor("bob");
+        Actor memory charlie = getActor("charlie");
+        
+        console.log("=== Test 6: Multiple Registration Attempts ===");
+        console.log("Flow: AlicePQ intent for AliceETH -> AliceETH cancels -> AlicePQ intent for BobETH -> AlicePQ cancels -> AlicePQ intent for CharlieETH -> confirms");
+        console.log("Alice ETH Address:", alice.ethAddress);
+        console.log("Alice PQ Fingerprint:", alice.pqFingerprint);
+        console.log("Bob ETH Address:", bob.ethAddress);
+        console.log("Charlie ETH Address:", charlie.ethAddress);
+        
+        // Step 1: AlicePQ sends register intent for AliceETH (AlicePQ 0, AliceETH 0)
+        console.log("\n--- Step 1: AlicePQ sends register intent for AliceETH ---");
+        string memory intentJson = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        bytes memory intentMessage = vm.parseBytes(vm.parseJsonString(intentJson, ".registration_intent[0].eth_message"));
+        uint8 v0 = uint8(vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.v")));
+        uint256 r0Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.r"));
+        uint256 s0Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.s"));
+        bytes32 r0 = bytes32(r0Decimal);
+        bytes32 s0 = bytes32(s0Decimal);
+        registry.submitRegistrationIntent(intentMessage, v0, r0, s0);
+        console.log("Step 1 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 2: AliceETH cancels (AliceETH 1, AlicePQ 1)
+        console.log("\n--- Step 2: AliceETH cancels ---");
+        string memory removalJson = vm.readFile("test/test_vectors/registration_eth_removal_vectors.json");
+        bytes memory removalMessage = vm.parseBytes(vm.parseJsonString(removalJson, ".registration_eth_removal[0].eth_message"));
+        uint8 v1 = uint8(vm.parseUint(vm.parseJsonString(removalJson, ".registration_eth_removal[0].eth_signature.v")));
+        uint256 r1Decimal = vm.parseUint(vm.parseJsonString(removalJson, ".registration_eth_removal[0].eth_signature.r"));
+        uint256 s1Decimal = vm.parseUint(vm.parseJsonString(removalJson, ".registration_eth_removal[0].eth_signature.s"));
+        bytes32 r1 = bytes32(r1Decimal);
+        bytes32 s1 = bytes32(s1Decimal);
+        registry.removeRegistrationIntentByETH(removalMessage, v1, r1, s1);
+        console.log("Step 2 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 3: AlicePQ sends register intent for BobETH (AlicePQ nonce 1, BobETH nonce 0)
+        console.log("\n--- Step 3: AlicePQ sends register intent for BobETH ---");
+        string memory bobIntentJson = vm.readFile("test/test_vectors/advanced/multiple_registration_attempts_alice_pq_switches_targets_registration_intent_vectors.json");
+        bytes memory bobIntentMessage = vm.parseBytes(vm.parseJsonString(bobIntentJson, ".registration_intent[1].eth_message"));
+        uint8 v3 = uint8(vm.parseUint(vm.parseJsonString(bobIntentJson, ".registration_intent[1].eth_signature.v")));
+        uint256 r3Decimal = vm.parseUint(vm.parseJsonString(bobIntentJson, ".registration_intent[1].eth_signature.r"));
+        uint256 s3Decimal = vm.parseUint(vm.parseJsonString(bobIntentJson, ".registration_intent[1].eth_signature.s"));
+        bytes32 r3 = bytes32(r3Decimal);
+        bytes32 s3 = bytes32(s3Decimal);
+        registry.submitRegistrationIntent(bobIntentMessage, v3, r3, s3);
+        console.log("Step 3 completed - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        
+        // Step 4: AlicePQ cancels (AlicePQ nonce 2, BobETH nonce 0)
+        console.log("\n--- Step 4: AlicePQ cancels ---");
+        string memory pqRemovalJson = vm.readFile("test/test_vectors/advanced/multiple_registration_attempts_alice_pq_switches_targets_removal_registration_pq_vectors.json");
+        bytes memory pqRemovalMessage = vm.parseBytes(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].pq_message"));
+        bytes memory salt3 = vm.parseBytes(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].pq_signature.salt"));
+        uint256[] memory cs1_3 = vm.parseJsonUintArray(pqRemovalJson, ".removal_registration_pq[0].pq_signature.cs1");
+        uint256[] memory cs2_3 = vm.parseJsonUintArray(pqRemovalJson, ".removal_registration_pq[0].pq_signature.cs2");
+        uint256 hint3 = vm.parseUint(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].pq_signature.hint"));
+        registry.removeRegistrationIntentByPQ(pqRemovalMessage, salt3, cs1_3, cs2_3, hint3);
+        console.log("Step 4 completed - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        
+        // Step 5: AlicePQ sends register intent for CharlieETH (AlicePQ nonce 3, CharlieETH nonce 0)
+        console.log("\n--- Step 5: AlicePQ sends register intent for CharlieETH ---");
+        bytes memory charlieIntentMessage = vm.parseBytes(vm.parseJsonString(bobIntentJson, ".registration_intent[2].eth_message"));
+        uint8 v4 = uint8(vm.parseUint(vm.parseJsonString(bobIntentJson, ".registration_intent[2].eth_signature.v")));
+        uint256 r4Decimal = vm.parseUint(vm.parseJsonString(bobIntentJson, ".registration_intent[2].eth_signature.r"));
+        uint256 s4Decimal = vm.parseUint(vm.parseJsonString(bobIntentJson, ".registration_intent[2].eth_signature.s"));
+        bytes32 r4 = bytes32(r4Decimal);
+        bytes32 s4 = bytes32(s4Decimal);
+        registry.submitRegistrationIntent(charlieIntentMessage, v4, r4, s4);
+        console.log("Step 5 completed - ETH nonce:", registry.ethNonces(charlie.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        
+        // Step 6: Confirms (AlicePQ nonce 4, CharlieETH nonce 1)
+        console.log("\n--- Step 6: Confirms ---");
+        string memory confirmJson = vm.readFile("test/test_vectors/advanced/multiple_registration_attempts_alice_pq_switches_targets_registration_confirmation_vectors.json");
+        bytes memory confirmMessage = vm.parseBytes(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJson, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJson, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_signature.hint"));
+        registry.confirmRegistration(confirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+        console.log("Step 6 completed - ETH nonce:", registry.ethNonces(charlie.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        console.log("\n=== Test 6 PASSED (with placeholders for missing vectors) ===");
+    }
 }

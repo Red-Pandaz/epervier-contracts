@@ -6,8 +6,11 @@ from eth_utils import keccak
 
 print("Script loaded successfully!")
 
-ACTORS_CONFIG_PATH = Path("test/test_keys/actors_config.json")
-OUTPUT_PATH = Path("test/test_vectors/unregistration_confirmation_vectors.json")
+# Get the project root directory (three levels up from this script)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
+
+ACTORS_CONFIG_PATH = PROJECT_ROOT / "test/test_keys/actors_config.json"
+OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/unregistration_confirmation_vectors.json"
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
 # Helper to convert int to bytes32
@@ -62,7 +65,7 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
         tmp.flush()
         tmp_path = tmp.name
     # Find the project root
-    project_root = Path(__file__).resolve().parents[3]  # epervier-registry
+    project_root = PROJECT_ROOT
 
     sign_cli = project_root / "ETHFALCON/python-ref/sign_cli.py"
     privkey_path = project_root / "test/test_keys" / pq_private_key_file

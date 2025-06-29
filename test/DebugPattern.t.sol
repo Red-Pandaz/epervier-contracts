@@ -9,7 +9,7 @@ contract DebugPatternTest is Test {
     function testDebugPattern() public {
         // Load the test vector
         string memory vectorsJson = vm.readFile("test/test_vectors/advanced/test4_pq_cancels_change_eth_vectors.json");
-        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(vectorsJson, ".vectors[2].pq_message"));
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(vectorsJson, ".change_eth_address_intent[1].pq_message"));
         
         // Check the first 100 bytes as hex
         console.log("Message length:", pqMessage.length);

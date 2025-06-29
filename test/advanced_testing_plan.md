@@ -102,6 +102,14 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 - ❌ Change ETH intent vector (alice, ETH nonce 2, PQ nonce 3) - **NEED TO GENERATE** (different new ETH address)
 - ❌ Change ETH confirmation vector (alice, ETH nonce 3, PQ nonce 4) - **NEED TO GENERATE**
 
+#### Test 6: Multiple Registration Attempts
+- ✅ Registration intent vector (alice, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
+- ✅ Registration ETH removal vector (alice, ETH nonce 1, PQ nonce 1) - **AVAILABLE**
+- ❌ Registration intent vector (bob, ETH nonce 0, PQ nonce 1) - **NEED TO GENERATE**
+- ❌ Registration PQ removal vector (bob, ETH nonce 0, PQ nonce 2) - **NEED TO GENERATE**
+- ❌ Registration intent vector (charlie, ETH nonce 0, PQ nonce 3) - **NEED TO GENERATE**
+- ❌ Registration confirmation vector (charlie, ETH nonce 1, PQ nonce 4) - **NEED TO GENERATE**
+
 #### Test 7: Multiple Change Attempts
 - ✅ Registration intent vector (alice, ETH nonce 0, PQ nonce 0) - **AVAILABLE**
 - ✅ Registration confirmation vector (alice, ETH nonce 1, PQ nonce 1) - **AVAILABLE**

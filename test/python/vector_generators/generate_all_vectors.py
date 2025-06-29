@@ -93,6 +93,12 @@ VECTOR_GENERATORS = [
         "script": "unregistration_intent_pq_removal_generator.py",
         "output": "unregistration_removal_vectors.json",
         "description": "PQ-controlled unregistration intent removal"
+    },
+    {
+        "name": "Advanced Testing",
+        "script": "advanced_vector_generator.py",
+        "output": "advanced",
+        "description": "Advanced test scenario vectors for complex flows"
     }
 ]
 
@@ -142,7 +148,16 @@ def check_dependencies() -> bool:
 def run_generator(generator: Dict[str, str], force: bool = False, actors_only: bool = False) -> bool:
     """Run a single vector generator."""
     script_path = VECTOR_GENERATORS_DIR / generator["script"]
-    output_path = TEST_VECTORS_DIR / generator["output"]
+    
+    # Handle different output types
+    if generator["output"].endswith("/") or generator["output"] == "advanced":
+        # Output is a directory
+        output_path = TEST_VECTORS_DIR / generator["output"]
+        output_exists = output_path.exists() and any(output_path.iterdir())
+    else:
+        # Output is a specific file
+        output_path = TEST_VECTORS_DIR / generator["output"]
+        output_exists = output_path.exists()
     
     print(f"\n{'='*60}")
     print(f"🔄 Generating: {generator['name']}")
@@ -152,7 +167,7 @@ def run_generator(generator: Dict[str, str], force: bool = False, actors_only: b
     print(f"{'='*60}")
     
     # Check if output already exists
-    if output_path.exists() and not force:
+    if output_exists and not force:
         print(f"⚠️  Output already exists: {output_path}")
         print("   Use --force to regenerate")
         return True
@@ -199,24 +214,39 @@ def generate_summary() -> None:
     
     for generator in VECTOR_GENERATORS:
         output_path = TEST_VECTORS_DIR / generator["output"]
-        if output_path.exists():
-            # Get file size
-            size = output_path.stat().st_size
-            size_kb = size / 1024
-            
-            # Count vectors in the file
-            try:
-                with open(output_path, "r") as f:
-                    data = json.load(f)
-                    # Get the first key (should be the vector type)
-                    first_key = list(data.keys())[0]
-                    vector_count = len(data[first_key])
-                    print(f"✅ {generator['name']:<30} | {vector_count:>2} vectors | {size_kb:>6.1f} KB")
-                    successful_generators += 1
-            except Exception as e:
-                print(f"❌ {generator['name']:<30} | Error reading: {e}")
+        
+        # Handle different output types
+        if generator["output"].endswith("/") or generator["output"] == "advanced":
+            # Output is a directory
+            if output_path.exists() and any(output_path.iterdir()):
+                # Count files in directory
+                file_count = len(list(output_path.glob("*.json")))
+                total_size = sum(f.stat().st_size for f in output_path.glob("*.json"))
+                size_kb = total_size / 1024
+                print(f"✅ {generator['name']:<30} | {file_count:>2} files | {size_kb:>6.1f} KB")
+                successful_generators += 1
+            else:
+                print(f"❌ {generator['name']:<30} | Not generated")
         else:
-            print(f"❌ {generator['name']:<30} | Not generated")
+            # Output is a specific file
+            if output_path.exists():
+                # Get file size
+                size = output_path.stat().st_size
+                size_kb = size / 1024
+                
+                # Count vectors in the file
+                try:
+                    with open(output_path, "r") as f:
+                        data = json.load(f)
+                        # Get the first key (should be the vector type)
+                        first_key = list(data.keys())[0]
+                        vector_count = len(data[first_key])
+                        print(f"✅ {generator['name']:<30} | {vector_count:>2} vectors | {size_kb:>6.1f} KB")
+                        successful_generators += 1
+                except Exception as e:
+                    print(f"❌ {generator['name']:<30} | Error reading: {e}")
+            else:
+                print(f"❌ {generator['name']:<30} | Not generated")
     
     print(f"\n📈 Success Rate: {successful_generators}/{total_generators} ({successful_generators/total_generators*100:.1f}%)")
     
