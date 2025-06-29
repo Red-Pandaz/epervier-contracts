@@ -450,23 +450,8 @@ class AdvancedVectorGenerator:
         self.actors_config = load_actors_config()
         
         # Actor configurations with their private keys and addresses
-        self.actors = {
-            "alice": {
-                "eth_private_key": self.actors_config["alice"]["eth_private_key"],
-                "eth_address": self.actors_config["alice"]["eth_address"],
-                "pq_fingerprint": self.actors_config["alice"]["pq_fingerprint"]
-            },
-            "bob": {
-                "eth_private_key": self.actors_config["bob"]["eth_private_key"],
-                "eth_address": self.actors_config["bob"]["eth_address"],
-                "pq_fingerprint": self.actors_config["bob"]["pq_fingerprint"]
-            },
-            "charlie": {
-                "eth_private_key": self.actors_config["charlie"]["eth_private_key"],
-                "eth_address": self.actors_config["charlie"]["eth_address"],
-                "pq_fingerprint": self.actors_config["charlie"]["pq_fingerprint"]
-            }
-        }
+        # Use all actors from the config instead of just alice, bob, charlie
+        self.actors = self.actors_config
     
     def generate_registration_intent_vector(self, actor: str, eth_nonce: int, pq_nonce: int) -> Dict[str, Any]:
         """Generate a registration intent vector with custom nonces"""
@@ -586,23 +571,30 @@ class AdvancedVectorGenerator:
     
     def generate_change_eth_address_intent_vector(self, actor: str, new_eth_address: str, eth_nonce: int, pq_nonce: int) -> Dict[str, Any]:
         """Generate a change ETH address intent vector with custom nonces"""
+        print(f"DEBUG: generate_change_eth_address_intent_vector called with actor={actor}, new_eth_address={new_eth_address}, eth_nonce={eth_nonce}, pq_nonce={pq_nonce}")
+        
         actor_data = self.actors[actor]
         
         # Handle actor name as new ETH address
         if new_eth_address in self.actors:
             new_eth_actor_data = self.actors[new_eth_address]
-            new_eth_address = new_eth_actor_data["eth_address"]
+            resolved_new_eth_address = new_eth_actor_data["eth_address"]
             new_eth_private_key = new_eth_actor_data["eth_private_key"]
             new_actor = new_eth_address
+            print(f"DEBUG: Resolved actor '{new_eth_address}' to ETH address '{resolved_new_eth_address}'")
         else:
             # Use the actor's own private key if new_eth_address is a direct address
+            resolved_new_eth_address = new_eth_address
             new_eth_private_key = actor_data["eth_private_key"]
             new_actor = actor
+            print(f"DEBUG: Using direct ETH address '{resolved_new_eth_address}'")
+        
+        print(f"DEBUG: About to call create_base_eth_change_eth_address_intent_message with pq_fingerprint={actor_data['pq_fingerprint']}, resolved_new_eth_address={resolved_new_eth_address}, eth_nonce={eth_nonce}")
         
         # Create base ETH change intent message
         base_eth_message = create_base_eth_change_eth_address_intent_message(
             actor_data["pq_fingerprint"],
-            new_eth_address,
+            resolved_new_eth_address,  # Use resolved ETH address
             eth_nonce
         )
         
@@ -612,7 +604,7 @@ class AdvancedVectorGenerator:
         # Create PQ change intent message
         pq_message = create_pq_change_eth_address_intent_message(
             actor_data["eth_address"],
-            new_eth_address,
+            resolved_new_eth_address,  # Use resolved ETH address
             base_eth_message,
             eth_signature["v"],
             eth_signature["r"],
@@ -627,7 +619,7 @@ class AdvancedVectorGenerator:
             "current_actor": actor,
             "new_actor": new_actor,
             "old_eth_address": actor_data["eth_address"],
-            "new_eth_address": new_eth_address,
+            "new_eth_address": resolved_new_eth_address,  # Use resolved ETH address
             "pq_fingerprint": actor_data["pq_fingerprint"],
             "base_eth_message": base_eth_message.hex(),
             "pq_message": pq_message.hex(),
@@ -644,18 +636,19 @@ class AdvancedVectorGenerator:
         # Handle actor name as new ETH address
         if new_eth_address in self.actors:
             new_eth_actor_data = self.actors[new_eth_address]
-            new_eth_address = new_eth_actor_data["eth_address"]
+            resolved_new_eth_address = new_eth_actor_data["eth_address"]
             new_eth_private_key = new_eth_actor_data["eth_private_key"]
             new_actor = new_eth_address
         else:
             # Use the actor's own private key if new_eth_address is a direct address
+            resolved_new_eth_address = new_eth_address
             new_eth_private_key = actor_data["eth_private_key"]
             new_actor = actor
         
         # Create base PQ change confirmation message
         base_pq_message = create_base_pq_change_eth_address_confirm_message(
             actor_data["eth_address"],
-            new_eth_address,
+            resolved_new_eth_address,  # Use resolved ETH address
             pq_nonce
         )
         
@@ -680,7 +673,7 @@ class AdvancedVectorGenerator:
             "current_actor": actor,
             "new_actor": new_actor,
             "old_eth_address": actor_data["eth_address"],
-            "new_eth_address": new_eth_address,
+            "new_eth_address": resolved_new_eth_address,  # Use resolved ETH address
             "pq_fingerprint": actor_data["pq_fingerprint"],
             "base_pq_message": base_pq_message.hex(),
             "eth_message": eth_message.hex(),
@@ -1114,13 +1107,13 @@ def main():
                 "registration_confirmation": {"actor": "alice", "eth_nonce": 1, "pq_nonce": 1},
                 "change_eth_address_intent": [
                     {"actor": "alice", "new_eth_address": "bob", "eth_nonce": 0, "pq_nonce": 2},
-                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 0, "pq_nonce": 4}
-                ],
-                "change_eth_address_confirmation": [
-                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 1, "pq_nonce": 5}
+                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 0, "pq_nonce": 3}
                 ],
                 "removal_change_pq": [
                     {"actor": "alice", "removal_type": "change_pq", "eth_nonce": 2, "pq_nonce": 3}
+                ],
+                "change_eth_address_confirmation": [
+                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 1, "pq_nonce": 5}
                 ]
             }
         },
@@ -1131,13 +1124,13 @@ def main():
                 "registration_confirmation": {"actor": "alice", "eth_nonce": 1, "pq_nonce": 1},
                 "change_eth_address_intent": [
                     {"actor": "alice", "new_eth_address": "bob", "eth_nonce": 0, "pq_nonce": 2},
-                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 0, "pq_nonce": 4}
+                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 0, "pq_nonce": 3}
                 ],
                 "change_eth_address_confirmation": [
-                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 1, "pq_nonce": 5}
+                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 1, "pq_nonce": 4}
                 ],
                 "removal_change_eth": [
-                    {"actor": "bob", "removal_type": "change_eth", "eth_nonce": 1, "pq_nonce": 3, "target_pq_fingerprint": "alice"}
+                    {"actor": "bob", "removal_type": "change_eth", "eth_nonce": 1, "pq_nonce": 2, "target_pq_fingerprint": "alice"}
                 ]
             }
         },
@@ -1154,6 +1147,27 @@ def main():
                 ],
                 "registration_confirmation": [
                     {"eth_actor": "charlie", "target_eth_actor": "charlie", "eth_nonce": 1, "pq_nonce": 4}
+                ]
+            }
+        },
+        {
+            "name": "multiple_change_attempts",
+            "config": {
+                "registration_intent": {"actor": "alice", "eth_nonce": 0, "pq_nonce": 0},
+                "registration_confirmation": {"actor": "alice", "eth_nonce": 1, "pq_nonce": 1},
+                "change_eth_address_intent": [
+                    {"actor": "alice", "new_eth_address": "bob", "eth_nonce": 0, "pq_nonce": 2},
+                    {"actor": "alice", "new_eth_address": "charlie", "eth_nonce": 0, "pq_nonce": 3},
+                    {"actor": "alice", "new_eth_address": "danielle", "eth_nonce": 0, "pq_nonce": 5}
+                ],
+                "change_eth_address_confirmation": [
+                    {"actor": "alice", "new_eth_address": "danielle", "eth_nonce": 1, "pq_nonce": 6}
+                ],
+                "removal_change_eth": [
+                    {"actor": "bob", "removal_type": "change_eth", "eth_nonce": 1, "pq_nonce": 3, "target_pq_fingerprint": "alice"}
+                ],
+                "removal_change_pq": [
+                    {"actor": "alice", "removal_type": "change_pq", "eth_nonce": 0, "pq_nonce": 4}
                 ]
             }
         }

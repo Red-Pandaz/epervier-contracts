@@ -102,6 +102,14 @@ contract PQRegistryAdvancedTests is Test {
                 pqPrivateKeyFile: "test/test_keys/charlie_pq_private_key.txt",
                 pqPublicKeyFile: "test/test_keys/charlie_pq_public_key.txt"
             });
+        } else if (keccak256(bytes(name)) == keccak256(bytes("danielle"))) {
+            return Actor({
+                ethAddress: 0x9BBfABe4dB16Cbf6902a438588B1f1eE9FB88182,
+                pqFingerprint: 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4,
+                ethPrivateKey: 0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e,
+                pqPrivateKeyFile: "test/test_keys/danielle_pq_private_key.txt",
+                pqPublicKeyFile: "test/test_keys/danielle_pq_public_key.txt"
+            });
         }
         revert("Actor not found");
     }
@@ -410,6 +418,9 @@ contract PQRegistryAdvancedTests is Test {
         console.log("Alice PQ Fingerprint:", alice.pqFingerprint);
         console.log("Charlie ETH Address:", charlie.ethAddress);
         
+        // Debug: Log initial PQ nonce before any steps
+        console.log("DEBUG: Initial PQ nonce before Step 1:", registry.pqKeyNonces(alice.pqFingerprint));
+        
         // Step 1: Alice submits registration intent
         console.log("\n--- Step 1: Alice submits registration intent ---");
         string memory regIntentJson = vm.readFile("test/test_vectors/registration_intent_vectors.json");
@@ -422,6 +433,9 @@ contract PQRegistryAdvancedTests is Test {
         registry.submitRegistrationIntent(regIntentMessage, v0, r0, s0);
         console.log("Step 1 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
+        // Debug: Log PQ nonce between Step 1 and Step 2
+        console.log("DEBUG: PQ nonce between Step 1 and Step 2:", registry.pqKeyNonces(alice.pqFingerprint));
+
         // Step 2: Alice confirms registration
         console.log("\n--- Step 2: Alice confirms registration ---");
         string memory regConfirmJson = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
@@ -432,6 +446,9 @@ contract PQRegistryAdvancedTests is Test {
         uint256 hint1 = vm.parseUint(vm.parseJsonString(regConfirmJson, ".registration_confirmation[0].pq_signature.hint"));
         registry.confirmRegistration(pqMessage1, salt1, cs1_1, cs2_1, hint1);
         console.log("Step 2 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Debug: Log PQ nonce between Step 2 and Step 3
+        console.log("DEBUG: PQ nonce between Step 2 and Step 3:", registry.pqKeyNonces(alice.pqFingerprint));
 
         // Step 3: Alice submits change intent to BobETH (PQ intent) - USING ADVANCED VECTORS
         console.log("\n--- Step 3: Alice submits change intent to BobETH (using advanced vectors) ---");
@@ -446,6 +463,9 @@ contract PQRegistryAdvancedTests is Test {
         registry.submitChangeETHAddressIntent(pqMessage2, salt2, cs1_2, cs2_2, hint2);
         console.log("Step 3 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
+        // Debug: Log PQ nonce between Step 3 and Step 4
+        console.log("DEBUG: PQ nonce between Step 3 and Step 4:", registry.pqKeyNonces(alice.pqFingerprint));
+
         // Step 4: PQ cancels the change intent - USING ADVANCED VECTORS
         console.log("\n--- Step 4: PQ cancels the change intent (using advanced vectors) ---");
         string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/test4_pq_cancels_change_eth_removal_change_pq_vectors.json");
@@ -457,6 +477,9 @@ contract PQRegistryAdvancedTests is Test {
         console.log("Step 4 PQ nonce from vector:", vm.parseUint(vm.parseJsonString(advancedCancelJson, ".removal_change_pq[0].pq_nonce")));
         registry.removeChangeETHAddressIntentByPQ(pqMessage3, salt3, cs1_3, cs2_3, hint3);
         console.log("Step 4 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Debug: Log PQ nonce between Step 4 and Step 5
+        console.log("DEBUG: PQ nonce between Step 4 and Step 5:", registry.pqKeyNonces(alice.pqFingerprint));
 
         // Step 5: Alice submits change intent to CharlieETH (PQ intent) - USING ADVANCED VECTORS
         console.log("\n--- Step 5: Alice submits change intent to CharlieETH (using advanced vectors) ---");
@@ -470,18 +493,19 @@ contract PQRegistryAdvancedTests is Test {
         registry.submitChangeETHAddressIntent(pqMessage4, salt4, cs1_4, cs2_4, hint4);
         console.log("Step 5 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
-        // Step 6: Alice confirms change to CharlieETH - USING ADVANCED VECTORS
-        console.log("\n--- Step 6: Alice confirms change to CharlieETH (using advanced vectors) ---");
-        string memory advancedConfirmJson = vm.readFile("test/test_vectors/advanced/test4_pq_cancels_change_eth_confirmation_vectors.json");
-        bytes memory ethMessage5 = vm.parseBytes(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_message"));
-        uint8 v5 = uint8(vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.v")));
-        uint256 r5Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.r"));
-        uint256 s5Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.s"));
-        bytes32 r5 = bytes32(r5Decimal);
-        bytes32 s5 = bytes32(s5Decimal);
-        console.log("Step 6 ETH nonce from vector:", vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_nonce")));
-        console.log("Step 6 PQ nonce from vector:", vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].pq_nonce")));
-        registry.confirmChangeETHAddress(ethMessage5, v5, r5, s5);
+        // Debug: Log PQ nonce between Step 5 and Step 6
+        console.log("DEBUG: PQ nonce between Step 5 and Step 6:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 6: AlicePQ confirms change to CharlieETH - USING ADVANCED VECTORS
+        console.log("\n--- Step 6: AlicePQ confirms change to CharlieETH (using advanced vectors) ---");
+        string memory advancedConfirmJson = vm.readFile("test/test_vectors/advanced/test4_pq_cancels_change_eth_change_eth_address_confirmation_vectors.json");
+        bytes memory advancedConfirmMessage = vm.parseBytes(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_message"));
+        uint8 v8 = uint8(vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.v")));
+        uint256 r8Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.r"));
+        uint256 s8Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.s"));
+        bytes32 r8 = bytes32(r8Decimal);
+        bytes32 s8 = bytes32(s8Decimal);
+        registry.confirmChangeETHAddress(advancedConfirmMessage, v8, r8, s8);
         console.log("Step 6 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
         // Verify final state - Alice should now be bound to Charlie's ETH address
@@ -516,6 +540,9 @@ contract PQRegistryAdvancedTests is Test {
         registry.submitRegistrationIntent(regIntentMessage, v0, r0, s0);
         console.log("Step 1 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
+        // Debug: Log PQ nonce between Step 1 and Step 2
+        console.log("DEBUG: PQ nonce between Step 1 and Step 2:", registry.pqKeyNonces(alice.pqFingerprint));
+
         // Step 2: Alice confirms registration
         console.log("\n--- Step 2: Alice confirms registration ---");
         string memory regConfirmJson = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
@@ -526,6 +553,9 @@ contract PQRegistryAdvancedTests is Test {
         uint256 hint1 = vm.parseUint(vm.parseJsonString(regConfirmJson, ".registration_confirmation[0].pq_signature.hint"));
         registry.confirmRegistration(pqMessage1, salt1, cs1_1, cs2_1, hint1);
         console.log("Step 2 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Debug: Log PQ nonce between Step 2 and Step 3
+        console.log("DEBUG: PQ nonce between Step 2 and Step 3:", registry.pqKeyNonces(alice.pqFingerprint));
 
         // Step 3: Alice submits change intent to BobETH (PQ intent) - USING ADVANCED VECTORS
         console.log("\n--- Step 3: Alice submits change intent to BobETH (using advanced vectors) ---");
@@ -540,6 +570,9 @@ contract PQRegistryAdvancedTests is Test {
         registry.submitChangeETHAddressIntent(pqMessage2, salt2, cs1_2, cs2_2, hint2);
         console.log("Step 3 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
+        // Debug: Log PQ nonce between Step 3 and Step 4
+        console.log("DEBUG: PQ nonce between Step 3 and Step 4:", registry.pqKeyNonces(alice.pqFingerprint));
+
         // Step 4: ETH cancels the change intent - USING ADVANCED VECTORS
         console.log("\n--- Step 4: ETH cancels the change intent (using advanced vectors) ---");
         string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/test5_eth_cancels_change_eth_removal_change_eth_vectors.json");
@@ -553,30 +586,33 @@ contract PQRegistryAdvancedTests is Test {
         registry.removeChangeETHAddressIntentByETH(ethMessage3, v3, r3, s3);
         console.log("Step 4 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
+        // Debug: Log PQ nonce between Step 4 and Step 5
+        console.log("DEBUG: PQ nonce between Step 4 and Step 5:", registry.pqKeyNonces(alice.pqFingerprint));
+
         // Step 5: Alice submits change intent to CharlieETH (PQ intent) - USING ADVANCED VECTORS
-        console.log("\n--- Step 5: Alice submits change intent to CharlieETH (using advanced vectors) ---");
-        bytes memory pqMessage4 = vm.parseBytes(vm.parseJsonString(advancedIntentJson, ".change_eth_address_intent[1].pq_message"));
-        bytes memory salt4 = vm.parseBytes(vm.parseJsonString(advancedIntentJson, ".change_eth_address_intent[1].pq_signature.salt"));
-        uint256[] memory cs1_4 = vm.parseJsonUintArray(advancedIntentJson, ".change_eth_address_intent[1].pq_signature.cs1");
-        uint256[] memory cs2_4 = vm.parseJsonUintArray(advancedIntentJson, ".change_eth_address_intent[1].pq_signature.cs2");
-        uint256 hint4 = vm.parseUint(vm.parseJsonString(advancedIntentJson, ".change_eth_address_intent[1].pq_signature.hint"));
-        console.log("Step 5 PQ nonce from vector:", vm.parseUint(vm.parseJsonString(advancedIntentJson, ".change_eth_address_intent[1].pq_nonce")));
-        console.log("Step 5 ETH nonce from vector:", vm.parseUint(vm.parseJsonString(advancedIntentJson, ".change_eth_address_intent[1].eth_nonce")));
-        registry.submitChangeETHAddressIntent(pqMessage4, salt4, cs1_4, cs2_4, hint4);
+        console.log("\n--- Step 5: AlicePQ changes to CharlieETH ---");
+        string memory step5IntentJson = vm.readFile("test/test_vectors/advanced/multiple_change_attempts_change_eth_address_intent_vectors.json");
+        bytes memory advancedIntentMessage = vm.parseBytes(vm.parseJsonString(step5IntentJson, ".change_eth_address_intent[1].pq_message"));
+        bytes memory advancedIntentSalt = vm.parseBytes(vm.parseJsonString(step5IntentJson, ".change_eth_address_intent[1].pq_signature.salt"));
+        uint256[] memory advancedIntentCs1 = vm.parseJsonUintArray(step5IntentJson, ".change_eth_address_intent[1].pq_signature.cs1");
+        uint256[] memory advancedIntentCs2 = vm.parseJsonUintArray(step5IntentJson, ".change_eth_address_intent[1].pq_signature.cs2");
+        uint256 advancedIntentHint = vm.parseUint(vm.parseJsonString(step5IntentJson, ".change_eth_address_intent[1].pq_signature.hint"));
+        registry.submitChangeETHAddressIntent(advancedIntentMessage, advancedIntentSalt, advancedIntentCs1, advancedIntentCs2, advancedIntentHint);
         console.log("Step 5 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
-        // Step 6: Alice confirms change to CharlieETH - USING ADVANCED VECTORS
-        console.log("\n--- Step 6: Alice confirms change to CharlieETH (using advanced vectors) ---");
-        string memory advancedConfirmJson = vm.readFile("test/test_vectors/advanced/test5_eth_cancels_change_eth_confirmation_vectors.json");
-        bytes memory ethMessage5 = vm.parseBytes(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_message"));
-        uint8 v5 = uint8(vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.v")));
-        uint256 r5Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.r"));
-        uint256 s5Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.s"));
-        bytes32 r5 = bytes32(r5Decimal);
-        bytes32 s5 = bytes32(s5Decimal);
-        console.log("Step 6 ETH nonce from vector:", vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_nonce")));
-        console.log("Step 6 PQ nonce from vector:", vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].pq_nonce")));
-        registry.confirmChangeETHAddress(ethMessage5, v5, r5, s5);
+        // Debug: Log PQ nonce between Step 5 and Step 6
+        console.log("DEBUG: PQ nonce between Step 5 and Step 6:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 6: AlicePQ confirms change to CharlieETH - USING ADVANCED VECTORS
+        console.log("\n--- Step 6: AlicePQ confirms change to CharlieETH (using advanced vectors) ---");
+        string memory advancedConfirmJson = vm.readFile("test/test_vectors/advanced/test5_eth_cancels_change_eth_change_eth_address_confirmation_vectors.json");
+        bytes memory advancedConfirmMessage = vm.parseBytes(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_message"));
+        uint8 v8 = uint8(vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.v")));
+        uint256 r8Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.r"));
+        uint256 s8Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.s"));
+        bytes32 r8 = bytes32(r8Decimal);
+        bytes32 s8 = bytes32(s8Decimal);
+        registry.confirmChangeETHAddress(advancedConfirmMessage, v8, r8, s8);
         console.log("Step 6 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
         // Verify final state - Alice should now be bound to Charlie's ETH address
@@ -685,5 +721,121 @@ contract PQRegistryAdvancedTests is Test {
         console.log("Step 6 completed - ETH nonce:", registry.ethNonces(charlie.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
 
         console.log("\n=== Test 6 PASSED (with placeholders for missing vectors) ===");
+    }
+
+    // Advanced Test 7: Multiple Change Attempts
+    function testMultipleChangeAttempts() public {
+        // Get actor configurations
+        Actor memory alice = getActor("alice");
+        Actor memory bob = getActor("bob");
+        Actor memory charlie = getActor("charlie");
+        Actor memory danielle = getActor("danielle");
+        
+        console.log("=== Test 7: Multiple Change Attempts ===");
+        console.log("Flow: AlicePQ intent for AliceETH -> AliceETH confirms -> AlicePQ changes to BobETH -> BobETH cancels -> AlicePQ changes to CharlieETH -> AlicePQ cancels -> AlicePQ changes to DanielleETH -> confirms");
+        console.log("Alice ETH Address:", alice.ethAddress);
+        console.log("Alice PQ Fingerprint:", alice.pqFingerprint);
+        console.log("Bob ETH Address:", bob.ethAddress);
+        console.log("Charlie ETH Address:", charlie.ethAddress);
+        console.log("Danielle ETH Address:", danielle.ethAddress);
+        
+        // Step 1: AlicePQ creates registration intent for AliceETH (ETH nonce 0, PQ nonce 0)
+        console.log("\n--- Step 1: AlicePQ creates registration intent for AliceETH ---");
+        string memory intentJson = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        bytes memory intentMessage = vm.parseBytes(vm.parseJsonString(intentJson, ".registration_intent[0].eth_message"));
+        uint8 v0 = uint8(vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.v")));
+        uint256 r0Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.r"));
+        uint256 s0Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.s"));
+        bytes32 r0 = bytes32(r0Decimal);
+        bytes32 s0 = bytes32(s0Decimal);
+        registry.submitRegistrationIntent(intentMessage, v0, r0, s0);
+        console.log("Step 1 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 2: AliceETH confirms registration (ETH nonce 1, PQ nonce 1)
+        console.log("\n--- Step 2: AliceETH confirms registration ---");
+        string memory confirmJson = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        bytes memory confirmMessage = vm.parseBytes(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(confirmJson, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(confirmJson, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_signature.hint"));
+        registry.confirmRegistration(confirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+        console.log("Step 2 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 3: AlicePQ changes AliceETH to BobETH (ETH nonce 0, PQ nonce 2)
+        console.log("\n--- Step 3: AlicePQ changes AliceETH to BobETH ---");
+        string memory changeIntentJson = vm.readFile("test/test_vectors/change_eth_address_intent_vectors.json");
+        bytes memory changeIntentMessage = vm.parseBytes(vm.parseJsonString(changeIntentJson, ".change_eth_address_intent[0].pq_message"));
+        bytes memory changeIntentSalt = vm.parseBytes(vm.parseJsonString(changeIntentJson, ".change_eth_address_intent[0].pq_signature.salt"));
+        uint256[] memory changeIntentCs1 = vm.parseJsonUintArray(changeIntentJson, ".change_eth_address_intent[0].pq_signature.cs1");
+        uint256[] memory changeIntentCs2 = vm.parseJsonUintArray(changeIntentJson, ".change_eth_address_intent[0].pq_signature.cs2");
+        uint256 changeIntentHint = vm.parseUint(vm.parseJsonString(changeIntentJson, ".change_eth_address_intent[0].pq_signature.hint"));
+        registry.submitChangeETHAddressIntent(changeIntentMessage, changeIntentSalt, changeIntentCs1, changeIntentCs2, changeIntentHint);
+        console.log("Step 3 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 4: BobETH cancels the change (ETH nonce 1, PQ nonce 3)
+        console.log("\n--- Step 4: BobETH cancels the change ---");
+        string memory cancelJson = vm.readFile("test/test_vectors/change_eth_address_cancel_eth_vectors.json");
+        bytes memory cancelMessage = vm.parseBytes(vm.parseJsonString(cancelJson, ".change_eth_address_cancel_eth[0].eth_message"));
+        uint8 v4 = uint8(vm.parseUint(vm.parseJsonString(cancelJson, ".change_eth_address_cancel_eth[0].eth_signature.v")));
+        uint256 r4Decimal = vm.parseUint(vm.parseJsonString(cancelJson, ".change_eth_address_cancel_eth[0].eth_signature.r"));
+        uint256 s4Decimal = vm.parseUint(vm.parseJsonString(cancelJson, ".change_eth_address_cancel_eth[0].eth_signature.s"));
+        bytes32 r4 = bytes32(r4Decimal);
+        bytes32 s4 = bytes32(s4Decimal);
+        registry.removeChangeETHAddressIntentByETH(cancelMessage, v4, r4, s4);
+        console.log("Step 4 completed - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 5: AlicePQ changes to CharlieETH (ETH nonce 2, PQ nonce 3) - USING ADVANCED VECTORS
+        console.log("\n--- Step 5: AlicePQ changes to CharlieETH ---");
+        string memory advancedIntentJson = vm.readFile("test/test_vectors/advanced/multiple_change_attempts_change_eth_address_intent_vectors.json");
+        bytes memory advancedIntentMessage = vm.parseBytes(vm.parseJsonString(advancedIntentJson, ".change_eth_address_intent[1].pq_message"));
+        bytes memory advancedIntentSalt = vm.parseBytes(vm.parseJsonString(advancedIntentJson, ".change_eth_address_intent[1].pq_signature.salt"));
+        uint256[] memory advancedIntentCs1 = vm.parseJsonUintArray(advancedIntentJson, ".change_eth_address_intent[1].pq_signature.cs1");
+        uint256[] memory advancedIntentCs2 = vm.parseJsonUintArray(advancedIntentJson, ".change_eth_address_intent[1].pq_signature.cs2");
+        uint256 advancedIntentHint = vm.parseUint(vm.parseJsonString(advancedIntentJson, ".change_eth_address_intent[1].pq_signature.hint"));
+        registry.submitChangeETHAddressIntent(advancedIntentMessage, advancedIntentSalt, advancedIntentCs1, advancedIntentCs2, advancedIntentHint);
+        console.log("Step 5 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 6: AlicePQ cancels the change (ETH nonce 3, PQ nonce 4) - USING ADVANCED VECTORS
+        console.log("\n--- Step 6: AlicePQ cancels the change ---");
+        string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/multiple_change_attempts_removal_change_pq_vectors.json");
+        bytes memory advancedCancelMessage = vm.parseBytes(vm.parseJsonString(advancedCancelJson, ".removal_change_pq[0].pq_message"));
+        bytes memory advancedCancelSalt = vm.parseBytes(vm.parseJsonString(advancedCancelJson, ".removal_change_pq[0].pq_signature.salt"));
+        uint256[] memory advancedCancelCs1 = vm.parseJsonUintArray(advancedCancelJson, ".removal_change_pq[0].pq_signature.cs1");
+        uint256[] memory advancedCancelCs2 = vm.parseJsonUintArray(advancedCancelJson, ".removal_change_pq[0].pq_signature.cs2");
+        uint256 advancedCancelHint = vm.parseUint(vm.parseJsonString(advancedCancelJson, ".removal_change_pq[0].pq_signature.hint"));
+        registry.removeChangeETHAddressIntentByPQ(advancedCancelMessage, advancedCancelSalt, advancedCancelCs1, advancedCancelCs2, advancedCancelHint);
+        console.log("Step 6 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 7: AlicePQ changes to DanielleETH (ETH nonce 4, PQ nonce 4) - USING ADVANCED VECTORS
+        console.log("\n--- Step 7: AlicePQ changes to DanielleETH ---");
+        string memory step7IntentJson = vm.readFile("test/test_vectors/advanced/multiple_change_attempts_change_eth_address_intent_vectors.json");
+        bytes memory danielleIntentMessage = vm.parseBytes(vm.parseJsonString(step7IntentJson, ".change_eth_address_intent[2].pq_message"));
+        bytes memory danielleIntentSalt = vm.parseBytes(vm.parseJsonString(step7IntentJson, ".change_eth_address_intent[2].pq_signature.salt"));
+        uint256[] memory danielleIntentCs1 = vm.parseJsonUintArray(step7IntentJson, ".change_eth_address_intent[2].pq_signature.cs1");
+        uint256[] memory danielleIntentCs2 = vm.parseJsonUintArray(step7IntentJson, ".change_eth_address_intent[2].pq_signature.cs2");
+        uint256 danielleIntentHint = vm.parseUint(vm.parseJsonString(step7IntentJson, ".change_eth_address_intent[2].pq_signature.hint"));
+        registry.submitChangeETHAddressIntent(danielleIntentMessage, danielleIntentSalt, danielleIntentCs1, danielleIntentCs2, danielleIntentHint);
+        console.log("Step 7 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Step 8: AlicePQ confirms change to DanielleETH (ETH nonce 5, PQ nonce 5) - USING ADVANCED VECTORS
+        console.log("\n--- Step 8: AlicePQ confirms change to DanielleETH ---");
+        string memory advancedConfirmJson = vm.readFile("test/test_vectors/advanced/multiple_change_attempts_change_eth_address_confirmation_vectors.json");
+        bytes memory advancedConfirmMessage = vm.parseBytes(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_message"));
+        uint8 v8 = uint8(vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.v")));
+        uint256 r8Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.r"));
+        uint256 s8Decimal = vm.parseUint(vm.parseJsonString(advancedConfirmJson, ".change_eth_address_confirmation[0].eth_signature.s"));
+        bytes32 r8 = bytes32(r8Decimal);
+        bytes32 s8 = bytes32(s8Decimal);
+        registry.confirmChangeETHAddress(advancedConfirmMessage, v8, r8, s8);
+        console.log("Step 8 completed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+
+        // Verify final state - Alice should now be bound to Danielle's ETH address
+        address alicePQFingerprint = registry.addressToEpervierKey(alice.ethAddress);
+        address aliceBoundETH = registry.epervierKeyToAddress(alice.pqFingerprint);
+        console.log("Final state - Alice PQ bound to ETH:", aliceBoundETH);
+        console.log("Final state - Alice ETH bound to PQ:", alicePQFingerprint);
+        assertEq(aliceBoundETH, danielle.ethAddress, "Alice should now be bound to Danielle's ETH address");
+        console.log("\n=== Test 7 PASSED ===");
     }
 }

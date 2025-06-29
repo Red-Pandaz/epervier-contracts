@@ -474,6 +474,9 @@ contract PQRegistry {
         require(intent.timestamp > 0, "No pending change intent");
         
         // STEP 7: Nonce validation
+        // DEBUG: Print PQ nonce in message and contract
+        console.log("DEBUG: PQ nonce in message:", pqNonce);
+        console.log("DEBUG: PQ nonce in contract:", pqKeyNonces[recoveredFingerprint]);
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         
         // STEP 8: Clear the intent

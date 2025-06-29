@@ -22,12 +22,12 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 **Functions Tested:** submitRegistrationIntent (multiple actors), confirmRegistration (different order than intent submission)
 
 ### **Test 4: Change ETH → PQ Cancels → Change to Different ETH → Confirms**
-**Flow:** AlicePQ tries to change AliceETH to BobETH → AlicePQ cancels → AlicePQ changes to CharlieETH → AlicePQ confirms
+**Flow:** Alice registers with AliceETH → AlicePQ tries to change AliceETH to BobETH → AlicePQ cancels → AlicePQ changes to CharlieETH → AlicePQ confirms
 **Tests:** PQ can cancel and retry with different ETH address, proper nonce progression
 **Functions Tested:** submitChangeETHAddressIntent, removeChangeETHAddressIntentByPQ, submitChangeETHAddressIntent, confirmChangeETHAddress
 
 ### **Test 5: Change ETH → ETH Cancels → Change to Different ETH → Confirms**
-**Flow:** AlicePQ tries to change AliceETH to BobETH → BobETH cancels → AlicePQ changes to CharlieETH → AlicePQ confirms
+**Flow:** Alice registers with AliceETH → AlicePQ tries to change AliceETH to BobETH → BobETH cancels → AlicePQ changes to CharlieETH → AlicePQ confirms
 **Tests:** ETH can cancel and PQ can retry with different ETH address, proper nonce progression
 **Functions Tested:** submitChangeETHAddressIntent, removeChangeETHAddressIntentByETH, submitChangeETHAddressIntent, confirmChangeETHAddress
 
@@ -37,19 +37,23 @@ This plan defines 7 comprehensive advanced test scenarios that cover all edge ca
 **Functions Tested:** submitRegistrationIntent removeRegistrationIntentByETH, removeRegistrationIntentByPQ, ConfirmRegistrationIntent
 
 ### **Test 7: Multiple Change Attempts**
-**Flow:** AlicePQ changes AliceETH to BobETH → BobETH cancels → AlicePQ changes to CharlieETH → AlicePQ cancels → AlicePQ changes to DanielleETH → confirms
+**Flow:** Alice registers with AliceETH → AlicePQ changes AliceETH to BobETH → BobETH cancels → AlicePQ changes to CharlieETH → AlicePQ cancels → AlicePQ changes to DanielleETH → confirms
 **Tests:** Multiple change attempts, proper state transitions, nonce progression
 **Functions Tested:** submitChangeETHAddressIntent, removeChangeETHAddressIntentByPQ, removeChangeETHAddressIntentBy, confirmChangeETHAddress
 
 ### **Test 8: Unregister → Revoke → Unregister Again → Confirm**
-**Flow:** AlicePQ initiates unregistration → AlicePQ revokes → AlicePQ initiates again → AliceETH confirms
+**Flow:** Alice registers with AliceETH → AlicePQ initiates unregistration → AlicePQ revokes → AlicePQ initiates again → AliceETH confirms
 **Tests:** PQ can revoke and retry unregistration, proper nonce progression
 **Functions Tested:** submitUnregistrationIntent, removeUnregistrationIntent, submitUnregistrationIntent, confirmUnregistration
 
 ### **Test 9: Full Lifecycle: Registration → Change → Unregistration → Re-registration**
-**Flow:** Alice registers → Alice changes ETH address → Alice unregisters → Alice re-registers with new PQ key
-**Tests:** Complete lifecycle, all functions work together, proper nonce progression through entire flow
+**Flow:** AlicePQ registers with AliceETH → AlicePQ changes to bind with BobETH → AlicePQ and BobETH unregister → AliceETH registers with BobPQ
+**Tests:** Complete lifecycle for a single actor (Alice) using different key combinations, all functions work together, proper nonce progression through entire flow
 **Functions Tested:** All 11 functions in sequence
+**Actor Relationships:** 
+- Alice owns both AliceETH and BobPQ keys
+- Bob owns BobETH key  
+- Flow demonstrates Alice's complete lifecycle: same person using different key combinations
 
 ## Vector Requirements
 
