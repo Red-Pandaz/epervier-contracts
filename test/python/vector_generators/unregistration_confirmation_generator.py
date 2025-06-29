@@ -122,8 +122,8 @@ def main():
         eth_private_key = actor["eth_private_key"]
         pq_private_key_file = actor["pq_private_key_file"]
         pq_fingerprint = actor["pq_fingerprint"]
-        eth_nonce = 3  # After unregistration intent submission
-        pq_nonce = 3   # After unregistration intent submission
+        eth_nonce = 3 
+        pq_nonce = 3 
         
         # 1. Build base PQ unregistration confirmation message
         print("Building base PQ unregistration confirmation message...")

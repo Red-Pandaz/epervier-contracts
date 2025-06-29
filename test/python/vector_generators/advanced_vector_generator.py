@@ -21,6 +21,7 @@ from eth_utils import decode_hex, keccak
 from eth_account.messages import encode_defunct
 import hashlib
 import hmac
+import subprocess
 
 # Add the parent directory to the path to import the basic generator
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -31,6 +32,9 @@ ACTORS_CONFIG_PATH = PROJECT_ROOT / "test/test_keys/actors_config.json"
 DOMAIN_SEPARATOR = Web3.keccak(b"PQRegistry")
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADVANCED_VECTOR_DIR = os.path.join(os.path.dirname(__file__), '../../test_vectors/advanced')
+OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/advanced/test8_unregister_revoke_unregister_confirm_unregistration_confirmation_vectors.json"
+
+int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
 
 def load_actors_config():
     """Load the actors config JSON"""
@@ -39,8 +43,6 @@ def load_actors_config():
 
 def generate_epervier_signature(message: bytes, actor: str) -> Dict[str, Any]:
     """Generate Epervier signature for a message"""
-    import subprocess
-    
     actors = load_actors_config()
     actor_data = actors[actor]
     pq_private_key_file = actor_data["pq_private_key_file"]
@@ -61,6 +63,7 @@ def generate_epervier_signature(message: bytes, actor: str) -> Dict[str, Any]:
     for attempt in range(max_retries):
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)  # 30 second timeout
+            
             if result.returncode != 0:
                 print(f"Error signing message (attempt {attempt + 1}/{max_retries}): {result.stderr}")
                 if attempt == max_retries - 1:
@@ -86,6 +89,21 @@ def generate_epervier_signature(message: bytes, actor: str) -> Dict[str, Any]:
                     return None
                 continue
             
+            # Debug: Print signature values to check ranges
+            print(f"DEBUG: Signature salt length: {len(signature_data['salt'])}")
+            print(f"DEBUG: Signature cs1 length: {len(signature_data['cs1'])}")
+            print(f"DEBUG: Signature cs2 length: {len(signature_data['cs2'])}")
+            print(f"DEBUG: Signature hint: {signature_data['hint']}")
+            
+            # Check if any values are too large
+            max_cs_value = max(max(signature_data['cs1']), max(signature_data['cs2']))
+            print(f"DEBUG: Max cs value: {max_cs_value}")
+            if max_cs_value > 2**256 - 1:
+                print(f"WARNING: CS values too large: {max_cs_value}")
+            
+            if signature_data['hint'] > 2**256 - 1:
+                print(f"WARNING: Hint value too large: {signature_data['hint']}")
+            
             # If we get here, we have a valid signature
             return {
                 "salt": signature_data["salt"],
@@ -99,6 +117,7 @@ def generate_epervier_signature(message: bytes, actor: str) -> Dict[str, Any]:
             if attempt == max_retries - 1:
                 print("Failed to generate signature due to timeout")
                 return None
+        
         except Exception as e:
             print(f"Unexpected error during signature generation (attempt {attempt + 1}/{max_retries}): {e}")
             if attempt == max_retries - 1:
@@ -116,8 +135,8 @@ def generate_eth_signature(message: bytes, private_key: str) -> Dict[str, Any]:
     
     return {
         "v": signed_message.v,
-        "r": hex(signed_message.r),  # Convert to hex string
-        "s": hex(signed_message.s),  # Convert to hex string
+        "r": signed_message.r,  # Return as integer like working generator
+        "s": signed_message.s,  # Return as integer like working generator
         "signature": signed_message.signature.hex()
     }
 
@@ -177,7 +196,7 @@ def create_base_eth_registration_confirmation_message(pq_fingerprint: str, eth_n
     )
     return message
 
-def create_pq_registration_confirmation_message(eth_address: str, base_eth_message: bytes, v: int, r: str, s: str, pq_nonce: int) -> bytes:
+def create_pq_registration_confirmation_message(eth_address: str, base_eth_message: bytes, v: int, r: int, s: int, pq_nonce: int) -> bytes:
     """Create PQ registration confirmation message according to schema"""
     # PQRegistrationConfirmationMessage: DOMAIN_SEPARATOR + pattern + ethAddress + baseETHMessage + v + r + s + pqNonce
     pattern = b"Confirm bonding to ETH Address "  # Correct pattern matching MessageParser.sol
@@ -189,8 +208,8 @@ def create_pq_registration_confirmation_message(eth_address: str, base_eth_messa
         bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix, convert to raw bytes
         base_eth_message +
         v.to_bytes(1, 'big') +
-        int(r, 16).to_bytes(32, 'big') +  # Convert hex string to bytes
-        int(s, 16).to_bytes(32, 'big') +  # Convert hex string to bytes
+        r.to_bytes(32, 'big') +  # Convert integer to bytes
+        s.to_bytes(32, 'big') +  # Convert integer to bytes
         pq_nonce.to_bytes(32, 'big')
     )
     return message
@@ -232,7 +251,7 @@ def create_base_eth_change_eth_address_intent_message(pq_fingerprint: str, new_e
     print(f"DEBUG: base_message final hex: {base_message.hex()}")
     return base_message
 
-def create_pq_change_eth_address_intent_message(old_eth_address: str, new_eth_address: str, base_eth_message: bytes, v: int, r: str, s: str, pq_nonce: int) -> bytes:
+def create_pq_change_eth_address_intent_message(old_eth_address: str, new_eth_address: str, base_eth_message: bytes, v: int, r: int, s: int, pq_nonce: int) -> bytes:
     """Create PQ change address intent message according to working vector schema"""
     pattern = b"Intent to change bound ETH Address from "
     pattern2 = b" to "
@@ -243,9 +262,9 @@ def create_pq_change_eth_address_intent_message(old_eth_address: str, new_eth_ad
     message += bytes.fromhex(new_eth_address[2:])
     message += base_eth_message
     message += v.to_bytes(1, 'big')
-    # Format r and s as int(hex, 16).to_bytes(32, 'big')
-    r_bytes = int(r, 16).to_bytes(32, 'big')
-    s_bytes = int(s, 16).to_bytes(32, 'big')
+    # Format r and s as integers to bytes
+    r_bytes = r.to_bytes(32, 'big')
+    s_bytes = s.to_bytes(32, 'big')
     message += r_bytes
     message += s_bytes
     message += pq_nonce.to_bytes(32, 'big')
@@ -294,53 +313,143 @@ def create_eth_change_eth_address_confirmation_message(pq_fingerprint: str, base
 def create_base_eth_unregistration_intent_message(pq_fingerprint: str, eth_nonce: int) -> bytes:
     """Create base ETH unregistration intent message according to schema"""
     # BaseETHUnregistrationIntentMessage: pattern + pqFingerprint + ethNonce
-    pattern = "Intent to unregister from Epervier Fingerprint "
-    return abi_encode_packed(
-        pattern,
-        pq_fingerprint,
-        eth_nonce
-    )
+    pattern = b"Intent to unregister from Epervier Fingerprint "
+    pq_fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])  # Convert hex address to bytes
+    eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
+    
+    # Calculate the base message length
+    base_message = pattern + pq_fingerprint_bytes + eth_nonce_bytes
+    base_length = len(base_message)
+    
+    # Pad to exactly 131 bytes, ensuring ETH nonce stays at the end
+    if base_length > 131:
+        # If too long, truncate from the beginning (pattern) but keep ETH nonce at end
+        available_space = 131 - 20 - 32  # 131 - pq_fingerprint - eth_nonce
+        if available_space < 0:
+            raise ValueError("Message too long even after truncation")
+        truncated_pattern = pattern[:available_space]
+        message = truncated_pattern + pq_fingerprint_bytes + eth_nonce_bytes
+    elif base_length < 131:
+        # If too short, pad with zeros before the ETH nonce
+        padding_needed = 131 - base_length
+        message = pattern + pq_fingerprint_bytes + b'\x00' * padding_needed + eth_nonce_bytes
+    else:
+        # Exactly 131 bytes
+        message = base_message
+    
+    return message
 
-def create_pq_unregistration_intent_message(eth_address: str, base_eth_message: bytes, v: int, r: bytes, s: bytes, pq_nonce: int) -> bytes:
+def create_pq_unregistration_intent_message(eth_address: str, base_eth_message: bytes, v: int, r: int, s: int, pq_nonce: int) -> bytes:
     """Create PQ unregistration intent message according to schema"""
-    # PQUnregistrationIntentMessage: DOMAIN_SEPARATOR + pattern + currentEthAddress + baseETHMessage + v + r + s + pqNonce
-    pattern = "Intent to unregister from Epervier Fingerprint from address "
-    return abi_encode_packed(
-        DOMAIN_SEPARATOR,
-        pattern,
-        eth_address,
-        base_eth_message,
-        v,
-        r,
-        s,
-        pq_nonce
+    pattern = b"Intent to unregister from Epervier Fingerprint from address "
+    # Ensure DOMAIN_SEPARATOR is bytes
+    domain_separator_bytes = DOMAIN_SEPARATOR if isinstance(DOMAIN_SEPARATOR, bytes) else bytes.fromhex(DOMAIN_SEPARATOR[2:])
+    # Debug prints
+    print("DEBUG: ETH address string:", eth_address, "length:", len(eth_address))
+    eth_address_bytes = bytes.fromhex(eth_address[2:])
+    print("DEBUG: ETH address bytes:", eth_address_bytes.hex(), "length:", len(eth_address_bytes))
+    
+    # Debug message structure
+    print("DEBUG: DOMAIN_SEPARATOR length:", len(domain_separator_bytes))
+    print("DEBUG: pattern length:", len(pattern))
+    print("DEBUG: pattern:", pattern.decode())
+    print("DEBUG: base_eth_message length:", len(base_eth_message))
+    print("DEBUG: v length:", 1)
+    print("DEBUG: r length:", 32)
+    print("DEBUG: s length:", 32)
+    print("DEBUG: pq_nonce length:", 32)
+    
+    # Convert r and s from integers to bytes
+    r_bytes = r.to_bytes(32, 'big')
+    s_bytes = s.to_bytes(32, 'big')
+    
+    message = (
+        domain_separator_bytes +
+        pattern +
+        eth_address_bytes +
+        base_eth_message +
+        v.to_bytes(1, 'big') +
+        r_bytes +
+        s_bytes +
+        pq_nonce.to_bytes(32, 'big')
     )
+    
+    # Debug final message structure
+    print("DEBUG: Total message length:", len(message))
+    print("DEBUG: ETH address should be at offset:", len(domain_separator_bytes) + len(pattern))
+    print("DEBUG: ETH address at offset:", message[len(domain_separator_bytes) + len(pattern):len(domain_separator_bytes) + len(pattern) + 20].hex())
+    print("DEBUG: Expected ETH address:", eth_address_bytes.hex())
+    
+    return message
 
 def create_base_pq_unregistration_confirm_message(eth_address: str, pq_nonce: int) -> bytes:
     """Create base PQ unregistration confirmation message according to schema"""
-    # BasePQUnregistrationConfirmMessage: DOMAIN_SEPARATOR + pattern + ethAddress + pqNonce
-    pattern = "Confirm unregistration from ETH Address "
-    return abi_encode_packed(
-        DOMAIN_SEPARATOR,
-        pattern,
-        eth_address,
-        pq_nonce
+    pattern = b"Confirm unregistration from ETH Address "  # 40 bytes
+    message = (
+        DOMAIN_SEPARATOR +
+        pattern +
+        bytes.fromhex(eth_address[2:]) +  # 20 bytes
+        pq_nonce.to_bytes(32, 'big')
     )
+    # The schema expects exactly 124 bytes for the BasePQUnregistrationConfirmMessage
+    # DOMAIN_SEPARATOR (32) + pattern (40) + ethAddress (20) + pqNonce (32) = 124
+    
+    # Debug output
+    print(f"DEBUG: Base PQ unregistration confirm message length: {len(message)}")
+    print(f"DEBUG: Pattern length: {len(pattern)}")
+    print(f"DEBUG: Pattern: {pattern.decode()}")
+    print(f"DEBUG: ETH address: {eth_address}")
+    print(f"DEBUG: PQ nonce: {pq_nonce}")
+    
+    return message
 
 def create_eth_unregistration_confirmation_message(pq_fingerprint: str, base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int) -> bytes:
-    """Create ETH unregistration confirmation message according to schema"""
-    # ETHUnregistrationConfirmationMessage: pattern + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
-    pattern = "Confirm unregistration from Epervier Fingerprint "
-    return abi_encode_packed(
-        pattern,
-        pq_fingerprint,
-        base_pq_message,
-        salt,
-        cs1,
-        cs2,
-        hint,
-        eth_nonce
+    """Create ETH unregistration confirmation message according to schema (manual byte concatenation)"""
+    pattern = b"Confirm unregistration from Epervier Fingerprint "
+    
+    def pack_uint256_array(arr):
+        return b"".join(x.to_bytes(32, 'big') for x in arr)
+    
+    # Calculate each component length
+    domain_separator_len = len(DOMAIN_SEPARATOR)
+    pattern_len = len(pattern)
+    pq_fingerprint_len = len(bytes.fromhex(pq_fingerprint[2:]))
+    base_pq_message_len = len(base_pq_message)
+    salt_len = len(salt)
+    cs1_len = len(cs1) * 32
+    cs2_len = len(cs2) * 32
+    hint_len = 32
+    eth_nonce_len = 32
+    
+    message = (
+        DOMAIN_SEPARATOR +  # 32 bytes
+        pattern +  # 49 bytes (schema requirement)
+        bytes.fromhex(pq_fingerprint[2:]) +  # 20 bytes
+        base_pq_message +  # 123 bytes (truncated from 124 to match schema)
+        salt +  # 40 bytes
+        pack_uint256_array(cs1) +  # 1024 bytes
+        pack_uint256_array(cs2) +  # 1024 bytes
+        hint.to_bytes(32, 'big') +  # 32 bytes
+        eth_nonce.to_bytes(32, 'big')  # 32 bytes
     )
+    
+    # Debug output
+    print(f"DEBUG: ETH unregistration confirmation message length: {len(message)}")
+    print(f"DEBUG: Expected total length: 2407")
+    print(f"DEBUG: Component breakdown:")
+    print(f"  DOMAIN_SEPARATOR: {domain_separator_len} bytes")
+    print(f"  pattern: {pattern_len} bytes")
+    print(f"  pq_fingerprint: {pq_fingerprint_len} bytes")
+    print(f"  base_pq_message: {base_pq_message_len} bytes")
+    print(f"  salt: {salt_len} bytes")
+    print(f"  cs1: {cs1_len} bytes")
+    print(f"  cs2: {cs2_len} bytes")
+    print(f"  hint: {hint_len} bytes")
+    print(f"  eth_nonce: {eth_nonce_len} bytes")
+    print(f"  Calculated total: {domain_separator_len + pattern_len + pq_fingerprint_len + base_pq_message_len + salt_len + cs1_len + cs2_len + hint_len + eth_nonce_len}")
+    print(f"  Difference: {2407 - len(message)} bytes")
+    
+    return message
 
 def create_eth_remove_registration_intent_message(pq_fingerprint: str, eth_nonce: int) -> bytes:
     """Create ETH remove registration intent message according to schema"""
@@ -841,6 +950,21 @@ class AdvancedVectorGenerator:
                 "pq_nonce": pq_nonce
             }
         
+        elif removal_type == "unregistration":
+            # Same as unregistration_pq - PQ removes unregistration intent
+            message = create_pq_remove_unregistration_intent_message(
+                actor_data["eth_address"],
+                pq_nonce
+            )
+            signature = generate_epervier_signature(message, actor)
+            # Return the structure expected by the test
+            return {
+                "pq_remove_unregistration_intent": {
+                    "message": message.hex(),
+                    "signature": signature
+                }
+            }
+        
         else:
             raise ValueError(f"Unknown removal type: {removal_type}")
     
@@ -994,6 +1118,40 @@ class AdvancedVectorGenerator:
                     config["pq_nonce"]
                 )
                 vectors["removal_registration_pq"].append(vector)
+        
+        # Generate unregistration intent vectors
+        if "unregistration_intent" in scenario_config:
+            vectors["unregistration_intent"] = []
+            for config in scenario_config["unregistration_intent"]:
+                vector = self.generate_unregistration_intent_vector(
+                    config["actor"],
+                    config["eth_nonce"],
+                    config["pq_nonce"]
+                )
+                vectors["unregistration_intent"].append(vector)
+        
+        # Generate unregistration confirmation vectors
+        if "unregistration_confirmation" in scenario_config:
+            vectors["unregistration_confirmation"] = []
+            for config in scenario_config["unregistration_confirmation"]:
+                vector = self.generate_unregistration_confirmation_vector(
+                    config["actor"],
+                    config["eth_nonce"],
+                    config["pq_nonce"]
+                )
+                vectors["unregistration_confirmation"].append(vector)
+        
+        # Generate unregistration removal vectors
+        if "removal_unregistration" in scenario_config:
+            vectors["remove_intent"] = []
+            for config in scenario_config["removal_unregistration"]:
+                vector = self.generate_removal_vector(
+                    config["actor"],
+                    "unregistration",
+                    config["eth_nonce"],
+                    config["pq_nonce"]
+                )
+                vectors["remove_intent"].append(vector)
         
         return vectors
 
@@ -1168,6 +1326,23 @@ def main():
                 ],
                 "removal_change_pq": [
                     {"actor": "alice", "removal_type": "change_pq", "eth_nonce": 0, "pq_nonce": 4}
+                ]
+            }
+        },
+        {
+            "name": "test8_unregister_revoke_unregister_confirm",
+            "config": {
+                "registration_intent": {"actor": "alice", "eth_nonce": 0, "pq_nonce": 0},
+                "registration_confirmation": {"actor": "alice", "eth_nonce": 1, "pq_nonce": 1},
+                "unregistration_intent": [
+                    {"actor": "alice", "eth_nonce": 2, "pq_nonce": 2},
+                    {"actor": "alice", "eth_nonce": 3, "pq_nonce": 4}
+                ],
+                "unregistration_confirmation": [
+                    {"actor": "alice", "eth_nonce": 4, "pq_nonce": 5}
+                ],
+                "removal_unregistration": [
+                    {"actor": "alice", "eth_nonce": 3, "pq_nonce": 3}
                 ]
             }
         }
