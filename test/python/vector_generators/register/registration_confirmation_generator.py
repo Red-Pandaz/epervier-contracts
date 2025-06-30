@@ -222,7 +222,9 @@ def main():
     # Write confirmation vectors to the correct file
     confirmation_data = {"registration_confirmation": confirmation_vectors}
     
-    with open(OUTPUT_PATH, 'w') as f:
+    # Write vectors to output file
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUTPUT_PATH, "w") as f:
         json.dump(confirmation_data, f, indent=2)
     
     print(f"\nGenerated {len(confirmation_vectors)} registration confirmation vectors")

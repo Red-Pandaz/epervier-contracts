@@ -21,7 +21,7 @@ from tempfile import NamedTemporaryFile
 from eth_utils import keccak
 
 # Project root
-PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
+PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
 
 # Domain separator (same as in the contract)
 DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")

@@ -99,8 +99,9 @@ def main():
         
         # Save to JSON file
         output_file = project_root / "test/test_vectors/register/registration_eth_removal_vectors.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
-            json.dump({"remove_registration_intent": vectors}, f, indent=2)
+            json.dump({"registration_eth_removal": vectors}, f, indent=2)
         
         print(f"Generated {len(vectors)} remove registration intent vectors")
         print(f"Vectors saved to {output_file}")

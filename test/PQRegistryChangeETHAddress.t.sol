@@ -114,7 +114,7 @@ contract PQRegistryChangeETHAddressTest is Test {
         // Load intent vectors for registration and change ETH address
         string memory registrationJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         string memory confirmationJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
-        string memory changeIntentJsonData = vm.readFile("test/test_vectors/change-eth/change_eth_address_intent_vectors.json");
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_intent_vectors.json");
 
         string[] memory actorCycle = new string[](10);
         actorCycle[0] = "alice";
@@ -193,8 +193,8 @@ contract PQRegistryChangeETHAddressTest is Test {
         // Load vectors
         string memory registrationJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         string memory confirmationJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
-        string memory changeIntentJsonData = vm.readFile("test/test_vectors/change-eth/change_eth_address_intent_vectors.json");
-        string memory changeConfirmJsonData = vm.readFile("test/test_vectors/change-eth/change_eth_address_confirmation_vectors.json");
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_intent_vectors.json");
+        string memory changeConfirmJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_confirmation_vectors.json");
 
         string[] memory actorCycle = new string[](10);
         actorCycle[0] = "alice";
@@ -296,9 +296,9 @@ contract PQRegistryChangeETHAddressTest is Test {
 
     function testCancelChangeETHAddressIntent_AllActors_Success() public {
         // Load intent and cancel vectors
-        string memory intentJsonData = vm.readFile("test/test_vectors/change-eth/change_eth_address_intent_vectors.json");
-        string memory cancelPQJsonData = vm.readFile("test/test_vectors/change-eth/change_eth_address_cancel_pq_vectors.json");
-        string memory cancelETHJsonData = vm.readFile("test/test_vectors/change-eth/change_eth_address_cancel_eth_vectors.json");
+        string memory intentJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_intent_vectors.json");
+        string memory cancelPQJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_cancel_pq_vectors.json");
+        string memory cancelETHJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_cancel_eth_vectors.json");
 
         for (uint i = 0; i < actorNames.length; i++) {
             // Reset state for each iteration

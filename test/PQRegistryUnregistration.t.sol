@@ -419,8 +419,8 @@ contract PQRegistryUnregistrationTest is Test {
     
     function registerActor(Actor memory actor, string memory actorName) internal {
         // Load registration intent vectors
-        string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory confirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
         
         // Find the actor's index
         uint actorIndex = 0;

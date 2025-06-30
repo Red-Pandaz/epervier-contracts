@@ -10,8 +10,8 @@ from eth_account import Account
 from eth_hash.auto import keccak
 
 # Add the project root to the path
-project_root = Path(__file__).resolve().parents[3]
-sys.path.append(str(project_root))
+project_root = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(project_root / "ETHFALCON" / "python-ref"))
 
 # Domain separator (same as in the contract)
 DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
@@ -142,7 +142,8 @@ def main():
         vectors = generate_cancel_change_eth_address_intent_vectors()
         
         # Save to JSON file
-        output_file = project_root / "test" / "test_vectors" / "change_eth_address_cancel_pq_vectors.json"
+        output_file = project_root / "test/test_vectors/change_eth/change_eth_address_cancel_pq_vectors.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
             json.dump({"change_eth_address_cancel_pq": vectors}, f, indent=2)
         

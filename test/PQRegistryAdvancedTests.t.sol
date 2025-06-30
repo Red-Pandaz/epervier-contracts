@@ -764,7 +764,7 @@ contract PQRegistryAdvancedTests is Test {
 
         // Step 3: AlicePQ changes AliceETH to BobETH (ETH nonce 0, PQ nonce 2)
         console.log("\n--- Step 3: AlicePQ changes AliceETH to BobETH ---");
-        string memory changeIntentJson = vm.readFile("test/test_vectors/change-eth/change_eth_address_intent_vectors.json");
+        string memory changeIntentJson = vm.readFile("test/test_vectors/change_eth/change_eth_address_intent_vectors.json");
         bytes memory changeIntentMessage = vm.parseBytes(vm.parseJsonString(changeIntentJson, ".change_eth_address_intent[0].pq_message"));
         bytes memory changeIntentSalt = vm.parseBytes(vm.parseJsonString(changeIntentJson, ".change_eth_address_intent[0].pq_signature.salt"));
         uint256[] memory changeIntentCs1 = vm.parseJsonUintArray(changeIntentJson, ".change_eth_address_intent[0].pq_signature.cs1");
@@ -775,7 +775,7 @@ contract PQRegistryAdvancedTests is Test {
 
         // Step 4: BobETH cancels the change (ETH nonce 1, PQ nonce 3)
         console.log("\n--- Step 4: BobETH cancels the change ---");
-        string memory cancelJson = vm.readFile("test/test_vectors/change-eth/change_eth_address_cancel_eth_vectors.json");
+        string memory cancelJson = vm.readFile("test/test_vectors/change_eth/change_eth_address_cancel_eth_vectors.json");
         bytes memory cancelMessage = vm.parseBytes(vm.parseJsonString(cancelJson, ".change_eth_address_cancel_eth[0].eth_message"));
         uint8 v4 = uint8(vm.parseUint(vm.parseJsonString(cancelJson, ".change_eth_address_cancel_eth[0].eth_signature.v")));
         uint256 r4Decimal = vm.parseUint(vm.parseJsonString(cancelJson, ".change_eth_address_cancel_eth[0].eth_signature.r"));

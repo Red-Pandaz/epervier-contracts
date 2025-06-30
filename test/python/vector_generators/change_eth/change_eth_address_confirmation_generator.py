@@ -10,7 +10,7 @@ from eth_account import Account
 from eth_hash.auto import keccak
 
 # Add the project root to the path
-project_root = Path(__file__).resolve().parents[4]
+project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.insert(0, str(project_root / "ETHFALCON" / "python-ref"))
 
 # Domain separator (same as in the contract)
@@ -192,8 +192,10 @@ def main():
         
         # Save to JSON file
         output_file = project_root / "test/test_vectors/change_eth/change_eth_address_confirmation_vectors.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output = {"change_eth_address_confirmation": vectors}
         with open(output_file, 'w') as f:
-            json.dump({"change_eth_address_confirmation": vectors}, f, indent=2)
+            json.dump(output, f, indent=2)
         
         print(f"Generated {len(vectors)} change ETH address confirmation vectors")
         print(f"Vectors saved to {output_file}")

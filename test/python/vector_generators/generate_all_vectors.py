@@ -17,6 +17,7 @@ Options:
 import json
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 from typing import List, Dict, Any
 import argparse
@@ -264,6 +265,7 @@ def main():
     parser.add_argument("--force", action="store_true", help="Regenerate all vectors even if they exist")
     parser.add_argument("--actors-only", action="store_true", help="Only generate vectors for a subset of actors (for testing)")
     parser.add_argument("--check-only", action="store_true", help="Only check dependencies without generating vectors")
+    parser.add_argument("--cleanup", action="store_true", help="Delete all existing test vectors before generating new ones")
     
     args = parser.parse_args()
     
@@ -278,6 +280,21 @@ def main():
     if args.check_only:
         print("✅ Dependencies check passed!")
         return
+    
+    # Cleanup existing test vectors if requested
+    if args.cleanup:
+        print("\n🧹 Cleaning up existing test vectors...")
+        if TEST_VECTORS_DIR.exists():
+            print(f"🗑️  Deleting test vectors directory: {TEST_VECTORS_DIR}")
+            shutil.rmtree(TEST_VECTORS_DIR)
+            print("✅ Test vectors directory deleted")
+        else:
+            print("ℹ️  Test vectors directory does not exist, nothing to delete")
+        
+        # Recreate the test vectors directory
+        print(f"📁 Creating test vectors directory: {TEST_VECTORS_DIR}")
+        TEST_VECTORS_DIR.mkdir(parents=True, exist_ok=True)
+        print("✅ Test vectors directory created")
     
     # Load actors config to show what we're working with
     actors = load_actors_config()

@@ -149,6 +149,7 @@ def main():
         
         # Save to JSON file
         output_file = project_root / "test/test_vectors/register/registration_pq_removal_vectors.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
             json.dump({"registration_pq_removal": vectors}, f, indent=2)
         

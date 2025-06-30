@@ -157,8 +157,8 @@ def generate_unregistration_flow_with_revocation_vectors():
         if pq_signature_0 is None:
             print(f"Failed to generate PQ signature for {actor_name} step 1")
             continue
-        # Step 2: PQ revokes unregistration intent (PQ nonce 1)
-        pq_nonce_1 = 1
+        # Step 2: PQ revokes unregistration intent (PQ nonce 3, after registration and unregistration intent)
+        pq_nonce_1 = 3
         pq_remove_message = create_pq_remove_unregistration_intent_message(DOMAIN_SEPARATOR, eth_address, pq_nonce_1)
         pq_remove_signature = sign_pq_message(pq_remove_message, pq_private_key_file)
         if pq_remove_signature is None:
@@ -237,36 +237,27 @@ def main():
     print("Generating unregistration flow with revocation test vectors...")
     try:
         vectors = generate_unregistration_flow_with_revocation_vectors()
-        # Convert to the standard format used by basic tests
-        formatted_vectors = []
+        # Build remove_intent array for PQ removal step (step 2 for each actor)
+        remove_intent = []
         for scenario in vectors:
-            for step in scenario["steps"]:
-                # Include all steps, not just those with eth_message
-                formatted_vectors.append({
-                    "actor": scenario["actor"],
-                    "eth_address": scenario["eth_address"],
-                    "pq_fingerprint": scenario["pq_fingerprint"],
-                    "base_pq_message": step.get("base_pq_message", ""),
-                    "pq_signature": step.get("pq_signature", {}),
-                    "eth_message": step.get("eth_message", ""),
-                    "eth_signature": step.get("eth_signature", {}),
-                    "eth_nonce": step.get("eth_nonce", 0)
-                })
-        
-        # Write to file in the same format as basic test vectors
-        output_data = {
-            "unregistration_flow_with_revocation": formatted_vectors
-        }
-        
-        output_file = "test/test_vectors/unregister/unregistration_flow_with_revocation_vectors.json"
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        
+            # Step 2: PQ revokes unregistration intent
+            pq_removal_step = scenario["steps"][1]
+            remove_intent.append({
+                "eth_address": scenario["eth_address"],
+                "pq_fingerprint": scenario["pq_fingerprint"],
+                "pq_remove_unregistration_intent": {
+                    "signature": pq_removal_step["pq_signature"],
+                    "message": pq_removal_step["pq_message"]
+                }
+            })
+        # Save to JSON file
+        output_file = project_root / "test/test_vectors/unregister/unregistration_removal_vectors.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
-            json.dump(output_data, f, indent=2)
-        
-        print(f"Generated {len(formatted_vectors)} vectors for unregistration flow with revocation")
+            json.dump({"remove_intent": remove_intent}, f, indent=2)
+        print(f"Generated {len(remove_intent)} PQ removal vectors for unregistration flow with revocation")
         print(f"Output saved to: {output_file}")
-        
+
     except Exception as e:
         print(f"Error generating vectors: {e}")
         traceback.print_exc()

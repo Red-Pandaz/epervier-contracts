@@ -1303,6 +1303,34 @@ def main():
     # Define all scenarios with consistent naming
     scenarios = [
         {
+            "name": "test1_eth_retry",
+            "config": {
+                "removal_registration_pq": [
+                    {"actor": "alice", "eth_nonce": 0, "pq_nonce": 2}
+                ],
+                "registration_intent": [
+                    {"actor": "alice", "eth_nonce": 1, "pq_nonce": 2}
+                ],
+                "registration_confirmation": [
+                    {"actor": "alice", "eth_nonce": 2, "pq_nonce": 3}
+                ]
+            }
+        },
+        {
+            "name": "test2_pq_retry",
+            "config": {
+                "removal_registration_eth": [
+                    {"actor": "bob", "removal_type": "registration_eth", "eth_nonce": 2, "pq_nonce": 0}
+                ],
+                "registration_intent": [
+                    {"actor": "bob", "eth_nonce": 2, "pq_nonce": 1}
+                ],
+                "registration_confirmation": [
+                    {"actor": "bob", "eth_nonce": 3, "pq_nonce": 2}
+                ]
+            }
+        },
+        {
             "name": "test4_pq_cancels_change_eth",
             "config": {
                 "registration_intent": {"actor": "alice", "eth_nonce": 0, "pq_nonce": 0},
@@ -1438,9 +1466,32 @@ def main():
                     json.dump({vector_type: vector_data_hex}, f, indent=2)
                 print(f"Saved {vector_type} vectors to: {output_file}")
         
-        # Save combined scenario file
+        # Save combined scenario file with special handling for test1 and test2
         combined_file = output_path / f"{scenario['name']}_vectors.json"
         vectors_hex = {k: ([bytes_to_hex(v) for v in vlist] if isinstance(vlist, list) else bytes_to_hex(vlist)) for k, vlist in vectors.items()}
+        
+        # Special handling for test1 and test2 to create the expected key names
+        if scenario['name'] == 'test1_eth_retry':
+            # Create the specific keys expected by the test
+            test1_vectors = {}
+            if 'registration_intent' in vectors_hex and vectors_hex['registration_intent']:
+                # The second registration intent (nonce 2) should be in registration_intent_nonce2
+                test1_vectors['registration_intent_nonce2'] = vectors_hex['registration_intent']
+            if 'registration_confirmation' in vectors_hex and vectors_hex['registration_confirmation']:
+                # The second confirmation (nonce 3) should be in registration_confirmation_nonce3
+                test1_vectors['registration_confirmation_nonce3'] = vectors_hex['registration_confirmation']
+            vectors_hex = test1_vectors
+        elif scenario['name'] == 'test2_pq_retry':
+            # Create the specific keys expected by the test
+            test2_vectors = {}
+            if 'registration_intent' in vectors_hex and vectors_hex['registration_intent']:
+                # The second registration intent (nonce 2, pq nonce 1) should be in registration_intent_nonce2_pq1
+                test2_vectors['registration_intent_nonce2_pq1'] = vectors_hex['registration_intent']
+            if 'registration_confirmation' in vectors_hex and vectors_hex['registration_confirmation']:
+                # The second confirmation (nonce 2, pq nonce 2) should be in registration_confirmation_nonce2_pq2
+                test2_vectors['registration_confirmation_nonce2_pq2'] = vectors_hex['registration_confirmation']
+            vectors_hex = test2_vectors
+        
         if find_bytes(vectors_hex):
             print(f"ERROR: Still found bytes in {combined_file}")
         with open(combined_file, 'w') as f:
@@ -1457,6 +1508,30 @@ def main():
     with open(output_file, 'w') as f:
         json.dump({"pq_registration_eth_removal_retry_vector": [bob_confirmation_vector_hex]}, f, indent=2)
     print(f"Saved pq_registration_eth_removal_retry_vector to: {output_file}")
+    
+    # Copy test1 and test2 files to root directory where tests expect them
+    print("Copying test1 and test2 files to root directory...")
+    root_output_path = Path(__file__).resolve().parents[4] / "test" / "test_vectors"
+    
+    # Copy test1_eth_retry_vectors.json
+    test1_source = output_path / "test1_eth_retry_vectors.json"
+    test1_dest = root_output_path / "test1_eth_retry_vectors.json"
+    if test1_source.exists():
+        import shutil
+        shutil.copy2(test1_source, test1_dest)
+        print(f"Copied {test1_source} to {test1_dest}")
+    else:
+        print(f"Warning: {test1_source} not found")
+    
+    # Copy test2_pq_retry_vectors.json
+    test2_source = output_path / "test2_pq_retry_vectors.json"
+    test2_dest = root_output_path / "test2_pq_retry_vectors.json"
+    if test2_source.exists():
+        import shutil
+        shutil.copy2(test2_source, test2_dest)
+        print(f"Copied {test2_source} to {test2_dest}")
+    else:
+        print(f"Warning: {test2_source} not found")
     
     print("\nConsolidated advanced vector generation complete!")
 

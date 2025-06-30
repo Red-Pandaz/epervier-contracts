@@ -155,6 +155,8 @@ def main():
         }
         vectors.append(vector)
     print(f"Writing {len(vectors)} vectors to {OUTPUT_PATH}")
+    # Write vectors to output file
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_PATH, "w") as f:
         json.dump({"registration_intent": vectors}, f, indent=2)
     print("Vector generation complete!")

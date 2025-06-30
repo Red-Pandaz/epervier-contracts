@@ -241,12 +241,12 @@ def main():
     try:
         vectors = generate_change_eth_address_intent_vectors()
         
-        # Write vectors to output file
-        output_path = project_root / "test/test_vectors/change-eth/change_eth_address_intent_vectors.json"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, "w") as f:
+        # Save to JSON file
+        output_file = project_root / "test/test_vectors/change_eth/change_eth_address_intent_vectors.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, 'w') as f:
             json.dump({"change_eth_address_intent": vectors}, f, indent=2)
-        print(f"Wrote {len(vectors)} change ETH address intent vectors to {output_path}")
+        print(f"Wrote {len(vectors)} change ETH address intent vectors to {output_file}")
         
         # Print sample vector for verification
         if vectors:
