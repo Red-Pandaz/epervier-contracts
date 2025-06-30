@@ -105,8 +105,8 @@ contract PQRegistryBasicTests is Test {
     // Helper function to register an actor (used by other tests)
     function registerActor(Actor memory actor, string memory actorName) internal {
         // Load registration vectors
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        string memory confirmationJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory confirmationJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
         
         // Find the registration intent vector for this actor
         uint256 actorIndex = 0;
@@ -177,7 +177,7 @@ contract PQRegistryBasicTests is Test {
         Actor memory alice = getActor("alice");
         
         // Load test data from the comprehensive registration vectors
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         
         // Parse addresses from the test vector directly
         address testETHAddress = vm.parseAddress(vm.parseJsonString(jsonData, ".registration_intent[0].eth_address"));
@@ -227,7 +227,7 @@ contract PQRegistryBasicTests is Test {
 
     function testSubmitRegistrationIntent_AllActors_Success() public {
         // Load comprehensive test vectors
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];
@@ -283,7 +283,7 @@ contract PQRegistryBasicTests is Test {
         testSubmitRegistrationIntent_Success();
         
         // Load confirmation test data
-        string memory jsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
         
         // Parse addresses from the test vector
         address testETHAddress = vm.parseAddress(vm.parseJsonString(jsonData, ".registration_confirmation[0].eth_address"));
@@ -324,14 +324,14 @@ contract PQRegistryBasicTests is Test {
 
     function testConfirmRegistration_AllActors_Success() public {
         // Load comprehensive test vectors
-        string memory jsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
         
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];
             Actor memory actor = getActor(actorName);
             
             // First submit registration intent for this actor
-            string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+            string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
             string memory intentVectorPath = string.concat(".registration_intent[", vm.toString(i), "]");
             bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_message")));
             

@@ -97,7 +97,7 @@ contract PQRegistryRegistrationTest is Test {
         Actor memory alice = getActor("alice");
         
         // Load test data from the comprehensive registration vectors
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         
         // Parse addresses from the test vector directly
         address testETHAddress = vm.parseAddress(vm.parseJsonString(jsonData, ".registration_intent[0].eth_address"));
@@ -147,7 +147,7 @@ contract PQRegistryRegistrationTest is Test {
 
     function testSubmitRegistrationIntent_AllActors_Success() public {
         // Load comprehensive test vectors
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];
@@ -200,7 +200,7 @@ contract PQRegistryRegistrationTest is Test {
         Actor memory alice = getActor("alice");
         
         // First submit a registration intent
-        string memory jsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
         
         // Sign the message with legacy Ethereum signed message format
@@ -220,7 +220,7 @@ contract PQRegistryRegistrationTest is Test {
         vm.clearMockedCalls();
         
         // Load the real PQ confirmation message from test vector
-        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        string memory confirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
         bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_message"));
         
         // Load the real signature components for confirmation
@@ -247,8 +247,8 @@ contract PQRegistryRegistrationTest is Test {
     
     function testConfirmRegistration_AllActors_Success() public {
         // Load comprehensive test vectors
-        string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        string memory confirmJsonData = vm.readFile("test/test_vectors/registration_confirmation_vectors.json");
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory confirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
         
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];
@@ -327,8 +327,8 @@ contract PQRegistryRegistrationTest is Test {
     
     function testRemoveIntentByETH_AllActors_Success() public {
         // Load intent and removal vectors
-        string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        string memory removalJsonData = vm.readFile("test/test_vectors/registration_eth_removal_vectors.json");
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory removalJsonData = vm.readFile("test/test_vectors/register/registration_eth_removal_vectors.json");
 
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];
@@ -386,8 +386,8 @@ contract PQRegistryRegistrationTest is Test {
 
     function testRemoveIntentByPQ_AllActors_Success() public {
         // Load intent and PQ removal vectors
-        string memory intentJsonData = vm.readFile("test/test_vectors/registration_intent_vectors.json");
-        string memory pqRemovalJsonData = vm.readFile("test/test_vectors/registration_pq_removal_vectors.json");
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory pqRemovalJsonData = vm.readFile("test/test_vectors/register/registration_pq_removal_vectors.json");
 
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];

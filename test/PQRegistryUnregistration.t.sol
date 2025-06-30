@@ -104,7 +104,7 @@ contract PQRegistryUnregistrationTest is Test {
         emit log_address(alice.ethAddress);
         
         // Load unregistration intent vectors
-        string memory jsonData = vm.readFile("test/test_vectors/unregistration_intent_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/unregister/unregistration_intent_vectors.json");
         
         // Parse addresses from the test vector
         address testETHAddress = vm.parseAddress(vm.parseJsonString(jsonData, ".unregistration_intent[0].eth_address"));
@@ -153,7 +153,7 @@ contract PQRegistryUnregistrationTest is Test {
     
     function testSubmitUnregistrationIntent_AllActors_Success() public {
         // Load comprehensive test vectors
-        string memory jsonData = vm.readFile("test/test_vectors/unregistration_intent_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/unregister/unregistration_intent_vectors.json");
         
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];
@@ -237,7 +237,7 @@ contract PQRegistryUnregistrationTest is Test {
         submitUnregistrationIntent(alice, 0);
         
         // Load PQ removal vectors from the correct file
-        string memory jsonData = vm.readFile("test/test_vectors/unregistration_removal_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/unregister/unregistration_removal_vectors.json");
         
         // Parse addresses from the test vector
         address testETHAddress = vm.parseAddress(vm.parseJsonString(jsonData, ".remove_intent[0].eth_address"));
@@ -273,7 +273,7 @@ contract PQRegistryUnregistrationTest is Test {
     
     function testRemoveUnregistrationIntent_AllActors_Success() public {
         // Load comprehensive PQ removal vectors from the correct file
-        string memory jsonData = vm.readFile("test/test_vectors/unregistration_removal_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/unregister/unregistration_removal_vectors.json");
         
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];
@@ -351,7 +351,7 @@ contract PQRegistryUnregistrationTest is Test {
     
     function testConfirmUnregistration_AllActors_Success() public {
         // Load comprehensive unregistration confirmation vectors
-        string memory jsonData = vm.readFile("test/test_vectors/unregistration_confirmation_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/unregister/unregistration_confirmation_vectors.json");
         
         for (uint i = 0; i < actorNames.length; i++) {
             string memory actorName = actorNames[i];
@@ -485,7 +485,7 @@ contract PQRegistryUnregistrationTest is Test {
     
     function submitUnregistrationIntent(Actor memory actor, uint256 actorIndex) internal {
         // Load test data from the unregistration intent vectors
-        string memory jsonData = vm.readFile("test/test_vectors/unregistration_intent_vectors.json");
+        string memory jsonData = vm.readFile("test/test_vectors/unregister/unregistration_intent_vectors.json");
         
         // Use the correct vector index for this actor
         string memory vectorPath = string.concat(".unregistration_intent[", vm.toString(actorIndex), "]");
