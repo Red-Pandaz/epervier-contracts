@@ -278,7 +278,7 @@ def main():
             "change_eth_flow_with_cancellation": formatted_vectors
         }
         
-        output_file = "test/test_vectors/advanced/change_eth_flow_with_cancellation_vectors.json"
+        output_file = "test/test_vectors_change-eth/change_eth_flow_with_cancellation_vectors.json"
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
         with open(output_file, 'w') as f:

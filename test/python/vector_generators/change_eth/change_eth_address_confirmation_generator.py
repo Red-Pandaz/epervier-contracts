@@ -191,7 +191,7 @@ def main():
         vectors = generate_change_eth_address_confirmation_vectors()
         
         # Save to JSON file
-        output_file = project_root / "test/test_vectors/change-eth/change_eth_address_confirmation_vectors.json"
+        output_file = project_root / "test/test_vectors/change_eth/change_eth_address_confirmation_vectors.json"
         with open(output_file, 'w') as f:
             json.dump({"change_eth_address_confirmation": vectors}, f, indent=2)
         

@@ -10,7 +10,7 @@ from eth_account import Account
 from eth_hash.auto import keccak
 
 # Add the project root to the path
-project_root = Path(__file__).parent.parent.parent
+project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.append(str(project_root))
 
 # Domain separator (same as in the contract)
@@ -18,7 +18,7 @@ DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae
 
 def get_actor_config():
     """Load actor configuration from JSON file"""
-    config_file = Path(__file__).parent.parent.parent / "test_keys" / "actors_config.json"
+    config_file = project_root / "test/test_keys/actors_config.json"
     with open(config_file, 'r') as f:
         config = json.load(f)
         return config["actors"]
@@ -98,7 +98,7 @@ def main():
         vectors = generate_remove_registration_intent_vectors()
         
         # Save to JSON file
-        output_file = Path(__file__).parent.parent.parent / "test_vectors" / "remove_registration_intent_vectors.json"
+        output_file = project_root / "test/test_vectors/register/registration_eth_removal_vectors.json"
         with open(output_file, 'w') as f:
             json.dump({"remove_registration_intent": vectors}, f, indent=2)
         

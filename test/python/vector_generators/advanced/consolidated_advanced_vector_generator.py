@@ -31,13 +31,11 @@ from eth_utils import keccak
 from tempfile import NamedTemporaryFile
 
 # Project root
-PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
+project_root = Path(__file__).resolve().parents[4]
 
 # Always use the absolute path for output
-OUTPUT_DIR = PROJECT_ROOT / "test" / "test_vectors"
-OUTPUT_DIR_ADVANCED = OUTPUT_DIR / "advanced"
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-OUTPUT_DIR_ADVANCED.mkdir(parents=True, exist_ok=True)
+output_path = project_root / "test/test_vectors/advanced"
+output_path.mkdir(parents=True, exist_ok=True)
 
 # Domain separator (same as in the contract)
 DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
@@ -47,7 +45,7 @@ int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
 
 def load_actors_config() -> Dict[str, Any]:
     """Load actor configuration from the main config file"""
-    config_file = PROJECT_ROOT / "test" / "test_keys" / "actors_config.json"
+    config_file = project_root / "test" / "test_keys" / "actors_config.json"
     with open(config_file, 'r') as f:
         return json.load(f)
 
@@ -81,9 +79,9 @@ def generate_epervier_signature(message: bytes, actor: str) -> Dict[str, Any]:
     actors = load_actors_config()["actors"]
     actor_config = actors[actor]
     
-    sign_cli = str(PROJECT_ROOT / "ETHFALCON" / "python-ref" / "sign_cli.py")
-    privkey_path = str(PROJECT_ROOT / "test" / "test_keys" / actor_config["pq_private_key_file"])
-    venv_python = str(PROJECT_ROOT / "ETHFALCON" / "python-ref" / "myenv" / "bin" / "python3")
+    sign_cli = str(project_root / "ETHFALCON" / "python-ref" / "sign_cli.py")
+    privkey_path = str(project_root / "test" / "test_keys" / actor_config["pq_private_key_file"])
+    venv_python = str(project_root / "ETHFALCON" / "python-ref" / "myenv" / "bin" / "python3")
     
     cmd = [
         venv_python, sign_cli, "sign",
@@ -1256,9 +1254,9 @@ class AdvancedVectorGenerator:
             tmp.flush()
             tmp_path = tmp.name
         
-        sign_cli = PROJECT_ROOT / "ETHFALCON/python-ref/sign_cli.py"
-        privkey_path = PROJECT_ROOT / "test/test_keys" / pq_private_key_file
-        venv_python = PROJECT_ROOT / "ETHFALCON/python-ref/myenv/bin/python3"
+        sign_cli = project_root / "ETHFALCON/python-ref/sign_cli.py"
+        privkey_path = project_root / "test/test_keys" / pq_private_key_file
+        venv_python = project_root / "ETHFALCON/python-ref/myenv/bin/python3"
 
         cmd = [
             str(venv_python), str(sign_cli), "sign",
@@ -1427,7 +1425,7 @@ def main():
         # Save individual vector files
         for vector_type, vector_data in vectors.items():
             if vector_data:
-                output_file = OUTPUT_DIR_ADVANCED / f"{scenario['name']}_{vector_type}_vectors.json"
+                output_file = output_path / f"{scenario['name']}_{vector_type}_vectors.json"
                 # If vector_data is a list, apply bytes_to_hex to each element
                 if isinstance(vector_data, list):
                     vector_data_hex = [bytes_to_hex(v) for v in vector_data]
@@ -1441,7 +1439,7 @@ def main():
                 print(f"Saved {vector_type} vectors to: {output_file}")
         
         # Save combined scenario file
-        combined_file = OUTPUT_DIR_ADVANCED / f"{scenario['name']}_vectors.json"
+        combined_file = output_path / f"{scenario['name']}_vectors.json"
         vectors_hex = {k: ([bytes_to_hex(v) for v in vlist] if isinstance(vlist, list) else bytes_to_hex(vlist)) for k, vlist in vectors.items()}
         if find_bytes(vectors_hex):
             print(f"ERROR: Still found bytes in {combined_file}")
@@ -1455,7 +1453,7 @@ def main():
     bob_confirmation_vector_hex = bytes_to_hex(bob_confirmation_vector)
     if find_bytes(bob_confirmation_vector_hex):
         print("ERROR: Still found bytes in pq_registration_eth_removal_retry_vector.json")
-    output_file = OUTPUT_DIR / "pq_registration_eth_removal_retry_vector.json"
+    output_file = output_path / "pq_registration_eth_removal_retry_vector.json"
     with open(output_file, 'w') as f:
         json.dump({"pq_registration_eth_removal_retry_vector": [bob_confirmation_vector_hex]}, f, indent=2)
     print(f"Saved pq_registration_eth_removal_retry_vector to: {output_file}")

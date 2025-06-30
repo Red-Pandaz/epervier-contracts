@@ -17,7 +17,7 @@ import binascii
 from eth_utils import keccak
 
 # Add the project root to the Python path
-project_root = Path(__file__).resolve().parents[3]  # epervier-registry
+project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.insert(0, str(project_root))
 
 # Add ETHFALCON to the path for imports
@@ -148,7 +148,7 @@ def main():
         vectors = generate_pq_removal_vectors()
         
         # Save to JSON file
-        output_file = project_root / "test" / "test_vectors" / "registration_pq_removal_vectors.json"
+        output_file = project_root / "test/test_vectors/register/registration_pq_removal_vectors.json"
         with open(output_file, 'w') as f:
             json.dump({"registration_pq_removal": vectors}, f, indent=2)
         

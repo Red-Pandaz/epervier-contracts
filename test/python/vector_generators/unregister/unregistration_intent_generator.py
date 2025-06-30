@@ -8,9 +8,9 @@ import hashlib
 print("Script loaded successfully!")
 
 # Get the project root directory
-PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
-ACTORS_CONFIG_PATH = PROJECT_ROOT / "test/test_keys/actors_config.json"
-OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/unregistration_intent_vectors.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
+ACTORS_CONFIG_PATH = PROJECT_ROOT / "test" / "test_keys" / "actors_config.json"
+OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/unregister/unregistration_intent_vectors.json"
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
 # Helper to convert int to bytes32

@@ -8,18 +8,22 @@ from pathlib import Path
 from eth_utils import keccak
 
 # Add the project root to the Python path
-project_root = Path(__file__).parent.parent.parent.parent
+project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.insert(0, str(project_root))
 
 # Add ETHFALCON to the path for imports
 sys.path.insert(0, str(project_root / "ETHFALCON" / "python-ref"))
 
+print(f"DEBUG: project_root = {project_root}")
+print(f"DEBUG: falcon path = {project_root / 'ETHFALCON' / 'python-ref'}")
+print(f"DEBUG: falcon.py exists = {(project_root / 'ETHFALCON' / 'python-ref' / 'falcon.py').exists()}")
+print(f"DEBUG: sys.path[0] = {sys.path[0]}")
+
 # Constants and functions from registration_intent_generator
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 ACTORS_CONFIG_PATH = project_root / "test" / "test_keys" / "actors_config.json"
 
-# Import constants from falcon module
-from falcon import HEAD_LEN, SALT_LEN
+OUTPUT_PATH = project_root / "test/test_vectors/register/registration_confirmation_vectors.json"
 
 def get_actor_config():
     """Load the actors config JSON."""
@@ -51,7 +55,7 @@ def generate_registration_confirmation_vector(actor_name):
     print(f"Generating registration confirmation vector for {actor_name}...")
     
     # Load existing registration intent vectors to get the ETH message and signature
-    intent_file = project_root / "test" / "test_vectors" / "registration_intent_vectors.json"
+    intent_file = project_root / "test" / "test_vectors" / "register" / "registration_intent_vectors.json"
     with open(intent_file, 'r') as f:
         intent_data = json.load(f)
     
@@ -216,14 +220,13 @@ def main():
             print(f"✗ Error generating confirmation vector for {actor_name}: {e}")
     
     # Write confirmation vectors to the correct file
-    confirmation_file = project_root / "test" / "test_vectors" / "registration_confirmation_vectors.json"
     confirmation_data = {"registration_confirmation": confirmation_vectors}
     
-    with open(confirmation_file, 'w') as f:
+    with open(OUTPUT_PATH, 'w') as f:
         json.dump(confirmation_data, f, indent=2)
     
     print(f"\nGenerated {len(confirmation_vectors)} registration confirmation vectors")
-    print(f"Updated {confirmation_file}")
+    print(f"Updated {OUTPUT_PATH}")
 
 if __name__ == "__main__":
     main() 

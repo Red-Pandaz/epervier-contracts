@@ -25,6 +25,8 @@ import argparse
 PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
 VECTOR_GENERATORS_DIR = PROJECT_ROOT / "test/python/vector_generators"
 TEST_VECTORS_DIR = PROJECT_ROOT / "test/test_vectors"
+# Use the virtual environment Python for running generators
+VENV_PYTHON = PROJECT_ROOT / "ETHFALCON/python-ref/myenv/bin/python3"
 
 # Define all vector generators in dependency order
 VECTOR_GENERATORS = [
@@ -59,7 +61,7 @@ VECTOR_GENERATORS = [
         "description": "PQ-controlled change ETH address intent messages"
     },
     {
-"name": "Change ETH Address Confirmation",
+        "name": "Change ETH Address Confirmation",
         "script": "change_eth/change_eth_address_confirmation_generator.py",
         "output": "change_eth/change_eth_address_confirmation_vectors.json",
         "description": "ETH-controlled change ETH address confirmation messages"
@@ -90,13 +92,13 @@ VECTOR_GENERATORS = [
     },
     {
         "name": "Unregistration Removal",
-        "script": "unregister/unregistration_intent_pq_removal_generator.py",
+        "script": "unregister/unregistration_flow_with_revocation_generator.py",
         "output": "unregister/unregistration_removal_vectors.json",
         "description": "PQ-controlled unregistration intent removal"
     },
     {
         "name": "Advanced Testing",
-        "script": "advanced_vector_generator.py",
+        "script": "advanced/consolidated_advanced_vector_generator.py",
         "output": "advanced",
         "description": "Advanced test scenario vectors for complex flows"
     }
@@ -174,7 +176,7 @@ def run_generator(generator: Dict[str, str], force: bool = False, actors_only: b
     
     # Run the generator
     try:
-        cmd = [sys.executable, str(script_path)]
+        cmd = [str(VENV_PYTHON), str(script_path)]
         if actors_only:
             cmd.extend(["--actors-only"])
         

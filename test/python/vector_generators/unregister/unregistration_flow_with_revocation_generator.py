@@ -13,7 +13,7 @@ import os
 import traceback
 
 # Add the project root to the path
-project_root = Path(__file__).parent.parent.parent.parent  # epervier-registry
+project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.append(str(project_root))
 
 DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
@@ -258,7 +258,7 @@ def main():
             "unregistration_flow_with_revocation": formatted_vectors
         }
         
-        output_file = "test/test_vectors/advanced/unregistration_flow_with_revocation_vectors.json"
+        output_file = "test/test_vectors/unregister/unregistration_flow_with_revocation_vectors.json"
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
         with open(output_file, 'w') as f:

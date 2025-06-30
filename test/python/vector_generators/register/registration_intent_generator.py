@@ -9,9 +9,12 @@ print("Script loaded successfully!")
 # TODO: import cryptography and web3/eth_account utilities as needed
 
 # Get the project root directory
-PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
-ACTORS_CONFIG_PATH = PROJECT_ROOT / "test/test_keys/actors_config.json"
-OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/registration_intent_vectors.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
+ACTORS_CONFIG_PATH = PROJECT_ROOT / "test" / "test_keys" / "actors_config.json"
+print(f"DEBUG: PROJECT_ROOT = {PROJECT_ROOT}")
+print(f"DEBUG: ACTORS_CONFIG_PATH = {ACTORS_CONFIG_PATH}")
+print(f"DEBUG: File exists: {ACTORS_CONFIG_PATH.exists()}")
+OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/register/registration_intent_vectors.json"
 DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
 # Helper to convert int to bytes32
@@ -42,7 +45,7 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
         tmp.flush()
         tmp_path = tmp.name
     # Find the project root (assuming this script is at test/python/vector_generators/)
-    project_root = Path(__file__).resolve().parents[3]  # epervier-registry
+    project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 
     sign_cli = project_root / "ETHFALCON/python-ref/sign_cli.py"
     privkey_path = project_root / "test/test_keys" / pq_private_key_file
