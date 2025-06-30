@@ -781,6 +781,14 @@ library MessageParser {
                 nonceBytes[j] = message[message.length - 32 + j];
             }
             return abi.decode(nonceBytes, (uint256));
+        } else if (messageType == 2) {
+            // Unregistration confirmation message: ETH nonce is the last 32 bytes
+            require(message.length >= 32, "Message too short for ETH nonce");
+            bytes memory nonceBytes = new bytes(32);
+            for (uint j = 0; j < 32; j++) {
+                nonceBytes[j] = message[message.length - 32 + j];
+            }
+            return abi.decode(nonceBytes, (uint256));
         } else {
             revert("Invalid message type");
         }
