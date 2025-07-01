@@ -11,10 +11,10 @@ from eth_hash.auto import keccak
 
 # Add the project root to the path
 project_root = Path(__file__).resolve().parents[4]
-sys.path.insert(0, str(project_root / "ETHFALCON" / "python-ref"))
+sys.path.insert(0, str(project_root / "test" / "python"))
 
-# Domain separator (same as in the contract)
-DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
+from eip712_helpers import get_remove_change_intent_struct_hash, get_domain_separator, sign_eip712_message
+from eip712_config import DOMAIN_SEPARATOR
 
 def get_actor_config():
     """Load actor configuration from JSON file"""
@@ -23,32 +23,55 @@ def get_actor_config():
         config = json.load(f)
         return config["actors"]
 
-def create_eth_cancel_change_eth_address_message(domain_separator, pq_fingerprint, eth_nonce):
+def create_eth_cancel_change_eth_address_message(pq_fingerprint, eth_nonce):
     """
     Create ETH message for canceling change ETH address intent
-    Format: DOMAIN_SEPARATOR + "Remove change intent from Epervier Fingerprint " + pqFingerprint + ethNonce
-    This is signed by the ETH key
+    Format: "Remove change intent from Epervier Fingerprint " + pqFingerprint + ethNonce
+    This is just for parsing, not for signing
     """
     pattern = b"Remove change intent from Epervier Fingerprint "
+    
+    # DEBUG: Check pq_fingerprint length
+    pq_bytes = bytes.fromhex(pq_fingerprint[2:])  # Remove "0x" prefix
+    print(f"DEBUG: pq_fingerprint: {pq_fingerprint}")
+    print(f"DEBUG: pq_fingerprint length: {len(pq_bytes)} bytes")
+    print(f"DEBUG: pq_fingerprint hex: {pq_bytes.hex()}")
+    
     message = (
-        domain_separator +
         pattern +
-        bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
+        pq_bytes +
         eth_nonce.to_bytes(32, "big")
     )
     return message
 
-def sign_eth_message(message_bytes, private_key):
-    """Sign a message with ETH private key (Ethereum Signed Message)"""
-    prefix = b"\x19Ethereum Signed Message:\n" + str(len(message_bytes)).encode()
-    eth_signed_message = prefix + message_bytes
-    eth_signed_message_hash = keccak(eth_signed_message)
-    account = Account.from_key(private_key)
-    sig = Account._sign_hash(eth_signed_message_hash, private_key=account.key)
+def sign_eth_message_eip712(eth_nonce, private_key):
+    """Sign a message with ETH private key using EIP-712 standards"""
+    # Get the struct hash for RemoveChangeIntent
+    struct_hash = get_remove_change_intent_struct_hash(eth_nonce)
+    
+    # Get the domain separator (use the hardcoded one from config)
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    
+    # Create the EIP-712 digest
+    digest = keccak(b'\x19\x01' + domain_separator + struct_hash)
+    
+    # Sign the digest
+    signature = sign_eip712_message(digest, private_key)
+    
+    # DEBUG: Print all the values for debugging
+    print(f"DEBUG: eth_nonce: {eth_nonce}")
+    print(f"DEBUG: struct_hash: {struct_hash.hex()}")
+    print(f"DEBUG: domain_separator: {domain_separator.hex()}")
+    print(f"DEBUG: digest: {digest.hex()}")
+    print(f"DEBUG: signature v: {signature['v']}")
+    print(f"DEBUG: signature r: {hex(signature['r'])}")
+    print(f"DEBUG: signature s: {hex(signature['s'])}")
+    
+    # Convert r and s to hex strings to match expected format
     return {
-        "v": sig.v,
-        "r": hex(sig.r),
-        "s": hex(sig.s)
+        "v": signature["v"],
+        "r": hex(signature["r"]),
+        "s": hex(signature["s"])
     }
 
 def generate_eth_cancel_change_eth_address_intent_vectors():
@@ -75,9 +98,11 @@ def generate_eth_cancel_change_eth_address_intent_vectors():
         pq_nonce = 3  # PQ nonce for cancel operation
         eth_nonce = 1  # ETH nonce for cancel operation (Bob's nonce)
 
-        # Create the ETH cancel message and sign it with ETH key
-        eth_message = create_eth_cancel_change_eth_address_message(DOMAIN_SEPARATOR, pq_fingerprint, eth_nonce)
-        eth_signature = sign_eth_message(eth_message, eth_private_key)
+        # Create the ETH cancel message for parsing (not for signing)
+        eth_message = create_eth_cancel_change_eth_address_message(pq_fingerprint, eth_nonce)
+        
+        # Sign using EIP-712 standards
+        eth_signature = sign_eth_message_eip712(eth_nonce, eth_private_key)
         
         if eth_signature is None:
             print(f"Failed to generate ETH signature for {current_actor_name} -> {next_actor_name}")

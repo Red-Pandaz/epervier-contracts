@@ -298,20 +298,27 @@ def get_unregistration_confirmation_struct_hash(pq_fingerprint: str, eth_nonce: 
     return keccak256(struct_data)
 
 def get_remove_change_intent_struct_hash(eth_nonce: int) -> bytes:
-    """Compute the struct hash for RemoveChangeIntent"""
-    struct_data = encode_structured_data({
-        "types": {
-            "RemoveChangeIntent": [
-                {"name": "ethNonce", "type": "uint256"}
-            ]
-        },
-        "primaryType": "RemoveChangeIntent",
-        "message": {
-            "ethNonce": eth_nonce
-        }
-    })
+    """
+    Compute the struct hash for RemoveChangeIntent(uint256 ethNonce)
+    Using abi.encode like the contract implementation
+    """
+    from eth_utils import keccak
+    from eth_abi import encode
     
-    return keccak256(struct_data)
+    type_hash = bytes.fromhex(REMOVE_CHANGE_INTENT_TYPE_HASH[2:])
+    
+    print(f"DEBUG: type_hash: {type_hash.hex()}")
+    print(f"DEBUG: eth_nonce: {eth_nonce}")
+    
+    # Use abi.encode like the contract: abi.encode(REMOVE_CHANGE_INTENT_TYPE_HASH, ethNonce)
+    encoded_data = encode(['bytes32', 'uint256'], [type_hash, eth_nonce])
+    
+    print(f"DEBUG: encoded_data: {encoded_data.hex()}")
+    
+    struct_hash = keccak(encoded_data)
+    print(f"DEBUG: struct_hash: {struct_hash.hex()}")
+    
+    return struct_hash
 
 def sign_eip712_message(digest: bytes, private_key: str) -> dict:
     """
@@ -332,4 +339,43 @@ def sign_eip712_message(digest: bytes, private_key: str) -> dict:
         "v": sig.v,
         "r": sig.r,
         "s": sig.s
-    } 
+    }
+
+def get_dynamic_domain_separator(contract_address: str) -> bytes:
+    """
+    Compute the domain separator dynamically like the contract does
+    This matches the contract's constructor logic
+    """
+    from eth_utils import keccak
+    
+    # EIP-712 domain separator computation
+    # keccak256(abi.encode(
+    #     keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+    #     keccak256(bytes(DOMAIN_NAME)),
+    #     keccak256(bytes(DOMAIN_VERSION)),
+    #     11155420, // Optimism Sepolia chain ID
+    #     address(this)
+    # ))
+    
+    # EIP-712 domain type hash
+    domain_type_hash = keccak(b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
+    
+    # Domain name and version
+    domain_name_hash = keccak(b"PQRegistry")
+    domain_version_hash = keccak(b"1")
+    
+    # Chain ID (Optimism Sepolia)
+    chain_id = 11155420
+    
+    # Contract address (remove 0x prefix and convert to bytes)
+    contract_address_bytes = bytes.fromhex(contract_address[2:])
+    
+    # Encode the domain separator
+    from eth_abi import encode
+    encoded_domain = encode(
+        ['bytes32', 'bytes32', 'bytes32', 'uint256', 'address'],
+        [domain_type_hash, domain_name_hash, domain_version_hash, chain_id, contract_address_bytes]
+    )
+    
+    domain_separator = keccak(encoded_domain)
+    return domain_separator 

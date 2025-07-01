@@ -40,7 +40,7 @@ contract PQRegistryAdvancedTests is Test {
         mockConsole = new MockConsole();
         
         // Deploy the registry with real verifier
-        registry = new PQRegistry(address(epervierVerifier), address(mockConsole));
+        registry = new PQRegistry(address(epervierVerifier));
     }
     
     /**

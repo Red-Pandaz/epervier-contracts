@@ -42,8 +42,7 @@ contract PQRegistryUnregistrationTest is Test {
         MockConsole mockConsole = new MockConsole();
         
         registry = new PQRegistry(
-            address(epervierVerifier),
-            address(mockConsole)
+            address(epervierVerifier)
         );
         
         // Load actor data from centralized config
@@ -361,8 +360,7 @@ contract PQRegistryUnregistrationTest is Test {
             MockConsole mockConsole = new MockConsole();
             
             registry = new PQRegistry(
-                address(epervierVerifier),
-                address(mockConsole)
+                address(epervierVerifier)
             );
             
             // First register the actor

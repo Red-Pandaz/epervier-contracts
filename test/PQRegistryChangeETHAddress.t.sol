@@ -46,9 +46,11 @@ contract PQRegistryChangeETHAddressTest is Test {
         MockConsole mockConsole = new MockConsole();
         
         registry = new PQRegistry(
-            address(epervierVerifier),
-            address(mockConsole)
+            address(epervierVerifier)
         );
+        
+        // DEBUG: Print the contract address
+        console.log("DEBUG: Contract address:", address(registry));
         
         // Load actor data from centralized config
         loadActorsConfig();
@@ -279,10 +281,78 @@ contract PQRegistryChangeETHAddressTest is Test {
     // CANCEL CHANGE ETH ADDRESS INTENT TESTS
     // ============================================================================
 
-    function testCancelChangeETHAddressIntent_AllActors_Success() public {
+    function testCancelChangeETHAddressIntentByPQ_AllActors_Success() public {
         // Load intent and cancel vectors
         string memory intentJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_intent_vectors.json");
         string memory cancelPQJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_cancel_pq_vectors.json");
+
+        for (uint i = 0; i < actorNames.length; i++) {
+            // Reset state for each iteration
+            setUp();
+
+            string memory currentActor = actorNames[i];
+            string memory nextActor = actorNames[(i + 1) % actorNames.length];
+            Actor memory currentActorData = getActor(currentActor);
+            Actor memory nextActorData = getActor(nextActor);
+
+            // Step 1: Register current actor
+            registerActor(currentActor, i);
+
+            // Step 2: Submit change ETH address intent
+            string memory intentVectorPath = string.concat(".change_eth_address_intent[", vm.toString(i), "]");
+            bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".pq_message")));
+            bytes memory salt = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".pq_signature.salt")));
+            uint256 hint = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".pq_signature.hint")));
+            string memory cs1Path = string.concat(intentVectorPath, ".pq_signature.cs1");
+            uint256[] memory cs1 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cs1[j] = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(cs1Path, "[", vm.toString(j), "]")));
+            }
+            string memory cs2Path = string.concat(intentVectorPath, ".pq_signature.cs2");
+            uint256[] memory cs2 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cs2[j] = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(cs2Path, "[", vm.toString(j), "]")));
+            }
+            
+            registry.submitChangeETHAddressIntent(pqMessage, salt, cs1, cs2, hint);
+
+            // Verify intent was created
+            (address newETHAddress, , uint256 changeTimestamp, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
+            assertEq(newETHAddress, nextActorData.ethAddress, string.concat("Change intent should map ", currentActor, "'s PQ fingerprint to ", nextActor, "'s ETH address"));
+
+            // Step 3: Cancel the intent using PQ signature
+            string memory cancelPQVectorPath = string.concat(".change_eth_address_cancel_pq[", vm.toString(i), "]");
+            bytes memory pqCancelMessage = vm.parseBytes(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_message")));
+            bytes memory cancelSalt = vm.parseBytes(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_signature.salt")));
+            uint256 cancelHint = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_signature.hint")));
+            string memory cancelCs1Path = string.concat(cancelPQVectorPath, ".pq_signature.cs1");
+            uint256[] memory cancelCs1 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cancelCs1[j] = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelCs1Path, "[", vm.toString(j), "]")));
+            }
+            string memory cancelCs2Path = string.concat(cancelPQVectorPath, ".pq_signature.cs2");
+            uint256[] memory cancelCs2 = new uint256[](32);
+            for (uint j = 0; j < 32; j++) {
+                cancelCs2[j] = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelCs2Path, "[", vm.toString(j), "]")));
+            }
+            
+            registry.removeChangeETHAddressIntentByPQ(pqCancelMessage, cancelSalt, cancelCs1, cancelCs2, cancelHint);
+
+            // Verify the intent is cleared after PQ cancel
+            (address clearedNewETHAddress, , uint256 clearedChangeTimestamp, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
+            assertEq(clearedNewETHAddress, address(0), string.concat("Change intent should be cleared after PQ cancel for ", currentActor));
+            assertEq(clearedChangeTimestamp, 0, string.concat("Change intent timestamp should be cleared after PQ cancel for ", currentActor));
+
+            // Verify PQ nonce is incremented
+            assertEq(registry.pqKeyNonces(currentActorData.pqFingerprint), 4, string.concat("PQ nonce should increment to 4 after PQ cancel for ", currentActor));
+
+            console.log("Intent created and cancelled by PQ for", currentActor);
+        }
+    }
+
+    function testCancelChangeETHAddressIntentByETH_AllActors_Success() public {
+        // Load intent and cancel vectors
+        string memory intentJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_intent_vectors.json");
         string memory cancelETHJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_cancel_eth_vectors.json");
 
         for (uint i = 0; i < actorNames.length; i++) {
@@ -312,46 +382,14 @@ contract PQRegistryChangeETHAddressTest is Test {
             for (uint j = 0; j < 32; j++) {
                 cs2[j] = vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(cs2Path, "[", vm.toString(j), "]")));
             }
-            // Log the struct encoding for the test
-            logChangeETHAddressIntentStructHash(nextActorData.ethAddress, 0);
+            
             registry.submitChangeETHAddressIntent(pqMessage, salt, cs1, cs2, hint);
 
             // Verify intent was created
             (address newETHAddress, , uint256 changeTimestamp, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
             assertEq(newETHAddress, nextActorData.ethAddress, string.concat("Change intent should map ", currentActor, "'s PQ fingerprint to ", nextActor, "'s ETH address"));
 
-            // Step 3a: Cancel the intent using PQ signature
-            string memory cancelPQVectorPath = string.concat(".change_eth_address_cancel_pq[", vm.toString(i), "]");
-            bytes memory pqCancelMessage = vm.parseBytes(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_message")));
-            bytes memory cancelSalt = vm.parseBytes(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_signature.salt")));
-            uint256 cancelHint = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelPQVectorPath, ".pq_signature.hint")));
-            string memory cancelCs1Path = string.concat(cancelPQVectorPath, ".pq_signature.cs1");
-            uint256[] memory cancelCs1 = new uint256[](32);
-            for (uint j = 0; j < 32; j++) {
-                cancelCs1[j] = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelCs1Path, "[", vm.toString(j), "]")));
-            }
-            string memory cancelCs2Path = string.concat(cancelPQVectorPath, ".pq_signature.cs2");
-            uint256[] memory cancelCs2 = new uint256[](32);
-            for (uint j = 0; j < 32; j++) {
-                cancelCs2[j] = vm.parseUint(vm.parseJsonString(cancelPQJsonData, string.concat(cancelCs2Path, "[", vm.toString(j), "]")));
-            }
-            
-            // Debug: Log current PQ nonce before cancel
-            console.log("Current PQ nonce before cancel:", registry.pqKeyNonces(currentActorData.pqFingerprint));
-            console.log("PQ cancel message length:", pqCancelMessage.length);
-            
-            registry.removeChangeETHAddressIntentByPQ(pqCancelMessage, cancelSalt, cancelCs1, cancelCs2, cancelHint);
-
-            // Verify the intent is cleared after PQ cancel
-            (address clearedNewETHAddress, , uint256 clearedChangeTimestamp, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
-            assertEq(clearedNewETHAddress, address(0), string.concat("Change intent should be cleared after PQ cancel for ", currentActor));
-            assertEq(clearedChangeTimestamp, 0, string.concat("Change intent timestamp should be cleared after PQ cancel for ", currentActor));
-
-            // Verify PQ nonce is incremented
-            console.log("PQ nonce after cancel:", registry.pqKeyNonces(currentActorData.pqFingerprint));
-            assertEq(registry.pqKeyNonces(currentActorData.pqFingerprint), 4, string.concat("PQ nonce should increment to 4 after PQ cancel for ", currentActor));
-
-            // Step 3b: Cancel using ETH signature (without submitting another intent first)
+            // Step 3: Cancel the intent using ETH signature
             string memory cancelETHVectorPath = string.concat(".change_eth_address_cancel_eth[", vm.toString(i), "]");
             bytes memory ethCancelMessage = vm.parseBytes(vm.parseJsonString(cancelETHJsonData, string.concat(cancelETHVectorPath, ".eth_message")));
             uint8 vCancel = uint8(vm.parseUint(vm.parseJsonString(cancelETHJsonData, string.concat(cancelETHVectorPath, ".eth_signature.v"))));
@@ -360,11 +398,15 @@ contract PQRegistryChangeETHAddressTest is Test {
             bytes32 rCancel = bytes32(rCancelDecimal);
             bytes32 sCancel = bytes32(sCancelDecimal);
             
-            // This should revert since there's no pending intent to cancel
-            vm.expectRevert("No pending change intent found for PQ fingerprint");
+            // This should succeed and remove the pending intent
             registry.removeChangeETHAddressIntentByETH(ethCancelMessage, vCancel, rCancel, sCancel);
 
-            console.log("Intent created and cancelled by PQ for", currentActor);
+            // Verify the intent is cleared after ETH cancel
+            (address clearedNewETHAddress, , uint256 clearedChangeTimestamp, ) = registry.changeETHAddressIntents(currentActorData.pqFingerprint);
+            assertEq(clearedNewETHAddress, address(0), string.concat("Change intent should be cleared after ETH cancel for ", currentActor));
+            assertEq(clearedChangeTimestamp, 0, string.concat("Change intent timestamp should be cleared after ETH cancel for ", currentActor));
+
+            console.log("Intent created and cancelled by ETH for", currentActor);
         }
     }
 

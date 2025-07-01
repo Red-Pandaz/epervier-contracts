@@ -12,11 +12,7 @@ interface IEpervierVerifier {
     function recover(bytes memory, bytes memory, uint256[] memory, uint256[] memory, uint256) external returns (address);
 }
 
-interface IConsole {
-    function log(string memory) external;
-    function log(string memory, uint256) external;
-    function log(string memory, address) external;
-}
+
 
 contract PQRegistry {
     using ECDSA for bytes32;
@@ -77,7 +73,6 @@ contract PQRegistry {
     
     // --- External dependencies (mocked as interfaces for this extraction) ---
     IEpervierVerifier public epervierVerifier;
-    IConsole public console;
     
     // EIP-712 Domain Separator - Hardcoded for consistency with test vectors
     string public constant DOMAIN_NAME = "PQRegistry";
@@ -95,14 +90,11 @@ contract PQRegistry {
     bytes32 public constant REMOVE_CHANGE_INTENT_TYPE_HASH = keccak256("RemoveChangeIntent(uint256 ethNonce)");
     
     constructor(
-        address _epervierVerifier,
-        address _console
+        address _epervierVerifier
     ) {
         require(_epervierVerifier != address(0), "Epervier verifier cannot be zero address");
-        require(_console != address(0), "Console cannot be zero address");
         
         epervierVerifier = IEpervierVerifier(_epervierVerifier);
-        console = IConsole(_console);
     }
     
     /**
@@ -416,16 +408,34 @@ contract PQRegistry {
         bytes32 structHash = SignatureExtractor.getRemoveChangeIntentStructHash(ethNonce);
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
+        // DEBUG: Print the values for comparison with Python
+        console.log("DEBUG: Contract type hash (bytes32):");
+        console.logBytes32(REMOVE_CHANGE_INTENT_TYPE_HASH);
+        console.log("DEBUG: Contract structHash:", uint256(structHash));
+        console.log("DEBUG: Contract DOMAIN_SEPARATOR (uint256):", uint256(DOMAIN_SEPARATOR));
+        console.log("DEBUG: Contract DOMAIN_SEPARATOR (bytes32):");
+        console.logBytes32(DOMAIN_SEPARATOR);
+        console.log("DEBUG: Contract hardcoded DOMAIN_SEPARATOR value (uint256):", uint256(0x07668882b5c3598c149b213b1c16ab1dd94b45bc4837b468e006b97caef5df92));
+        console.log("DEBUG: Contract digest (uint256):", uint256(digest));
+        console.log("DEBUG: Contract digest (bytes32):");
+        console.logBytes32(digest);
+        console.log("DEBUG: Contract digest (hex):");
+        console.log("0x", uint256(digest));
+        console.log("DEBUG: ACTUAL DOMAIN_SEPARATOR (bytes32):");
+        console.logBytes32(DOMAIN_SEPARATOR);
+        
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
-        
+
+        // DEBUG: Log recoveredETHAddress and pqFingerprint
+        console.log("DEBUG: recoveredETHAddress:", recoveredETHAddress);
+        console.log("DEBUG: pqFingerprint:", pqFingerprint);
+
         // STEP 3: State validation
         ChangeETHAddressIntent storage intent = changeETHAddressIntents[pqFingerprint];
         require(intent.timestamp != 0, "No pending change intent found for PQ fingerprint");
         require(ethAddressToChangeIntentFingerprint[recoveredETHAddress] == pqFingerprint, "ETH Address not registered to PQ fingerprint");
         require(intent.newETHAddress == recoveredETHAddress, "ETH Address not the new address in change intent");
-        
-        // DEBUG: Print addresses for debugging
         
         // STEP 4: Comprehensive conflict prevention check
         require(changeETHAddressIntents[pqFingerprint].timestamp != 0, "PQ fingerprint does not have pending change intent");
