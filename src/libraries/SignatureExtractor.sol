@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "forge-std/console.sol";
+
 /**
  * @title SignatureExtractor
  * @dev Library for extracting signatures and components from messages
@@ -431,7 +433,7 @@ library SignatureExtractor {
         uint256 ethNonce
     ) internal pure returns (bytes32) {
         return keccak256(
-            abi.encode(
+            abi.encodePacked(
                 CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH,
                 newETHAddress,
                 ethNonce

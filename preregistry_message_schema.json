@@ -89,7 +89,7 @@
       {"name": "s", "type": "bytes32", "length": 32, "description": "ETH signature s component"},
       {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
     ],
-    "total_length": 344
+    "total_length": 353
   },
   "BasePQChangeETHAddressConfirmMessage": {
     "description": "Base PQ message structure for change ETH Address confirmation.",

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "forge-std/console.sol";
+
 /**
  * @title MessageParser
  * @dev Library for parsing various message types in the PQRegistry
@@ -20,13 +22,13 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (27) = 59
-        fieldOffsets[0] = 59;
+        // ethAddress: starts after pattern (27) = 27
+        fieldOffsets[0] = 27;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // pqNonce: starts after ethAddress = 59 + 20 = 79
-        fieldOffsets[1] = 79;
+        // pqNonce: starts after ethAddress = 27 + 20 = 47
+        fieldOffsets[1] = 47;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
@@ -281,7 +283,7 @@ library MessageParser {
     
     /**
      * @dev Parse a BaseETHChangeETHAddressIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+     * Expected format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
      */
     function parseBaseETHChangeETHAddressIntentMessage(bytes memory message) internal pure returns (
         address pqFingerprint,
@@ -289,45 +291,84 @@ library MessageParser {
         uint256 ethNonce
     ) {
         bytes memory pattern = "Intent to change ETH Address and bond with Epervier Fingerprint ";
-        uint256[] memory fieldOffsets = new uint256[](4);
-        uint256[] memory fieldLengths = new uint256[](4);
-        string[] memory fieldTypes = new string[](4);
         
-        // pqFingerprint: starts after pattern (64) = 64
-        fieldOffsets[0] = 64;
-        fieldLengths[0] = 20;
-        fieldTypes[0] = "address";
+        uint256 manualPatternIndex = type(uint256).max;
+        for (uint i = 0; i <= message.length - pattern.length; i++) {
+            bool found = true;
+            for (uint j = 0; j < pattern.length; j++) {
+                if (message[i + j] != pattern[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                manualPatternIndex = i;
+                break;
+            }
+        }
+        require(manualPatternIndex != type(uint256).max, "Pattern not found");
         
-        // " to " pattern: starts after pqFingerprint = 64 + 20 = 84, length = 4
-        fieldOffsets[1] = 84;
-        fieldLengths[1] = 4;
-        fieldTypes[1] = "string";
+        // Calculate field offsets relative to pattern start
+        uint256 pqFingerprintStart = manualPatternIndex + pattern.length;
+        uint256 pqFingerprintEnd = pqFingerprintStart + 20;
+        uint256 toPatternStart = pqFingerprintEnd;
+        uint256 toPatternEnd = toPatternStart + 4;
+        uint256 newEthAddressStart = toPatternEnd;
+        uint256 newEthAddressEnd = newEthAddressStart + 20;
+        uint256 ethNonceStart = newEthAddressEnd;
+        uint256 ethNonceEnd = ethNonceStart + 32;
         
-        // newEthAddress: starts after " to " = 84 + 4 = 88, length = 20
-        fieldOffsets[2] = 88;
-        fieldLengths[2] = 20;
-        fieldTypes[2] = "address";
+        require(ethNonceEnd <= message.length, "Message too short for ethNonce");
         
-        // ethNonce: starts after newEthAddress = 88 + 20 = 108, length = 32
-        fieldOffsets[3] = 108;
-        fieldLengths[3] = 32;
-        fieldTypes[3] = "uint256";
-        
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 64, fieldOffsets, fieldLengths, fieldTypes, false);
-        
-        // Convert the extracted bytes to addresses manually to ensure correct byte order
+        // Extract pqFingerprint
+        bytes memory pqFingerprintBytes = new bytes(20);
+        for (uint i = 0; i < 20; i++) {
+            pqFingerprintBytes[i] = message[pqFingerprintStart + i];
+        }
         uint256 addr1 = 0;
         for (uint j = 0; j < 20; j++) {
-            addr1 = (addr1 << 8) | uint8(parsedFields[0][j]);
+            addr1 = (addr1 << 8) | uint8(pqFingerprintBytes[j]);
         }
         pqFingerprint = address(uint160(addr1));
         
+        // Extract newEthAddress
+        bytes memory newEthAddressBytes = new bytes(20);
+        for (uint i = 0; i < 20; i++) {
+            newEthAddressBytes[i] = message[newEthAddressStart + i];
+        }
         uint256 addr2 = 0;
         for (uint j = 0; j < 20; j++) {
-            addr2 = (addr2 << 8) | uint8(parsedFields[2][j]);
+            addr2 = (addr2 << 8) | uint8(newEthAddressBytes[j]);
         }
         newEthAddress = address(uint160(addr2));
-        ethNonce = uint256(bytes32(parsedFields[3]));
+        
+        // Debug logging
+        console.log("DEBUG: Pattern found at index:", manualPatternIndex);
+        console.log("DEBUG: Pattern length:", pattern.length);
+        console.log("DEBUG: pqFingerprintStart:", pqFingerprintStart);
+        console.log("DEBUG: pqFingerprintEnd:", pqFingerprintEnd);
+        console.log("DEBUG: toPatternStart:", toPatternStart);
+        console.log("DEBUG: toPatternEnd:", toPatternEnd);
+        console.log("DEBUG: newEthAddressStart:", newEthAddressStart);
+        console.log("DEBUG: newEthAddressEnd:", newEthAddressEnd);
+        
+        // Print the actual bytes being read
+        console.log("DEBUG: Message length:", message.length);
+        console.log("DEBUG: Bytes at newEthAddressStart:");
+        for (uint i = 0; i < 20; i++) {
+            console.log("DEBUG: Byte", i, ":", uint8(message[newEthAddressStart + i]));
+        }
+        
+        console.log("DEBUG: newEthAddressBytes (hex):", uint256(uint160(newEthAddress)));
+        console.log("DEBUG: Expected Bob's address:", uint256(uint160(0x70997970C51812dc3A010C7d01b50e0d17dc79C8)));
+        console.log("DEBUG: Extracted newEthAddress:", uint256(uint160(newEthAddress)));
+        
+        // Extract ethNonce
+        bytes memory ethNonceBytes = new bytes(32);
+        for (uint i = 0; i < 32; i++) {
+            ethNonceBytes[i] = message[ethNonceStart + i];
+        }
+        ethNonce = uint256(bytes32(ethNonceBytes));
     }
     
     /**
@@ -363,23 +404,23 @@ library MessageParser {
         fieldLengths[2] = 20;
         fieldTypes[2] = "address";
         
-        // baseETHMessage: starts after newEthAddress = 64 + 20 = 84, length = 172
+        // baseETHMessage: starts after newEthAddress = 64 + 20 = 84, length = 140
         fieldOffsets[3] = 84;
-        fieldLengths[3] = 172;
+        fieldLengths[3] = 140;
         fieldTypes[3] = "bytes";
         
-        // v: starts after baseETHMessage = 84 + 172 = 256, length = 1
-        fieldOffsets[4] = 256;
+        // v: starts after baseETHMessage = 84 + 140 = 224, length = 1
+        fieldOffsets[4] = 224;
         fieldLengths[4] = 1;
         fieldTypes[4] = "uint8";
         
-        // r: starts after v = 256 + 1 = 257, length = 32
-        fieldOffsets[5] = 257;
+        // r: starts after v = 224 + 1 = 225, length = 32
+        fieldOffsets[5] = 225;
         fieldLengths[5] = 32;
         fieldTypes[5] = "bytes32";
         
-        // s: starts after r = 257 + 32 = 289, length = 32
-        fieldOffsets[6] = 289;
+        // s: starts after r = 225 + 32 = 257, length = 32
+        fieldOffsets[6] = 257;
         fieldLengths[6] = 32;
         fieldTypes[6] = "bytes32";
         
@@ -846,8 +887,8 @@ library MessageParser {
         for (uint256 i = 0; i < fieldOffsets.length; i++) {
             uint256 actualFieldStart;
             if (skipDomainSeparator) {
-                // For PQ messages: patternIndex + patternLength + (fieldOffsets[i] - (32 + patternLength))
-                actualFieldStart = patternIndex + patternLength + (fieldOffsets[i] - (32 + patternLength));
+                // For PQ messages: patternIndex + fieldOffsets[i] (fieldOffsets are relative to pattern start)
+                actualFieldStart = patternIndex + fieldOffsets[i];
             } else {
                 // For ETH messages: patternIndex + patternLength + (fieldOffsets[i] - patternLength)
                 actualFieldStart = patternIndex + patternLength + (fieldOffsets[i] - patternLength);

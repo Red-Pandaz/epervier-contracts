@@ -211,40 +211,57 @@ def get_remove_intent_struct_hash(pq_fingerprint: str, eth_nonce: int) -> bytes:
     return keccak(encoded)
 
 def get_change_eth_address_intent_struct_hash(new_eth_address: str, eth_nonce: int) -> bytes:
-    """Compute the struct hash for ChangeETHAddressIntent"""
-    struct_data = encode_structured_data({
-        "types": {
-            "ChangeETHAddressIntent": [
-                {"name": "newETHAddress", "type": "address"},
-                {"name": "ethNonce", "type": "uint256"}
-            ]
-        },
-        "primaryType": "ChangeETHAddressIntent",
-        "message": {
-            "newETHAddress": new_eth_address,
-            "ethNonce": eth_nonce
-        }
-    })
+    """
+    Compute the struct hash for ChangeETHAddressIntent(address newETHAddress,uint256 ethNonce)
+    Using keccak-packed encoding like the working registration generator
+    """
+    from eth_utils import keccak, to_checksum_address
     
-    return keccak256(struct_data)
+    type_hash = bytes.fromhex(CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH[2:])
+    
+    # Convert hex string to checksum address for proper encoding
+    new_eth_address_checksum = to_checksum_address(new_eth_address)
+    
+    print(f"DEBUG: type_hash: {type_hash.hex()}")
+    print(f"DEBUG: new_eth_address: {new_eth_address}")
+    print(f"DEBUG: new_eth_address_checksum: {new_eth_address_checksum}")
+    print(f"DEBUG: eth_nonce: {eth_nonce}")
+    
+    # Use keccak-packed encoding like the working registration generator
+    # For address: use 20 bytes (not padded to 32)
+    address_bytes = bytes.fromhex(new_eth_address_checksum[2:])  # Remove 0x prefix, 20 bytes
+    
+    # For uint256: convert to 32 bytes
+    nonce_bytes = eth_nonce.to_bytes(32, 'big')
+    
+    print(f"DEBUG: address_bytes (20 bytes): {address_bytes.hex()}")
+    print(f"DEBUG: nonce_bytes: {nonce_bytes.hex()}")
+    
+    # Use keccak-packed encoding: type_hash + address (20 bytes) + nonce (32 bytes)
+    packed = type_hash + address_bytes + nonce_bytes
+    print(f"DEBUG: packed: {packed.hex()}")
+    
+    struct_hash = keccak(packed)
+    print(f"DEBUG: PYTHON struct_hash: {struct_hash.hex()}")
+    
+    return struct_hash
 
 def get_change_eth_address_confirmation_struct_hash(old_eth_address: str, eth_nonce: int) -> bytes:
-    """Compute the struct hash for ChangeETHAddressConfirmation"""
-    struct_data = encode_structured_data({
-        "types": {
-            "ChangeETHAddressConfirmation": [
-                {"name": "oldETHAddress", "type": "address"},
-                {"name": "ethNonce", "type": "uint256"}
-            ]
-        },
-        "primaryType": "ChangeETHAddressConfirmation",
-        "message": {
-            "oldETHAddress": old_eth_address,
-            "ethNonce": eth_nonce
-        }
-    })
-    
-    return keccak256(struct_data)
+    """Compute the struct hash for ChangeETHAddressConfirmation(address oldETHAddress,uint256 ethNonce)"""
+    from eth_utils import keccak, to_checksum_address
+    from eth_abi import encode
+    type_hash = bytes.fromhex(CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH[2:])  # Remove '0x' prefix
+    old_eth_address_checksum = to_checksum_address(old_eth_address)
+    encoded = encode([
+        'bytes32',
+        'address',
+        'uint256'
+    ], [
+        type_hash,
+        old_eth_address_checksum,
+        eth_nonce
+    ])
+    return keccak(encoded)
 
 def get_unregistration_intent_struct_hash(eth_nonce: int) -> bytes:
     """Compute the struct hash for UnregistrationIntent"""
@@ -296,17 +313,23 @@ def get_remove_change_intent_struct_hash(eth_nonce: int) -> bytes:
     
     return keccak256(struct_data)
 
-def sign_eip712_message(private_key: str, domain_separator: bytes, struct_hash: bytes) -> Dict[str, Any]:
-    """Sign an EIP712 message"""
-    # Compute the EIP712 digest
-    digest = get_eip712_digest(domain_separator, struct_hash)
+def sign_eip712_message(digest: bytes, private_key: str) -> dict:
+    """
+    Sign an EIP-712 digest using the same pattern as the working registration intent generator
+    """
+    from eth_account import Account
     
-    # Sign the digest
-    signed_message = Account._sign_hash(digest, private_key)
+    # Convert private key from hex string to bytes
+    if private_key.startswith('0x'):
+        private_key = private_key[2:]
+    private_key_bytes = bytes.fromhex(private_key)
+    
+    # Sign the digest using the same pattern as registration intent
+    account = Account.from_key(private_key_bytes)
+    sig = Account._sign_hash(digest, private_key=account.key)
     
     return {
-        'v': signed_message.v,
-        'r': signed_message.r,
-        's': signed_message.s,
-        'signature': signed_message.signature.hex()
+        "v": sig.v,
+        "r": sig.r,
+        "s": sig.s
     } 

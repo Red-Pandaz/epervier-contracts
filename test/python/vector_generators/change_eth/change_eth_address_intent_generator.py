@@ -62,29 +62,60 @@ def create_base_eth_message(pq_fingerprint, new_eth_address, eth_nonce):
 def create_base_pq_message(old_eth_address, new_eth_address, base_eth_message, v, r, s, pq_nonce):
     """
     Create base PQ message for change ETH Address intent
-    Format: "Intent to change bound ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
-    This is signed by Alice (PQ key) (no domain separator in content)
+    Format: DOMAIN_SEPARATOR + "Intent to change bound ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
+    This matches the contract's parsePQChangeETHAddressIntentMessage function exactly
     """
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix, 32 bytes
     pattern = b"Intent to change bound ETH Address from "
-    message = (
-        pattern +
-        bytes.fromhex(old_eth_address[2:]) +  # Remove "0x" prefix
-        b" to " +
-        bytes.fromhex(new_eth_address[2:]) +  # Remove "0x" prefix
-        base_eth_message +
-        v.to_bytes(1, 'big') +
-        r.to_bytes(32, 'big') +
-        s.to_bytes(32, 'big') +
-        pq_nonce.to_bytes(32, 'big')
-    )
+    old_addr_bytes = bytes.fromhex(old_eth_address[2:])  # Remove "0x" prefix, 20 bytes
+    to_pattern = b" to "
+    new_addr_bytes = bytes.fromhex(new_eth_address[2:])  # Remove "0x" prefix, 20 bytes
+    
+    # Convert base_eth_message from hex string to bytes
+    if isinstance(base_eth_message, bytes):
+        base_eth_message_str = base_eth_message.hex()
+    else:
+        base_eth_message_str = base_eth_message
+
+    base_eth_message_bytes = bytes.fromhex(base_eth_message_str[2:] if base_eth_message_str.startswith('0x') else base_eth_message_str)
+    
+    # Pad or truncate base_eth_message_bytes to exactly 140 bytes
+    if len(base_eth_message_bytes) < 140:
+        base_eth_message_bytes = base_eth_message_bytes + b'\x00' * (140 - len(base_eth_message_bytes))
+    elif len(base_eth_message_bytes) > 140:
+        base_eth_message_bytes = base_eth_message_bytes[:140]
+    
+    # Convert signature components to bytes
+    v_bytes = v.to_bytes(1, 'big')  # 1 byte
+    r_bytes = r.to_bytes(32, 'big')  # 32 bytes
+    s_bytes = s.to_bytes(32, 'big')  # 32 bytes
+    pq_nonce_bytes = pq_nonce.to_bytes(32, 'big')  # 32 bytes
+    
+    # Concatenate all components with DOMAIN_SEPARATOR at the start
+    message = domain_separator_bytes + pattern + old_addr_bytes + to_pattern + new_addr_bytes + base_eth_message_bytes + v_bytes + r_bytes + s_bytes + pq_nonce_bytes
+    
     return message
 
-def sign_eth_message(message_bytes, private_key, new_eth_address, eth_nonce):
-    """Sign a message with ETH private key using EIP712"""
-    # Use EIP712 structured signing
-    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+def sign_eth_message(new_eth_address: str, eth_nonce: int, private_key: str) -> dict:
+    """
+    Sign the change ETH address intent message using the same pattern as registration intent
+    """
+    from eth_utils import keccak
+    
+    # Get the struct hash using the same pattern as registration intent
     struct_hash = get_change_eth_address_intent_struct_hash(new_eth_address, eth_nonce)
-    signature = sign_eip712_message(private_key, domain_separator, struct_hash)
+    
+    # Create EIP712 digest with domain separator (same pattern as registration intent)
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(b'\x19\x01' + domain_separator_bytes + struct_hash)
+    
+    print(f"DEBUG: PYTHON struct_hash: {struct_hash.hex()}")
+    print(f"DEBUG: PYTHON domain_separator: {domain_separator_bytes.hex()}")
+    print(f"DEBUG: PYTHON digest: {digest.hex()}")
+    
+    # Sign the digest using the same pattern as registration intent
+    signature = sign_eip712_message(digest, private_key)
+    
     return signature
 
 def sign_pq_message(message, pq_private_key_file):
@@ -227,9 +258,15 @@ def generate_change_eth_address_intent_vectors():
         pq_nonce = 2  # Current actor's PQ nonce (2 for change ETH address intent after registration)
         
         # Step 1: Next actor signs the base ETH message
+        struct_hash = get_change_eth_address_intent_struct_hash(new_eth_address, eth_nonce)
+        domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+        digest = keccak(b'\x19\x01' + domain_separator_bytes + struct_hash)
+        print(f"DEBUG: PYTHON struct_hash: {struct_hash.hex()}")
+        print(f"DEBUG: PYTHON domain_separator: {domain_separator_bytes.hex()}")
+        print(f"DEBUG: PYTHON digest: {digest.hex()}")
+        # Recover address from signature (after signing, below)
         base_eth_message = create_base_eth_message(pq_fingerprint, new_eth_address, eth_nonce)
-        eth_signature = sign_eth_message(base_eth_message, next_actor["eth_private_key"], new_eth_address, eth_nonce)  # Next actor signs
-        print(f"DEBUG: eth_signature = {eth_signature}")
+        eth_signature = sign_eth_message(new_eth_address, eth_nonce, next_actor["eth_private_key"])  # Next actor signs
         
         # Step 2: Current actor's PQ key signs the complete message containing next actor's signature
         base_pq_message = create_base_pq_message(
@@ -243,17 +280,8 @@ def generate_change_eth_address_intent_vectors():
         
         # Create the full ETH message for contract submission
         # The basePQMessage should be the message that was signed by the PQ key
-        base_pq_message_for_contract = (
-            b"Intent to change bound ETH Address from " +
-            bytes.fromhex(old_eth_address[2:]) +  # Remove "0x" prefix
-            b" to " +
-            bytes.fromhex(new_eth_address[2:]) +  # Remove "0x" prefix
-            base_eth_message +
-            eth_signature["v"].to_bytes(1, "big") +
-            eth_signature["r"].to_bytes(32, "big") +
-            eth_signature["s"].to_bytes(32, "big") +
-            pq_nonce.to_bytes(32, "big")
-        )
+        # Use the already correctly constructed base_pq_message
+        base_pq_message_for_contract = base_pq_message  # Use the correctly constructed message
         
         eth_message = (
             bytes.fromhex(DOMAIN_SEPARATOR[2:]) +
