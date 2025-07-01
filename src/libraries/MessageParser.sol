@@ -30,7 +30,7 @@ library MessageParser {
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 27, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 27, fieldOffsets, fieldLengths, fieldTypes, true);
         
         // Convert bytes to address and uint256
         // Convert the extracted bytes to address manually to ensure correct byte order
@@ -89,7 +89,7 @@ library MessageParser {
         fieldLengths[5] = 32;
         fieldTypes[5] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 27, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 27, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert parsed fields to appropriate types
         basePQMessage = parsedFields[0];
@@ -142,7 +142,7 @@ library MessageParser {
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 40, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 40, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -165,53 +165,64 @@ library MessageParser {
         bytes32 s,
         uint256 pqNonce
     ) {
+        // According to schema:
+        // DOMAIN_SEPARATOR (32) + pattern (31) + ethAddress (20) + baseETHMessage (92) + v (1) + r (32) + s (32) + pqNonce (32)
         bytes memory pattern = "Confirm bonding to ETH Address ";
-        uint256[] memory fieldOffsets = new uint256[](6);
-        uint256[] memory fieldLengths = new uint256[](6);
-        string[] memory fieldTypes = new string[](6);
-        
-        // pattern (31 bytes) + ethAddress (20 bytes) + baseETHMessage (variable) + v (1 byte) + r (32 bytes) + s (32 bytes) + pqNonce (32 bytes)
-        fieldOffsets[0] = 31; // ethAddress starts after pattern
-        fieldLengths[0] = 20;
-        fieldTypes[0] = "address";
-        
-        // Find the end of baseETHMessage (it's variable length)
-        uint256 baseETHMessageStart = fieldOffsets[0] + fieldLengths[0];
-        uint256 baseETHMessageLength = message.length - baseETHMessageStart - 1 - 32 - 32 - 32; // - v - r - s - pqNonce
-        
-        fieldOffsets[1] = baseETHMessageStart;
-        fieldLengths[1] = baseETHMessageLength;
-        fieldTypes[1] = "bytes";
-        
-        fieldOffsets[2] = baseETHMessageStart + baseETHMessageLength; // v
-        fieldLengths[2] = 1;
-        fieldTypes[2] = "uint8";
-        
-        fieldOffsets[3] = fieldOffsets[2] + fieldLengths[2]; // r
-        fieldLengths[3] = 32;
-        fieldTypes[3] = "bytes32";
-        
-        fieldOffsets[4] = fieldOffsets[3] + fieldLengths[3]; // s
-        fieldLengths[4] = 32;
-        fieldTypes[4] = "bytes32";
-        
-        fieldOffsets[5] = fieldOffsets[4] + fieldLengths[4]; // pqNonce
-        fieldLengths[5] = 32;
-        fieldTypes[5] = "uint256";
-        
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 31, fieldOffsets, fieldLengths, fieldTypes);
-        
-        // Convert the extracted bytes to address manually to ensure correct byte order
+        uint256 patternOffset = 32; // DOMAIN_SEPARATOR is 32 bytes
+        uint256 ethAddressOffset = patternOffset + pattern.length;
+        uint256 baseETHMessageOffset = ethAddressOffset + 20;
+        uint256 vOffset = baseETHMessageOffset + 92;
+        uint256 rOffset = vOffset + 1;
+        uint256 sOffset = rOffset + 32;
+        uint256 pqNonceOffset = sOffset + 32;
+
+        require(message.length >= pqNonceOffset + 32, "Message too short for PQ confirmation");
+
+        // Find the pattern at the expected position
+        for (uint i = 0; i < pattern.length; i++) {
+            require(message[patternOffset + i] == pattern[i], "Pattern mismatch in PQ confirmation");
+        }
+
+        // Extract ethAddress
+        bytes memory addressBytes = new bytes(20);
+        for (uint i = 0; i < 20; i++) {
+            addressBytes[i] = message[ethAddressOffset + i];
+        }
         uint256 addr = 0;
         for (uint j = 0; j < 20; j++) {
-            addr = (addr << 8) | uint8(parsedFields[0][j]);
+            addr = (addr << 8) | uint8(addressBytes[j]);
         }
         ethAddress = address(uint160(addr));
-        baseETHMessage = parsedFields[1];
-        v = uint8(parsedFields[2][0]);
-        r = bytes32(parsedFields[3]);
-        s = bytes32(parsedFields[4]);
-        pqNonce = uint256(bytes32(parsedFields[5]));
+
+        // Extract baseETHMessage
+        baseETHMessage = new bytes(92);
+        for (uint i = 0; i < 92; i++) {
+            baseETHMessage[i] = message[baseETHMessageOffset + i];
+        }
+
+        // Extract v
+        v = uint8(message[vOffset]);
+
+        // Extract r
+        bytes memory rBytes = new bytes(32);
+        for (uint i = 0; i < 32; i++) {
+            rBytes[i] = message[rOffset + i];
+        }
+        r = bytes32(rBytes);
+
+        // Extract s
+        bytes memory sBytes = new bytes(32);
+        for (uint i = 0; i < 32; i++) {
+            sBytes[i] = message[sOffset + i];
+        }
+        s = bytes32(sBytes);
+
+        // Extract pqNonce
+        bytes memory pqNonceBytes = new bytes(32);
+        for (uint i = 0; i < 32; i++) {
+            pqNonceBytes[i] = message[pqNonceOffset + i];
+        }
+        pqNonce = uint256(bytes32(pqNonceBytes));
     }
     
     /**
@@ -302,7 +313,7 @@ library MessageParser {
         fieldLengths[3] = 32;
         fieldTypes[3] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 64, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 64, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert the extracted bytes to addresses manually to ensure correct byte order
         uint256 addr1 = 0;
@@ -372,7 +383,7 @@ library MessageParser {
         fieldLengths[6] = 32;
         fieldTypes[6] = "bytes32";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 40, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 40, fieldOffsets, fieldLengths, fieldTypes, true);
         
         // Convert the extracted bytes to addresses manually to ensure correct byte order
         uint256 addr1 = 0;
@@ -434,7 +445,7 @@ library MessageParser {
         fieldLengths[3] = 32;
         fieldTypes[3] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 65, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 65, fieldOffsets, fieldLengths, fieldTypes, true);
         
         // Convert the extracted bytes to addresses manually to ensure correct byte order
         uint256 addr1 = 0;
@@ -474,7 +485,7 @@ library MessageParser {
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 47, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 47, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -604,7 +615,7 @@ library MessageParser {
         fieldLengths[6] = 32;
         fieldTypes[6] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 49, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 49, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert parsed fields to appropriate types
         // Convert the extracted bytes to address manually to ensure correct byte order
@@ -693,7 +704,7 @@ library MessageParser {
         fieldLengths[6] = 32;
         fieldTypes[6] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 52, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 52, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert parsed fields to appropriate types
         // Convert the extracted bytes to address manually to ensure correct byte order
@@ -794,6 +805,7 @@ library MessageParser {
      * @param fieldOffsets Array of field offsets from the start of the message
      * @param fieldLengths Array of field lengths
      * @param fieldTypes Array of field types ("address", "uint256", "bytes", "uint8", "bytes32")
+     * @param skipDomainSeparator Whether to skip the 32-byte domain separator (true for PQ messages, false for ETH messages)
      * @return parsedFields Array of parsed field values as bytes
      */
     function parseMessageFields(
@@ -802,12 +814,13 @@ library MessageParser {
         uint256 patternLength,
         uint256[] memory fieldOffsets,
         uint256[] memory fieldLengths,
-        string[] memory fieldTypes
+        string[] memory fieldTypes,
+        bool skipDomainSeparator
     ) internal pure returns (bytes[] memory parsedFields) {
         require(fieldOffsets.length == fieldLengths.length, "Field offsets and lengths must match");
         require(fieldOffsets.length == fieldTypes.length, "Field offsets and types must match");
         
-        uint256 patternIndex = findPattern(message, expectedPattern, true); // Skip DOMAIN_SEPARATOR
+        uint256 patternIndex = findPattern(message, expectedPattern, skipDomainSeparator);
         
         // Debug: If pattern not found, we can't emit events from a pure function
         // But we can encode the debug info in the revert message
@@ -831,7 +844,14 @@ library MessageParser {
         
         parsedFields = new bytes[](fieldOffsets.length);
         for (uint256 i = 0; i < fieldOffsets.length; i++) {
-            uint256 actualFieldStart = patternIndex + patternLength + (fieldOffsets[i] - (32 + patternLength));
+            uint256 actualFieldStart;
+            if (skipDomainSeparator) {
+                // For PQ messages: patternIndex + patternLength + (fieldOffsets[i] - (32 + patternLength))
+                actualFieldStart = patternIndex + patternLength + (fieldOffsets[i] - (32 + patternLength));
+            } else {
+                // For ETH messages: patternIndex + patternLength + (fieldOffsets[i] - patternLength)
+                actualFieldStart = patternIndex + patternLength + (fieldOffsets[i] - patternLength);
+            }
             uint256 fieldLength = fieldLengths[i];
             require(actualFieldStart + fieldLength <= message.length, "Field extends beyond message length");
             parsedFields[i] = new bytes(fieldLength);
@@ -933,7 +953,7 @@ library MessageParser {
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 53, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 53, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -967,7 +987,7 @@ library MessageParser {
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 47, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 47, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -998,7 +1018,7 @@ library MessageParser {
         fieldOffsets[1] = 64;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 44, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 44, fieldOffsets, fieldLengths, fieldTypes, true);
         uint256 addr = 0;
         for (uint j = 0; j < 20; j++) {
             addr = (addr << 8) | uint8(parsedFields[0][j]);
@@ -1030,7 +1050,7 @@ library MessageParser {
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 38, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 38, fieldOffsets, fieldLengths, fieldTypes, true);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -1064,7 +1084,7 @@ library MessageParser {
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 46, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 46, fieldOffsets, fieldLengths, fieldTypes, true);
         
         // Convert the extracted bytes to address manually to ensure correct byte order
         uint256 addr = 0;
@@ -1127,7 +1147,7 @@ library MessageParser {
         fieldLengths[6] = 32;
         fieldTypes[6] = "uint256";
         
-        bytes[] memory parsedFields = parseMessageFields(message, pattern, 52, fieldOffsets, fieldLengths, fieldTypes);
+        bytes[] memory parsedFields = parseMessageFields(message, pattern, 52, fieldOffsets, fieldLengths, fieldTypes, false);
         
         // Convert parsed fields to appropriate types
         // Note: pqFingerprint is parsed but not returned as it's not needed for this function
@@ -1212,7 +1232,7 @@ library MessageParser {
      */
     function validateETHUnregistrationConfirmationMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Confirm unregistration from Epervier Fingerprint ";
-        return findPattern(message, pattern, true) != type(uint).max;
+        return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
@@ -1257,7 +1277,7 @@ library MessageParser {
      */
     function validateETHRegistrationIntentMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Intent to pair Epervier Key";
-        return findPattern(message, pattern, true) != type(uint).max;
+        return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
@@ -1275,7 +1295,7 @@ library MessageParser {
      */
     function validateETHRegistrationConfirmationMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Confirm bonding to Epervier Fingerprint ";
-        return findPattern(message, pattern, true) != type(uint).max;
+        return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
@@ -1293,7 +1313,7 @@ library MessageParser {
      */
     function validateETHRemoveRegistrationIntentMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Remove registration intent from Epervier Fingerprint ";
-        return findPattern(message, pattern, true) != type(uint).max;
+        return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
@@ -1303,7 +1323,7 @@ library MessageParser {
      */
     function validateETHChangeETHAddressIntentMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Intent to change ETH Address and bond with Epervier Fingerprint ";
-        return findPattern(message, pattern, true) != type(uint).max;
+        return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
@@ -1330,7 +1350,7 @@ library MessageParser {
      */
     function validateETHChangeETHAddressConfirmationMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Confirm change ETH Address for Epervier Fingerprint ";
-        return findPattern(message, pattern, true) != type(uint).max;
+        return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
@@ -1339,7 +1359,7 @@ library MessageParser {
      */
     function validateETHRemoveChangeIntentMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Remove change intent from Epervier Fingerprint ";
-        return findPattern(message, pattern, true) != type(uint).max;
+        return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
@@ -1348,7 +1368,7 @@ library MessageParser {
      */
     function validateETHUnregistrationIntentMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Intent to unregister from Epervier Fingerprint ";
-        return findPattern(message, pattern, true) != type(uint).max;
+        return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**

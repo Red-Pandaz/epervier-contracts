@@ -3,6 +3,9 @@ from pathlib import Path
 import subprocess
 from eth_account import Account
 from eth_utils import keccak
+import sys
+sys.path.append(str(Path(__file__).resolve().parents[2]))  # Add python directory to path
+from eip712_helpers import get_unregistration_intent_struct_hash, sign_eip712_message
 import hashlib
 
 print("Script loaded successfully!")
@@ -11,7 +14,8 @@ print("Script loaded successfully!")
 PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
 ACTORS_CONFIG_PATH = PROJECT_ROOT / "test" / "test_keys" / "actors_config.json"
 OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/unregister/unregistration_intent_vectors.json"
-DOMAIN_SEPARATOR = keccak(b"PQRegistry")
+from eip712_config import DOMAIN_SEPARATOR
+DOMAIN_SEPARATOR = bytes.fromhex(DOMAIN_SEPARATOR[2:])
 
 # Helper to convert int to bytes32
 int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
@@ -26,12 +30,11 @@ def load_actors_config():
 def create_base_eth_message(domain_separator, pq_fingerprint, eth_nonce):
     """
     Create base ETH message for unregistration intent
-    Format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint " + pqFingerprint + ethNonce
-    This is signed by the ETH Address
+    Format: "Intent to unregister from Epervier Fingerprint " + pqFingerprint + ethNonce
+    This is signed by the ETH Address (no domain separator in content for EIP712)
     """
     pattern = b"Intent to unregister from Epervier Fingerprint "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
         eth_nonce.to_bytes(32, 'big')
@@ -75,13 +78,13 @@ def create_eth_message_for_signing(domain_separator, eth_nonce, pq_message):
     return message
 
 
-def sign_with_eth_key(message_bytes, private_key):
-    prefix = b"\x19Ethereum Signed Message:\n" + str(len(message_bytes)).encode()
-    eth_signed_message = prefix + message_bytes
-    eth_signed_message_hash = keccak(eth_signed_message)
-    account = Account.from_key(private_key)
-    sig = Account._sign_hash(eth_signed_message_hash, private_key=account.key)
-    return {"v": sig.v, "r": sig.r, "s": sig.s}
+def sign_with_eth_key(message_bytes, private_key, pq_fingerprint, eth_nonce):
+    """Sign a message with ETH private key using EIP712"""
+    # Use EIP712 structured signing
+    # DOMAIN_SEPARATOR is already bytes from the import
+    struct_hash = get_unregistration_intent_struct_hash(eth_nonce)
+    signature = sign_eip712_message(private_key, DOMAIN_SEPARATOR, struct_hash)
+    return signature
 
 
 def sign_with_pq_key(message, pq_private_key_file):
@@ -159,22 +162,10 @@ def main():
             pq_message_without_eth_sig
         )
         
-        # 4. Sign the baseETHMessage using eth_account (Ethereum style)
+        # 4. Sign the baseETHMessage using EIP712
         # The ETH signature should sign the baseETHMessage directly (BaseETHUnregistrationIntentMessage)
-        # If eth_private_key is a hex string, convert to bytes
-        if isinstance(eth_private_key, str):
-            if eth_private_key.startswith("0x"):
-                eth_private_key_bytes = bytes.fromhex(eth_private_key[2:])
-            else:
-                eth_private_key_bytes = bytes.fromhex(eth_private_key)
-        else:
-            eth_private_key_bytes = eth_private_key
-
-        account = Account.from_key(eth_private_key_bytes)
-        eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(len(base_eth_message)).encode() + base_eth_message
-        eth_signed_message_hash = keccak(eth_signed_message)
-        sig = Account._sign_hash(eth_signed_message_hash, private_key=account.key)
-        v, r, s = sig.v, sig.r, sig.s
+        eth_signature = sign_with_eth_key(base_eth_message, eth_private_key, pq_fingerprint, eth_nonce)
+        v, r, s = eth_signature["v"], eth_signature["r"], eth_signature["s"]
         
         # 5. Build complete PQ message with ETH signature components
         pq_message = create_base_pq_message(

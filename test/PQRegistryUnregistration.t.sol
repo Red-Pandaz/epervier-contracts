@@ -121,11 +121,11 @@ contract PQRegistryUnregistrationTest is Test {
         uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, ".unregistration_intent[0].pq_signature.hint"));
         
         // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
+        // vm.mockCall(
+        //     address(epervierVerifier),
+        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+        //     abi.encode(alice.pqFingerprint)
+        // );
         
         // Load the real PQ message from test vector
         bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".unregistration_intent[0].pq_message"));
@@ -184,11 +184,11 @@ contract PQRegistryUnregistrationTest is Test {
             uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_signature.hint")));
             
             // Mock the Epervier verifier to return the actor's fingerprint
-            vm.mockCall(
-                address(epervierVerifier),
-                abi.encodeWithSelector(epervierVerifier.recover.selector),
-                abi.encode(actor.pqFingerprint)
-            );
+            // vm.mockCall(
+            //     address(epervierVerifier),
+            //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+            //     abi.encode(actor.pqFingerprint)
+            // );
             
             // Load the real PQ message from test vector
             bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_message")));
@@ -214,7 +214,7 @@ contract PQRegistryUnregistrationTest is Test {
             assertEq(registry.addressToEpervierKey(actor.ethAddress), actor.pqFingerprint, string.concat("Registration should still be active for ", actorName));
             
             // Clear the mock for the next iteration
-            vm.clearMockedCalls();
+            // vm.clearMockedCalls();
         }
     }
     
@@ -254,11 +254,11 @@ contract PQRegistryUnregistrationTest is Test {
         uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_intent[0].pq_remove_unregistration_intent.signature.hint"));
         
         // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
+        // vm.mockCall(
+        //     address(epervierVerifier),
+        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+        //     abi.encode(alice.pqFingerprint)
+        // );
         
         // Load the real PQ message from test vector
         bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_intent[0].pq_remove_unregistration_intent.message"));
@@ -307,11 +307,11 @@ contract PQRegistryUnregistrationTest is Test {
             uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_remove_unregistration_intent.signature.hint")));
             
             // Mock the Epervier verifier to return the actor's fingerprint
-            vm.mockCall(
-                address(epervierVerifier),
-                abi.encodeWithSelector(epervierVerifier.recover.selector),
-                abi.encode(actor.pqFingerprint)
-            );
+            // vm.mockCall(
+            //     address(epervierVerifier),
+            //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+            //     abi.encode(actor.pqFingerprint)
+            // );
             
             // Load the real PQ removal message from test vector
             bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_remove_unregistration_intent.message")));
@@ -341,7 +341,7 @@ contract PQRegistryUnregistrationTest is Test {
             assertEq(registry.addressToEpervierKey(actor.ethAddress), actor.pqFingerprint, string.concat("Registration should still be active for ", actorName));
             
             // Clear the mock for the next iteration
-            vm.clearMockedCalls();
+            // vm.clearMockedCalls();
         }
     }
     
@@ -391,11 +391,11 @@ contract PQRegistryUnregistrationTest is Test {
             bytes32 s = bytes32(sDecimal);
             
             // Mock the Epervier verifier to return the actor's fingerprint
-            vm.mockCall(
-                address(epervierVerifier),
-                abi.encodeWithSelector(epervierVerifier.recover.selector),
-                abi.encode(actor.pqFingerprint)
-            );
+            // vm.mockCall(
+            //     address(epervierVerifier),
+            //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+            //     abi.encode(actor.pqFingerprint)
+            // );
             
             // Confirm unregistration
             registry.confirmUnregistration(ethMessage, v, r, s);
@@ -409,7 +409,7 @@ contract PQRegistryUnregistrationTest is Test {
             assertEq(timestamp, 0, string.concat("Unregistration intent should be cleared for ", actorName));
             
             // Clear the mock for the next iteration
-            vm.clearMockedCalls();
+            // vm.clearMockedCalls();
         }
     }
     
@@ -443,17 +443,17 @@ contract PQRegistryUnregistrationTest is Test {
         bytes32 s = bytes32(sDecimal);
         
         // Mock the Epervier verifier for intent submission
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(actor.pqFingerprint)
-        );
+        // vm.mockCall(
+        //     address(epervierVerifier),
+        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+        //     abi.encode(actor.pqFingerprint)
+        // );
         
         // Submit registration intent
         registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
         
         // Clear the mock
-        vm.clearMockedCalls();
+        // vm.clearMockedCalls();
         
         // Load confirmation data
         string memory confirmPath = string.concat(".registration_confirmation[", vm.toString(actorIndex), "]");
@@ -466,17 +466,17 @@ contract PQRegistryUnregistrationTest is Test {
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJsonData, string.concat(confirmPath, ".pq_signature.hint")));
         
         // Mock the Epervier verifier for confirmation
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(actor.pqFingerprint)
-        );
+        // vm.mockCall(
+        //     address(epervierVerifier),
+        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+        //     abi.encode(actor.pqFingerprint)
+        // );
         
         // Confirm registration
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
         
         // Clear the mock
-        vm.clearMockedCalls();
+        // vm.clearMockedCalls();
         
         // Verify registration was completed
         assertEq(registry.epervierKeyToAddress(actor.pqFingerprint), actor.ethAddress, "Registration should be completed");
@@ -505,11 +505,11 @@ contract PQRegistryUnregistrationTest is Test {
         uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_signature.hint")));
         
         // Mock the Epervier verifier to return the actor's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(actor.pqFingerprint)
-        );
+        // vm.mockCall(
+        //     address(epervierVerifier),
+        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+        //     abi.encode(actor.pqFingerprint)
+        // );
         
         // Load the real PQ message from test vector
         bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_message")));

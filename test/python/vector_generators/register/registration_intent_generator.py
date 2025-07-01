@@ -1,16 +1,17 @@
 import json
-import sys
 from pathlib import Path
 import subprocess
 from eth_account import Account
 from eth_utils import keccak
+import sys
 
-# Add the python directory to the path for imports
-sys.path.append(str(Path(__file__).resolve().parents[2]))
-from eip712_helpers import *
-from eip712_config import *
+# Add the parent directory to the path to import eip712_config
+sys.path.append(str(Path(__file__).resolve().parents[2]))  # test/python
+from eip712_config import DOMAIN_SEPARATOR
 
 print("Script loaded successfully!")
+
+# TODO: import cryptography and web3/eth_account utilities as needed
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
@@ -23,6 +24,18 @@ OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/register/registration_intent_vec
 # Helper to convert int to bytes32
 int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
 
+def encode_packed(*args):
+    """Encode packed data (equivalent to abi.encodePacked)"""
+    result = b''
+    for arg in args:
+        if isinstance(arg, bytes):
+            result += arg
+        elif isinstance(arg, str):
+            result += arg.encode('utf-8')
+        elif isinstance(arg, int):
+            result += arg.to_bytes(32, 'big')
+    return result
+
 
 def load_actors_config():
     # Load the actors config JSON
@@ -30,11 +43,13 @@ def load_actors_config():
         return json.load(f)["actors"]
 
 
-def build_base_pq_message(eth_address, pq_nonce):
-    # "Intent to pair ETH Address " (27) + ethAddress (20) + pqNonce (32) = 79 bytes
-    # This matches BasePQRegistrationIntentMessage in schema (no domain separator in content)
+def build_base_pq_message(domain_separator, eth_address, pq_nonce):
+    # DOMAIN_SEPARATOR (32) + "Intent to pair ETH Address " (27) + ethAddress (20) + pqNonce (32) = 111 bytes
+    # This matches BasePQRegistrationIntentMessage in schema
     pattern = b"Intent to pair ETH Address "
-    return pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
+    # Convert domain_separator from hex string to bytes
+    domain_separator_bytes = bytes.fromhex(domain_separator[2:])  # Remove '0x' prefix
+    return domain_separator_bytes + pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
 
 
 def sign_with_pq_key(base_pq_message, pq_private_key_file):
@@ -83,30 +98,45 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
     return out
 
 
-def build_eth_intent_message(base_pq_message, salt, cs1, cs2, hint, eth_nonce):
-    # "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
-    # This matches ETHRegistrationIntentMessage in schema (no domain separator in content)
+def build_eth_intent_message(domain_separator, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
+    # "Intent to pair Epervier Key" + basePQMessage (with domain separator) + salt + cs1 + cs2 + hint + ethNonce
+    # The ETH message contains the complete BasePQRegistrationIntentMessage as per schema
     pattern = b"Intent to pair Epervier Key"
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
-    return (
+    
+    # Build the ETH message with the complete base PQ message (including domain separator)
+    eth_message = (
         pattern + base_pq_message + salt +
         pack_uint256_array(cs1) + pack_uint256_array(cs2) +
         hint.to_bytes(32, 'big') + int_to_bytes32(eth_nonce)
     )
-
-
-def sign_with_eth_key(eth_intent_message, eth_private_key, salt, cs1, cs2, hint, eth_nonce):
-    # Use EIP712 structured signing with domain separator from config
-    # Get struct hash for RegistrationIntent
-    struct_hash = get_registration_intent_struct_hash(
-        eth_nonce, salt, cs1, cs2, hint, eth_intent_message
-    )
     
-    # Sign the EIP712 message
-    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
-    signature = sign_eip712_message(eth_private_key, domain_separator, struct_hash)
-    return signature
+    return eth_message
+
+
+def sign_with_eth_key(eth_intent_message, eth_private_key, salt, cs1, cs2, hint, eth_nonce, base_pq_message):
+    # Use EIP712 structured signing - domain separator is used in signature verification, not message content
+    # Create the struct hash for the message components
+    # For EIP712, we need the base PQ message WITH domain separator in the struct hash
+    struct_hash = keccak(encode_packed(
+        keccak(b"RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)"),
+        eth_nonce.to_bytes(32, 'big'),
+        keccak(salt),
+        keccak(encode_packed(*[x.to_bytes(32, 'big') for x in cs1])),
+        keccak(encode_packed(*[x.to_bytes(32, 'big') for x in cs2])),
+        hint.to_bytes(32, 'big'),
+        keccak(base_pq_message)
+    ))
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(eth_private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
 
 
 def main():
@@ -123,7 +153,7 @@ def main():
         eth_nonce = 0
         # 1. Build base PQ message
         print("Building base PQ message...")
-        base_pq_message = build_base_pq_message(eth_address, pq_nonce)
+        base_pq_message = build_base_pq_message(DOMAIN_SEPARATOR, eth_address, pq_nonce)
         print(f"Base PQ message length: {len(base_pq_message)} bytes")
         # 2. PQ sign
         print("Signing with PQ key...")
@@ -135,12 +165,12 @@ def main():
         # 3. Build ETH intent message
         print("Building ETH intent message...")
         eth_intent_message = build_eth_intent_message(
-            base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
         )
         print(f"ETH intent message length: {len(eth_intent_message)} bytes")
         # 4. ETH sign
         print("Signing with ETH key...")
-        eth_sig = sign_with_eth_key(eth_intent_message, eth_private_key, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce)
+        eth_sig = sign_with_eth_key(eth_intent_message, eth_private_key, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce, base_pq_message)
         print(f"ETH signature generated: v={eth_sig['v']}, r={eth_sig['r']}, s={eth_sig['s']}")
         # 5. Collect all fields
         print("Collecting vector data...")
@@ -156,13 +186,15 @@ def main():
                 "hint": pq_sig["hint"]
             },
             "eth_message": eth_intent_message.hex(),
-            "eth_signature": eth_sig,
+            "eth_signature": {
+                "v": eth_sig["v"],
+                "r": f"0x{eth_sig['r']:064x}",
+                "s": f"0x{eth_sig['s']:064x}"
+            },
             "eth_nonce": eth_nonce
         }
         vectors.append(vector)
     print(f"Writing {len(vectors)} vectors to {OUTPUT_PATH}")
-    # Write vectors to output file
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_PATH, "w") as f:
         json.dump({"registration_intent": vectors}, f, indent=2)
     print("Vector generation complete!")

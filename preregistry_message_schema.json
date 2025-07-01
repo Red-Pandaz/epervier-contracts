@@ -20,7 +20,7 @@
       {"name": "hint", "type": "uint256", "length": 32, "description": "PQ signature hint component"},
       {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
     ],
-    "total_length": 2376
+    "total_length": 2290
   },
   "BaseETHRegistrationConfirmationMessage": {
     "description": "ETH message that gets signed and embedded in the PQ confirmation message.",

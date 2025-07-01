@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from eth_account import Account
 from eth_hash.auto import keccak
+from eth_abi import encode
 
 # Add the project root to the path
 project_root = Path(__file__).resolve().parents[4]  # epervier-registry
@@ -18,6 +19,23 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from eip712_helpers import *
 from eip712_config import *
 
+print("Script loaded successfully!")
+
+# Helper to convert int to bytes32
+int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
+
+def encode_packed(*args):
+    """Encode packed data (equivalent to abi.encodePacked)"""
+    result = b''
+    for arg in args:
+        if isinstance(arg, bytes):
+            result += arg
+        elif isinstance(arg, str):
+            result += arg.encode('utf-8')
+        elif isinstance(arg, int):
+            result += arg.to_bytes(32, 'big')
+    return result
+
 def get_actor_config():
     """Load actor configuration from JSON file"""
     config_file = project_root / "test/test_keys/actors_config.json"
@@ -27,25 +45,50 @@ def get_actor_config():
 
 def create_remove_registration_message(pq_fingerprint, eth_nonce):
     """
-    Create ETH message for removing registration intent
+    Create structured string message for removing registration intent
     Format: "Remove registration intent from Epervier Fingerprint " + pqFingerprint + ethNonce
-    This is signed by the ETH Address (no domain separator in content)
+    This matches the contract's parseETHRemoveRegistrationIntentMessage expectations
     """
     pattern = b"Remove registration intent from Epervier Fingerprint "
-    message = (
-        pattern +
-        bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
-        eth_nonce.to_bytes(32, "big")
-    )
+    # Convert pq_fingerprint from hex string to bytes (20 bytes)
+    pq_fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])  # Remove '0x' prefix
+    # Convert eth_nonce to 32 bytes
+    eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
+    
+    message = pattern + pq_fingerprint_bytes + eth_nonce_bytes
     return message
 
 def sign_eth_message(message, eth_private_key, pq_fingerprint, eth_nonce):
-    """Sign a message with ETH private key using EIP712"""
-    # Use EIP712 structured signing
-    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
-    struct_hash = get_remove_intent_struct_hash(pq_fingerprint, eth_nonce)
-    signature = sign_eip712_message(eth_private_key, domain_separator, struct_hash)
-    return signature
+    """Sign the EIP-712 digest with ETH private key"""
+    from eth_account import Account
+    from eth_utils import keccak
+    from eth_abi import encode
+    
+    # Create the struct hash for RemoveIntent using abi.encode (same as contract)
+    type_hash = keccak(b"RemoveIntent(address pqFingerprint,uint256 ethNonce)")
+    struct_hash = keccak(encode([
+        'bytes32',
+        'address', 
+        'uint256'
+    ], [
+        type_hash,
+        pq_fingerprint,  # address (20 bytes)
+        eth_nonce        # uint256
+    ]))
+    
+    # Create EIP-712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(b'\x19\x01' + domain_separator_bytes + struct_hash)
+    
+    # Sign the digest
+    account = Account.from_key(eth_private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {
+        "v": sig.v,
+        "r": sig.r,
+        "s": sig.s,
+        "signature": sig.signature.hex()
+    }
 
 def generate_remove_registration_intent_vectors():
     """Generate test vectors for removing registration intents for all 10 actors"""

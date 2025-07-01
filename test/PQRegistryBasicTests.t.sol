@@ -129,15 +129,15 @@ contract PQRegistryBasicTests is Test {
         bytes32 sIntent = bytes32(sIntentDecimal);
         
         // Mock the Epervier verifier for intent
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(actor.pqFingerprint)
-        );
+        // vm.mockCall(
+        //     address(epervierVerifier),
+        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+        //     abi.encode(actor.pqFingerprint)
+        // );
         
         // Submit registration intent
         registry.submitRegistrationIntent(ethIntentMessage, vIntent, rIntent, sIntent);
-        vm.clearMockedCalls();
+        // vm.clearMockedCalls();
         
         // Load confirmation data
         bytes memory pqConfirmationMessage = vm.parseBytes(vm.parseJsonString(confirmationJsonData, string.concat(confirmationVectorPath, ".pq_message")));
@@ -157,15 +157,15 @@ contract PQRegistryBasicTests is Test {
         }
         
         // Mock the Epervier verifier for confirmation
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(actor.pqFingerprint)
-        );
+        // vm.mockCall(
+        //     address(epervierVerifier),
+        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+        //     abi.encode(actor.pqFingerprint)
+        // );
         
         // Confirm registration
         registry.confirmRegistration(pqConfirmationMessage, confirmationSalt, confirmationCs1, confirmationCs2, confirmationHint);
-        vm.clearMockedCalls();
+        // vm.clearMockedCalls();
     }
 
     // ============================================================================
@@ -200,12 +200,26 @@ contract PQRegistryBasicTests is Test {
             abi.encode(alice.pqFingerprint)
         );
         
-        // Load the real ETH intent message from test vector
+        // Load the real ETH intent message from test vector (now without domain separator)
         bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
         
-        // Sign the message with legacy Ethereum signed message format
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, ethSignedMessageHash);
+        // Parse the ETH intent message to extract components for EIP712 signing
+        // Note: ETH message no longer contains domain separator in content
+        (uint256 ethNonce, bytes memory salt, uint256[] memory cs1Array, uint256[] memory cs2Array, uint256 hint, bytes memory basePQMessage) = 
+            MessageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
+        
+        // Convert dynamic arrays to fixed-size arrays for EIP712 struct hash
+        uint256[32] memory cs1;
+        uint256[32] memory cs2;
+        for (uint256 i = 0; i < 32; i++) {
+            cs1[i] = cs1Array[i];
+            cs2[i] = cs2Array[i];
+        }
+        
+        // Use the ETH signature from the test vector (already generated with EIP712)
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(jsonData, ".registration_intent[0].eth_signature.s"));
         
         // Check initial nonces before submitting intent
         assertEq(registry.ethNonces(alice.ethAddress), 0, "Initial ETH nonce should be 0");
@@ -252,19 +266,33 @@ contract PQRegistryBasicTests is Test {
             uint256[] memory pqSignatureCs2 = vm.parseJsonUintArray(jsonData, string.concat(vectorPath, ".pq_signature.cs2"));
             uint256 pqSignatureHint = vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".pq_signature.hint")));
             
-            // Load the ETH intent message from test vector
+            // Load the ETH intent message from test vector (now without domain separator)
             bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_message")));
             
-            // Sign the message with legacy Ethereum signed message format
-            bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
-            (uint8 v, bytes32 r, bytes32 s) = vm.sign(actor.ethPrivateKey, ethSignedMessageHash);
+            // Parse the ETH intent message to extract components for EIP712 signing
+            // Note: ETH message no longer contains domain separator in content
+            (uint256 ethNonce2, bytes memory salt2, uint256[] memory cs1Array2, uint256[] memory cs2Array2, uint256 hint2, bytes memory basePQMessage2) = 
+                MessageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
+            
+            // Convert dynamic arrays to fixed-size arrays for EIP712 struct hash
+            uint256[32] memory cs1_2;
+            uint256[32] memory cs2_2;
+            for (uint256 j = 0; j < 32; j++) {
+                cs1_2[j] = cs1Array2[j];
+                cs2_2[j] = cs2Array2[j];
+            }
+            
+            // Use the ETH signature from the test vector (already generated with EIP712)
+            uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.v"))));
+            bytes32 r = vm.parseBytes32(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.r")));
+            bytes32 s = vm.parseBytes32(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.s")));
             
             // Mock the Epervier verifier to return the correct fingerprint
-            vm.mockCall(
-                address(epervierVerifier),
-                abi.encodeWithSelector(epervierVerifier.recover.selector, basePQMessage, pqSignatureSalt, pqSignatureCs1, pqSignatureCs2, pqSignatureHint),
-                abi.encode(actor.pqFingerprint)
-            );
+            // vm.mockCall(
+            //     address(epervierVerifier),
+            //     abi.encodeWithSelector(epervierVerifier.recover.selector, basePQMessage, pqSignatureSalt, pqSignatureCs1, pqSignatureCs2, pqSignatureHint),
+            //     abi.encode(actor.pqFingerprint)
+            // );
             
             // Submit registration intent
             registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
@@ -335,20 +363,34 @@ contract PQRegistryBasicTests is Test {
             string memory intentVectorPath = string.concat(".registration_intent[", vm.toString(i), "]");
             bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_message")));
             
-            // Sign the message with legacy Ethereum signed message format
-            bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethIntentMessage.length), ethIntentMessage));
-            (uint8 v, bytes32 r, bytes32 s) = vm.sign(actor.ethPrivateKey, ethSignedMessageHash);
+            // Parse the ETH intent message to extract components for EIP712 signing
+            // Note: ETH message no longer contains domain separator in content
+            (uint256 ethNonce3, bytes memory salt3, uint256[] memory cs1Array3, uint256[] memory cs2Array3, uint256 hint3, bytes memory basePQMessage3) = 
+                MessageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
+            
+            // Convert dynamic arrays to fixed-size arrays for EIP712 struct hash
+            uint256[32] memory cs1_3;
+            uint256[32] memory cs2_3;
+            for (uint256 j = 0; j < 32; j++) {
+                cs1_3[j] = cs1Array3[j];
+                cs2_3[j] = cs2Array3[j];
+            }
+            
+            // Use the ETH signature from the test vector (already generated with EIP712)
+            uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.v"))));
+            bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.r")));
+            bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, string.concat(intentVectorPath, ".eth_signature.s")));
             
             // Mock the Epervier verifier for intent
-            vm.mockCall(
-                address(epervierVerifier),
-                abi.encodeWithSelector(epervierVerifier.recover.selector),
-                abi.encode(actor.pqFingerprint)
-            );
+            // vm.mockCall(
+            //     address(epervierVerifier),
+            //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+            //     abi.encode(actor.pqFingerprint)
+            // );
             
             // Submit registration intent
             registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
-            vm.clearMockedCalls();
+            // vm.clearMockedCalls();
             
             // Find the confirmation vector for this actor
             string memory confirmationVectorPath = string.concat(".registration_confirmation[", vm.toString(i), "]");
@@ -362,29 +404,28 @@ contract PQRegistryBasicTests is Test {
             assertEq(testPQFingerprint, actor.pqFingerprint, string.concat("Test vector PQ fingerprint should match actor config for ", actorName));
             
             // Parse signature components for confirmation
-            bytes memory testSalt = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(confirmationVectorPath, ".pq_signature.salt")));
-            uint256[] memory testCs1 = vm.parseJsonUintArray(jsonData, string.concat(confirmationVectorPath, ".pq_signature.cs1"));
-            uint256[] memory testCs2 = vm.parseJsonUintArray(jsonData, string.concat(confirmationVectorPath, ".pq_signature.cs2"));
-            uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, string.concat(confirmationVectorPath, ".pq_signature.hint")));
+            bytes memory confirmationSalt = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(confirmationVectorPath, ".pq_signature.salt")));
+            uint256[] memory confirmationCs1 = vm.parseJsonUintArray(jsonData, string.concat(confirmationVectorPath, ".pq_signature.cs1"));
+            uint256[] memory confirmationCs2 = vm.parseJsonUintArray(jsonData, string.concat(confirmationVectorPath, ".pq_signature.cs2"));
+            uint256 confirmationHint = vm.parseUint(vm.parseJsonString(jsonData, string.concat(confirmationVectorPath, ".pq_signature.hint")));
             
             // Mock the Epervier verifier for confirmation
-            vm.mockCall(
-                address(epervierVerifier),
-                abi.encodeWithSelector(epervierVerifier.recover.selector),
-                abi.encode(actor.pqFingerprint)
-            );
+            // vm.mockCall(
+            //     address(epervierVerifier),
+            //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+            //     abi.encode(actor.pqFingerprint)
+            // );
             
             // Load the real PQ confirmation message from test vector
             bytes memory pqConfirmationMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(confirmationVectorPath, ".pq_message")));
             
             // Confirm registration
-            registry.confirmRegistration(pqConfirmationMessage, testSalt, testCs1, testCs2, testHint);
+            registry.confirmRegistration(pqConfirmationMessage, confirmationSalt, confirmationCs1, confirmationCs2, confirmationHint);
+            // vm.clearMockedCalls();
             
             // Verify registration was completed
             assertEq(registry.epervierKeyToAddress(actor.pqFingerprint), actor.ethAddress, string.concat("Registration should be complete for ", actorName));
             assertEq(registry.addressToEpervierKey(actor.ethAddress), actor.pqFingerprint, string.concat("Registration should be complete for ", actorName));
-            
-            vm.clearMockedCalls();
         }
     }
 } 

@@ -12,18 +12,30 @@ DOMAIN_SEPARATOR_TYPE_HASH = "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffaca
 
 # EIP712 Type Hashes (matching the contract)
 REGISTRATION_INTENT_TYPE_HASH = "0x6c82d11868bb07b09942f187a0411348a333edceb605e23f50498111c090e8cd"
-REGISTRATION_CONFIRMATION_TYPE_HASH = "0x9c72408f08e33645658a3082401bcabbd0d3803d0e7bd4e7ccd1ba31dc355e42"
-REMOVE_INTENT_TYPE_HASH = "0x7787773e4cdf380124e8392841703d948b9cc8f1c7305ecf19c34dffdb449dbf"
+REGISTRATION_CONFIRMATION_TYPE_HASH = "0x18de7768ef44f4d9fc06fe05870b6e013cdefc55ac93a9ba5ecc3bcdbe73c57f"
+REMOVE_INTENT_TYPE_HASH = "0xeabb87d4659aa065c1553e7f5514018dede42e554eee09f74b28dcaa233ecc8e"
 CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH = "0xad9c7fd98278e0491b4ce426e94e536f62add607a7f807ffdf38be3a091083ba"
 CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = "0xda30aa3205452341590172cf23b24acb65901330ccc9b39d7ab09e2655e77ab4"
 UNREGISTRATION_INTENT_TYPE_HASH = "0x3dff1ea3007a7dce6fd087cada5bc6a2536df49ff71603b8bbb5a455a38a696c"
 UNREGISTRATION_CONFIRMATION_TYPE_HASH = "0xf46f8261cd17c25e9128d0041059f670d1965f2387117dc4ac34542b3028da56"
 REMOVE_CHANGE_INTENT_TYPE_HASH = "0xd5374f2c763a462fe47bd1d024c2cf59b3ee1ec6126bb83be1f1fda1562a50eb"
-REMOVE_UNREGISTRATION_INTENT_TYPE_HASH = "0x1234567890123456789012345678901234567890123456789012345678901234"  # Placeholder
 
-# Hardcoded domain separator for vector generation (will be updated before deployment)
+# Hardcoded domain separator for vector generation
 # This should match what the contract computes in its constructor
-DOMAIN_SEPARATOR = "0x1234567890123456789012345678901234567890123456789012345678901234"  # Placeholder
+# For testing, we'll use a fixed contract address
+TEST_CONTRACT_ADDRESS = "0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"
+
+# The domain separator is computed as:
+# keccak256(abi.encode(
+#     keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+#     keccak256(bytes(DOMAIN_NAME)),
+#     keccak256(bytes(DOMAIN_VERSION)),
+#     CHAIN_ID,
+#     TEST_CONTRACT_ADDRESS
+# ))
+
+# This is the precomputed value for the test environment
+DOMAIN_SEPARATOR = "0x07668882b5c3598c149b213b1c16ab1dd94b45bc4837b468e006b97caef5df92"
 
 # Note: The actual DOMAIN_SEPARATOR will be computed in the contract as:
 # keccak256(abi.encode(

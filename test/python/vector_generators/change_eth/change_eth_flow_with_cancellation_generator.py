@@ -12,6 +12,10 @@ from eth_hash.auto import keccak
 import os
 import traceback
 
+# Add the python directory to the path for EIP712 imports
+sys.path.append(str(Path(__file__).resolve().parents[3] / "test" / "python"))
+from eip712_helpers import get_change_eth_address_intent_struct_hash, get_change_eth_address_confirmation_struct_hash, get_remove_change_intent_struct_hash, sign_eip712_message
+
 # Add the project root to the path
 project_root = Path(__file__).parent.parent.parent.parent  # epervier-registry
 sys.path.append(str(project_root))
@@ -27,7 +31,6 @@ def get_actor_config():
 def create_base_eth_change_eth_address_intent_message(domain_separator, pq_fingerprint, new_eth_address, eth_nonce):
     pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +
         b" to " +
@@ -55,7 +58,6 @@ def create_pq_change_eth_address_intent_message(domain_separator, old_eth_addres
 def create_eth_remove_change_intent_message(domain_separator, pq_fingerprint, eth_nonce):
     pattern = b"Remove change intent from Epervier Fingerprint "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +
         eth_nonce.to_bytes(32, 'big')
@@ -79,7 +81,6 @@ def create_eth_change_eth_address_confirmation_message(domain_separator, pq_fing
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +
         base_pq_message +

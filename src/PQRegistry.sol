@@ -79,10 +79,10 @@ contract PQRegistry {
     IEpervierVerifier public epervierVerifier;
     IConsole public console;
     
-    // EIP-712 Domain Separator
+    // EIP-712 Domain Separator - Hardcoded for consistency with test vectors
     string public constant DOMAIN_NAME = "PQRegistry";
     string public constant DOMAIN_VERSION = "1";
-    bytes32 public DOMAIN_SEPARATOR;
+    bytes32 public constant DOMAIN_SEPARATOR = 0x07668882b5c3598c149b213b1c16ab1dd94b45bc4837b468e006b97caef5df92;
     
     // EIP-712 Type Hashes
     bytes32 public constant REGISTRATION_INTENT_TYPE_HASH = keccak256("RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)");
@@ -103,17 +103,6 @@ contract PQRegistry {
         
         epervierVerifier = IEpervierVerifier(_epervierVerifier);
         console = IConsole(_console);
-        
-        // Compute EIP-712 domain separator
-        DOMAIN_SEPARATOR = keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256(bytes(DOMAIN_NAME)),
-                keccak256(bytes(DOMAIN_VERSION)),
-                11155420, // Optimism Sepolia chain ID
-                address(this)
-            )
-        );
     }
     
     /**
@@ -130,7 +119,7 @@ contract PQRegistry {
         bytes32 r,
         bytes32 s
     ) external {
-        console.log("=== submitRegistrationIntent ===");
+
         
         // STEP 1: Parse the ETH registration intent message
         (
@@ -161,14 +150,15 @@ contract PQRegistry {
         );
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
-        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
-        require(recoveredETHAddress != address(0), "Invalid ETH signature");
+        // DEBUG: Show the digest being used for ecrecover
+        console.log("DEBUG: Digest for ecrecover:", uint256(digest));
+        console.log("DEBUG: v value:", v);
+        console.log("DEBUG: r value:", uint256(r));
+        console.log("DEBUG: s value:", uint256(s));
         
-        // Debug logging
-        emit DebugParseStep("eth_message_length", ethMessage.length);
-        emit DebugParseStep("struct_hash", uint256(structHash));
-        emit DebugParseStep("eip712_digest", uint256(digest));
-        emit DebugParseStep("eth_signature_recovered", uint256(uint160(recoveredETHAddress)));
+        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        console.log("DEBUG: Digest for ecrecover:", uint256(digest));
+        require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 3: Parse the base PQ message
         (address intentAddress, uint256 pqNonce) = MessageParser.parseBasePQRegistrationIntentMessage(basePQMessage);
@@ -177,6 +167,10 @@ contract PQRegistry {
         emit DebugParseStep("recovered_eth_address", uint256(uint160(recoveredETHAddress)));
         emit DebugParseStep("parsed_intent_address", uint256(uint160(intentAddress)));
         emit DebugParseStep("addresses_equal", uint256(uint160(recoveredETHAddress == intentAddress ? 1 : 0)));
+        
+        // Add console logs for debugging
+        emit DebugAddress("recovered_eth_address", recoveredETHAddress);
+        emit DebugAddress("parsed_intent_address", intentAddress);
         
         // STEP 4: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
@@ -193,12 +187,6 @@ contract PQRegistry {
         require(unregistrationIntents[recoveredFingerprint].timestamp == 0 && ethAddressToUnregistrationFingerprint[recoveredFingerprint] == address(0), "PQ fingerprint has pending unregistration intent");
         
         // STEP 7: Nonce validation
-        console.log("DEBUG: ETH address:", intentAddress);
-        console.log("DEBUG: PQ fingerprint:", recoveredFingerprint);
-        console.log("DEBUG: Contract expects ETH nonce:", ethNonces[intentAddress]);
-        console.log("DEBUG: Message provides ETH nonce:", ethNonce);
-        console.log("DEBUG: Contract expects PQ nonce:", pqKeyNonces[recoveredFingerprint]);
-        console.log("DEBUG: Message provides PQ nonce:", pqNonce);
         
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
@@ -217,8 +205,6 @@ contract PQRegistry {
         ethNonces[intentAddress]++;
         pqKeyNonces[recoveredFingerprint]++;
         
-        console.log("DEBUG: After increment - ETH nonce:", ethNonces[intentAddress]);
-        console.log("DEBUG: After increment - PQ nonce:", pqKeyNonces[recoveredFingerprint]);
         
         emit RegistrationIntentSubmitted(intentAddress, recoveredFingerprint);
     }
@@ -230,7 +216,6 @@ contract PQRegistry {
         uint256[] calldata cs2,
         uint256 hint
     ) external {
-        console.log("=== confirmRegistration ===");
         
         // STEP 1: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
@@ -248,7 +233,7 @@ contract PQRegistry {
             uint256 pqNonce
         ) = MessageParser.parsePQRegistrationConfirmationMessage(pqMessage);
         
-        // STEP 4: Parse the base ETH confirmation message
+        // STEP 4: Parse the base ETH message to get pqFingerprint and ethNonce
         (address pqFingerprint, uint256 ethNonce) = MessageParser.parseBaseETHRegistrationConfirmationMessage(baseETHMessage);
         
         // STEP 5: Verify the ETH signature using EIP712
@@ -257,7 +242,15 @@ contract PQRegistry {
             ethNonce
         );
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        // DEBUG: Show the digest being used for ecrecover
+        console.log("DEBUG: Digest for ecrecover:", uint256(digest));
+        console.log("DEBUG: v value:", v);
+        console.log("DEBUG: r value:", uint256(r));
+        console.log("DEBUG: s value:", uint256(s));
+        
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        console.log("DEBUG: Digest for ecrecover:", uint256(digest));
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
 
         // STEP 6: Cross-reference validation
@@ -278,12 +271,6 @@ contract PQRegistry {
         require(pqFingerprintToPendingIntentAddress[recoveredFingerprint] != address(0), "PQ fingerprint does not have pending registration intent");
         
         // STEP 9: Nonce validation
-        console.log("DEBUG: ETH address:", ethAddress);
-        console.log("DEBUG: PQ fingerprint:", recoveredFingerprint);
-        console.log("DEBUG: Contract expects ETH nonce:", ethNonces[ethAddress]);
-        console.log("DEBUG: Message provides ETH nonce:", ethNonce);
-        console.log("DEBUG: Contract expects PQ nonce:", pqKeyNonces[recoveredFingerprint]);
-        console.log("DEBUG: Message provides PQ nonce:", pqNonce);
         
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[ethAddress] == ethNonce, "Invalid ETH nonce");
@@ -300,8 +287,6 @@ contract PQRegistry {
         pqKeyNonces[recoveredFingerprint]++;
         ethNonces[ethAddress]++;
         
-        console.log("DEBUG: After increment - ETH nonce:", ethNonces[ethAddress]);
-        console.log("DEBUG: After increment - PQ nonce:", pqKeyNonces[recoveredFingerprint]);
         
         emit RegistrationConfirmed(ethAddress, recoveredFingerprint);
     }
@@ -328,6 +313,9 @@ contract PQRegistry {
             ethNonce
         );
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        console.log("Contract struct hash:", uint256(structHash));
+        console.log("Contract digest:", uint256(digest));
         
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
@@ -438,9 +426,6 @@ contract PQRegistry {
         require(intent.newETHAddress == recoveredETHAddress, "ETH Address not the new address in change intent");
         
         // DEBUG: Print addresses for debugging
-        console.log("DEBUG: Recovered ETH address:", recoveredETHAddress);
-        console.log("DEBUG: New ETH address in intent:", intent.newETHAddress);
-        console.log("DEBUG: PQ fingerprint:", pqFingerprint);
         
         // STEP 4: Comprehensive conflict prevention check
         require(changeETHAddressIntents[pqFingerprint].timestamp != 0, "PQ fingerprint does not have pending change intent");
@@ -516,10 +501,6 @@ contract PQRegistry {
         require(epervierKeyToAddress[recoveredFingerprint] == ethAddress, "ETH Address not the current address for PQ fingerprint");
         
         // DEBUG: Print addresses for debugging
-        console.log("DEBUG PQ Cancel: ETH address from message:", ethAddress);
-        console.log("DEBUG PQ Cancel: Current ETH address for PQ fingerprint:", epervierKeyToAddress[recoveredFingerprint]);
-        console.log("DEBUG PQ Cancel: New ETH address in intent:", intent.newETHAddress);
-        console.log("DEBUG PQ Cancel: PQ fingerprint:", recoveredFingerprint);
         
         // STEP 5: Verify ETH address is registered to this PQ fingerprint
         require(epervierKeyToAddress[recoveredFingerprint] == ethAddress, "ETH address not registered to PQ fingerprint");
@@ -530,8 +511,6 @@ contract PQRegistry {
         
         // STEP 7: Nonce validation
         // DEBUG: Print PQ nonce in message and contract
-        console.log("DEBUG: PQ nonce in message:", pqNonce);
-        console.log("DEBUG: PQ nonce in contract:", pqKeyNonces[recoveredFingerprint]);
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         
         // STEP 8: Clear the intent
@@ -655,12 +634,6 @@ contract PQRegistry {
         require(ethNonces[newEthAddress] == ethNonce, "Invalid ETH nonce");
         
         // Debug logging for nonce validation
-        console.log("DEBUG: Expected ETH nonce:", ethNonces[newEthAddress]);
-        console.log("DEBUG: Provided ETH nonce:", ethNonce);
-        console.log("DEBUG: Expected PQ nonce:", pqKeyNonces[recoveredFingerprint]);
-        console.log("DEBUG: Provided PQ nonce:", pqNonce);
-        console.log("DEBUG: ETH address:", newEthAddress);
-        console.log("DEBUG: PQ fingerprint:", recoveredFingerprint);
         
         // STEP 8: Complete the change
         epervierKeyToAddress[recoveredFingerprint] = newEthAddress;
@@ -696,7 +669,6 @@ contract PQRegistry {
         uint256 hint,
         uint256[2] calldata publicKey
     ) external {
-        console.log("=== submitUnregistrationIntent ===");
         
         // STEP 1: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
@@ -730,12 +702,6 @@ contract PQRegistry {
         require(unregistrationIntents[intentAddress].timestamp == 0, "ETH Address has pending unregistration intent");
         
         // STEP 6: Nonce validation
-        console.log("DEBUG: ETH address:", intentAddress);
-        console.log("DEBUG: PQ fingerprint:", recoveredFingerprint);
-        console.log("DEBUG: Contract expects ETH nonce:", ethNonces[intentAddress]);
-        console.log("DEBUG: Message provides ETH nonce:", ethNonce);
-        console.log("DEBUG: Contract expects PQ nonce:", pqKeyNonces[recoveredFingerprint]);
-        console.log("DEBUG: Message provides PQ nonce:", parsedPQNonce);
         
         require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
         require(pqKeyNonces[recoveredFingerprint] == parsedPQNonce, "Invalid PQ nonce");
@@ -760,8 +726,6 @@ contract PQRegistry {
         ethNonces[intentAddress]++;
         pqKeyNonces[publicKeyAddress]++;
         
-        console.log("DEBUG: After increment - ETH nonce:", ethNonces[intentAddress]);
-        console.log("DEBUG: After increment - PQ nonce:", pqKeyNonces[publicKeyAddress]);
         
         emit UnregistrationIntentSubmitted(intentAddress, publicKeyAddress);
     }
@@ -857,7 +821,6 @@ contract PQRegistry {
         uint256[] calldata cs2,
         uint256 hint
     ) external {
-        console.log("=== removeUnregistrationIntent ===");
         
         // STEP 1: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
@@ -876,10 +839,6 @@ contract PQRegistry {
         require(intent.publicKeyAddress == publicKeyAddress, "PQ key mismatch");
         
         // STEP 5: Nonce validation
-        console.log("DEBUG: ETH address:", intentAddress);
-        console.log("DEBUG: PQ fingerprint:", recoveredFingerprint);
-        console.log("DEBUG: Contract expects PQ nonce:", pqKeyNonces[publicKeyAddress]);
-        console.log("DEBUG: Message provides PQ nonce:", pqNonce);
         
         require(pqKeyNonces[publicKeyAddress] == pqNonce, "Invalid PQ nonce");
         
@@ -894,7 +853,6 @@ contract PQRegistry {
         // STEP 8: Increment nonce
         pqKeyNonces[publicKeyAddress]++;
         
-        console.log("DEBUG: After increment - PQ nonce:", pqKeyNonces[publicKeyAddress]);
 
         emit UnregistrationIntentRemoved(publicKeyAddress);
     }

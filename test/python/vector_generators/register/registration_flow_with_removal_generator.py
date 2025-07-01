@@ -16,8 +16,14 @@ import traceback
 project_root = Path(__file__).parent.parent.parent.parent  # epervier-registry
 sys.path.append(str(project_root))
 
+# Add the python directory to the path for EIP712 imports
+sys.path.append(str(project_root / "test" / "python"))
+
 # Domain separator (same as in the contract)
 DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
+
+# Import EIP712 helpers
+from eip712_helpers import get_registration_intent_struct_hash, get_registration_confirmation_struct_hash, sign_eip712_message
 
 def get_actor_config():
     """Load actor configuration from JSON file"""
@@ -43,14 +49,14 @@ def create_base_pq_registration_intent_message(domain_separator, eth_address, pq
 def create_eth_registration_intent_message(domain_separator, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
     """
     Create ETH message for registration intent
-    Format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    Format: "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    (no domain separator in content for EIP712)
     """
     pattern = b"Intent to pair Epervier Key"
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     
     message = (
-        domain_separator +
         pattern +
         base_pq_message +
         salt +
@@ -78,11 +84,11 @@ def create_pq_remove_registration_intent_message(domain_separator, eth_address, 
 def create_base_eth_registration_confirmation_message(domain_separator, pq_fingerprint, eth_nonce):
     """
     Create base ETH message for registration confirmation
-    Format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    Format: "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    (no domain separator in content for EIP712)
     """
     pattern = b"Confirm bonding to Epervier Fingerprint "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
         eth_nonce.to_bytes(32, 'big')
@@ -92,9 +98,9 @@ def create_base_eth_registration_confirmation_message(domain_separator, pq_finge
 def create_pq_registration_confirmation_message(domain_separator, eth_address, base_eth_message, v, r, s, pq_nonce):
     """
     Create PQ message for registration confirmation
-    Format: DOMAIN_SEPARATOR + "Confirm binding ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+    Format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
     """
-    pattern = b"Confirm binding ETH Address "
+    pattern = b"Confirm bonding to ETH Address "
     message = (
         domain_separator +
         pattern +
@@ -107,18 +113,25 @@ def create_pq_registration_confirmation_message(domain_separator, eth_address, b
     )
     return message
 
-def sign_eth_message(message_bytes, private_key):
-    """Sign a message with ETH private key (Ethereum Signed Message)"""
-    prefix = b"\x19Ethereum Signed Message:\n" + str(len(message_bytes)).encode()
-    eth_signed_message = prefix + message_bytes
-    eth_signed_message_hash = keccak(eth_signed_message)
-    account = Account.from_key(private_key)
-    sig = Account._sign_hash(eth_signed_message_hash, private_key=account.key)
-    return {
-        "v": sig.v,
-        "r": sig.r,
-        "s": sig.s
-    }
+def sign_eth_message(message_bytes, private_key, message_type="registration_intent", **kwargs):
+    """Sign a message with ETH private key using EIP712"""
+    # Use EIP712 structured signing
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    
+    if message_type == "registration_intent":
+        struct_hash = get_registration_intent_struct_hash(
+            kwargs["eth_nonce"], kwargs["salt"], kwargs["cs1"], 
+            kwargs["cs2"], kwargs["hint"], kwargs["base_pq_message"]
+        )
+    elif message_type == "registration_confirmation":
+        struct_hash = get_registration_confirmation_struct_hash(
+            kwargs["pq_fingerprint"], kwargs["eth_nonce"]
+        )
+    else:
+        raise ValueError(f"Unsupported message type: {message_type}")
+    
+    signature = sign_eip712_message(private_key, domain_separator, struct_hash)
+    return signature
 
 def sign_pq_message(message, pq_private_key_file):
     """Sign a message with PQ private key using sign_cli.py"""
@@ -204,7 +217,16 @@ def generate_registration_flow_with_removal_vectors():
             [int(x, 16) for x in pq_signature_0["cs2"]], 
             pq_signature_0["hint"], eth_nonce_0
         )
-        eth_signature_0 = sign_eth_message(eth_message_0, actor["eth_private_key"])
+        eth_signature_0 = sign_eth_message(
+            eth_message_0, actor["eth_private_key"], 
+            message_type="registration_intent",
+            eth_nonce=eth_nonce_0,
+            salt=bytes.fromhex(pq_signature_0["salt"]),
+            cs1=[int(x, 16) for x in pq_signature_0["cs1"]],
+            cs2=[int(x, 16) for x in pq_signature_0["cs2"]],
+            hint=pq_signature_0["hint"],
+            base_pq_message=base_pq_message_0
+        )
 
         # Step 2: PQ removes registration intent (ETH nonce 0, PQ nonce 1)
         pq_nonce_1 = 1
@@ -232,14 +254,28 @@ def generate_registration_flow_with_removal_vectors():
             [int(x, 16) for x in pq_signature_1["cs2"]], 
             pq_signature_1["hint"], eth_nonce_1
         )
-        eth_signature_1 = sign_eth_message(eth_message_1, actor["eth_private_key"])
+        eth_signature_1 = sign_eth_message(
+            eth_message_1, actor["eth_private_key"], 
+            message_type="registration_intent",
+            eth_nonce=eth_nonce_1,
+            salt=bytes.fromhex(pq_signature_1["salt"]),
+            cs1=[int(x, 16) for x in pq_signature_1["cs1"]],
+            cs2=[int(x, 16) for x in pq_signature_1["cs2"]],
+            hint=pq_signature_1["hint"],
+            base_pq_message=base_pq_message_1
+        )
 
         # Step 4: Registration confirmation (ETH nonce 2, PQ nonce 3)
         eth_nonce_2 = 2
         pq_nonce_3 = 3
         
         base_eth_confirm_message = create_base_eth_registration_confirmation_message(DOMAIN_SEPARATOR, pq_fingerprint, eth_nonce_2)
-        eth_confirm_signature = sign_eth_message(base_eth_confirm_message, actor["eth_private_key"])
+        eth_confirm_signature = sign_eth_message(
+            base_eth_confirm_message, actor["eth_private_key"],
+            message_type="registration_confirmation",
+            pq_fingerprint=pq_fingerprint,
+            eth_nonce=eth_nonce_2
+        )
         
         pq_confirm_message = create_pq_registration_confirmation_message(
             DOMAIN_SEPARATOR, eth_address, base_eth_confirm_message,

@@ -77,18 +77,29 @@ def encode_registration_intent_data(message: Dict[str, Any]) -> bytes:
     return encoded
 
 def encode_registration_confirmation_data(message: Dict[str, Any]) -> bytes:
-    """Encode RegistrationConfirmation data"""
-    pq_fingerprint = int(message["pqFingerprint"], 16)
+    """Encode RegistrationConfirmation data (EIP-712 compliant)"""
+    from eth_abi import encode
+    pq_fingerprint = message["pqFingerprint"]  # hex string, e.g. '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
     eth_nonce = message["ethNonce"]
-    
-    return pq_fingerprint.to_bytes(32, 'big') + eth_nonce.to_bytes(32, 'big')
+    type_hash = bytes.fromhex(REGISTRATION_CONFIRMATION_TYPE_HASH[2:])  # Remove '0x' prefix
+    # EIP-712: keccak256(abi.encode(typeHash, pqFingerprint, ethNonce))
+    encoded = encode(['bytes32', 'address', 'uint256'], [type_hash, pq_fingerprint, eth_nonce])
+    return encoded
 
 def encode_remove_intent_data(message: Dict[str, Any]) -> bytes:
     """Encode RemoveIntent data"""
-    pq_fingerprint = int(message["pqFingerprint"], 16)
+    from eth_utils import to_checksum_address
+    from eth_abi import encode
+    pq_fingerprint_checksum = to_checksum_address(message["pqFingerprint"])
     eth_nonce = message["ethNonce"]
-    
-    return pq_fingerprint.to_bytes(32, 'big') + eth_nonce.to_bytes(32, 'big')
+    encoded = encode([
+        'address',
+        'uint256'
+    ], [
+        pq_fingerprint_checksum,
+        eth_nonce
+    ])
+    return encoded
 
 def encode_change_eth_address_intent_data(message: Dict[str, Any]) -> bytes:
     """Encode ChangeETHAddressIntent data"""
@@ -163,41 +174,41 @@ def get_registration_intent_struct_hash(
     
     return keccak256(struct_data)
 
-def get_registration_confirmation_struct_hash(pq_fingerprint: str, eth_nonce: int) -> bytes:
-    """Compute the struct hash for RegistrationConfirmation"""
-    struct_data = encode_structured_data({
-        "types": {
-            "RegistrationConfirmation": [
-                {"name": "pqFingerprint", "type": "address"},
-                {"name": "ethNonce", "type": "uint256"}
-            ]
-        },
-        "primaryType": "RegistrationConfirmation",
-        "message": {
-            "pqFingerprint": pq_fingerprint,
-            "ethNonce": eth_nonce
-        }
-    })
-    
-    return keccak256(struct_data)
+def get_registration_confirmation_struct_hash(pq_fingerprint, eth_nonce):
+    """
+    Compute the struct hash for RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)
+    """
+    from eth_utils import keccak, to_checksum_address
+    from eth_abi import encode
+    type_hash = bytes.fromhex("18de7768ef44f4d9fc06fe05870b6e013cdefc55ac93a9ba5ecc3bcdbe73c57f")
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
+    encoded = encode([
+        'bytes32',
+        'address',
+        'uint256'
+    ], [
+        type_hash,
+        pq_fingerprint_checksum,
+        eth_nonce
+    ])
+    return keccak(encoded)
 
 def get_remove_intent_struct_hash(pq_fingerprint: str, eth_nonce: int) -> bytes:
-    """Compute the struct hash for RemoveIntent"""
-    struct_data = encode_structured_data({
-        "types": {
-            "RemoveIntent": [
-                {"name": "pqFingerprint", "type": "address"},
-                {"name": "ethNonce", "type": "uint256"}
-            ]
-        },
-        "primaryType": "RemoveIntent",
-        "message": {
-            "pqFingerprint": pq_fingerprint,
-            "ethNonce": eth_nonce
-        }
-    })
-    
-    return keccak256(struct_data)
+    """Compute the struct hash for RemoveIntent(address pqFingerprint,uint256 ethNonce)"""
+    from eth_utils import keccak, to_checksum_address
+    from eth_abi import encode
+    type_hash = bytes.fromhex(REMOVE_INTENT_TYPE_HASH[2:])  # Remove '0x' prefix
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
+    encoded = encode([
+        'bytes32',
+        'address',
+        'uint256'
+    ], [
+        type_hash,
+        pq_fingerprint_checksum,
+        eth_nonce
+    ])
+    return keccak(encoded)
 
 def get_change_eth_address_intent_struct_hash(new_eth_address: str, eth_nonce: int) -> bytes:
     """Compute the struct hash for ChangeETHAddressIntent"""

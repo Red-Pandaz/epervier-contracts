@@ -385,13 +385,6 @@ contract PQRegistryChangeETHAddressTest is Test {
     function registerActor(string memory actorName, uint256 vectorIndex) internal {
         Actor memory actor = getActor(actorName);
         
-        // Mock the Epervier verifier to return the actor's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(actor.pqFingerprint)
-        );
-
         // Submit registration intent
         string memory registrationJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         string memory confirmationJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");

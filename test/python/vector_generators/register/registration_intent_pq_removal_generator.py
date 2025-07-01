@@ -45,8 +45,10 @@ def create_remove_registration_message(eth_address, pq_nonce):
     Format: "Remove registration intent from ETH Address " + ethAddress + pqNonce
     This is signed by the PQ key (no domain separator in content)
     """
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])
     pattern = b"Remove registration intent from ETH Address "
     message = (
+        domain_separator_bytes +
         pattern +
         bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix
         pq_nonce.to_bytes(32, "big")
@@ -64,9 +66,10 @@ def sign_pq_message(message, pq_private_key_file):
         # Sign with PQ key using sign_cli.py
         sign_cli = str(project_root / "ETHFALCON" / "python-ref" / "sign_cli.py")
         privkey_path = str(project_root / "test" / "test_keys" / pq_private_key_file)
+        venv_python = str(project_root / "ETHFALCON" / "python-ref" / "myenv" / "bin" / "python3")
         
         cmd = [
-            "python3", sign_cli, "sign",
+            venv_python, sign_cli, "sign",
             f"--privkey={privkey_path}",
             f"--data={message.hex()}",
             "--version=epervier"

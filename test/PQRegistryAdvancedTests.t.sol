@@ -251,7 +251,7 @@ contract PQRegistryAdvancedTests is Test {
         // Load the vectors we'll use for this test
         string memory intentJson = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
         string memory removalJson = vm.readFile("test/test_vectors/register/registration_eth_removal_vectors.json");
-        string memory advancedJson = vm.readFile("test/test_vectors/test2_pq_retry_vectors.json");
+        string memory advancedJson = vm.readFile("test/test_vectors/advanced/test2_pq_retry_vectors.json");
         
         // Get Bob's configuration
         Actor memory bob = getActor("bob");
@@ -305,7 +305,7 @@ contract PQRegistryAdvancedTests is Test {
         
         // Step 3: PQ creates new registration intent (nonce 1)
         console.log("\n--- Step 3: PQ creates new registration intent ---");
-        string memory pqRetryJson = vm.readFile("test/test_vectors/test2_pq_retry_vectors.json");
+        string memory pqRetryJson = vm.readFile("test/test_vectors/advanced/test2_pq_retry_vectors.json");
         bytes memory newIntentMessage = vm.parseBytes(vm.parseJsonString(pqRetryJson, ".registration_intent_nonce2_pq1[0].eth_message"));
         uint8 v3 = uint8(vm.parseUint(vm.parseJsonString(pqRetryJson, ".registration_intent_nonce2_pq1[0].eth_signature.v")));
         uint256 r3Decimal = vm.parseUint(vm.parseJsonString(pqRetryJson, ".registration_intent_nonce2_pq1[0].eth_signature.r"));
@@ -1068,11 +1068,11 @@ contract PQRegistryAdvancedTests is Test {
         console.log("\n--- Step 4: AliceETH registers with BobPQ ---");
         
         // Mock the Epervier verifier to return Bob's fingerprint for the final registration
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(bob.pqFingerprint)
-        );
+        // vm.mockCall(
+        //     address(epervierVerifier),
+        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
+        //     abi.encode(bob.pqFingerprint)
+        // );
         
         string memory finalRegIntentJson = vm.readFile("test/test_vectors/advanced/test9_full_lifecycle_final_registration_intent_vectors.json");
         string memory finalRegConfirmJson = vm.readFile("test/test_vectors/advanced/test9_full_lifecycle_final_registration_confirmation_vectors.json");
@@ -1081,7 +1081,6 @@ contract PQRegistryAdvancedTests is Test {
         bytes memory finalIntentMessage = vm.parseBytes(vm.parseJsonString(finalRegIntentJson, ".final_registration_intent[0].eth_message"));
         bytes32 finalIntentSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(finalIntentMessage.length), finalIntentMessage));
         (uint8 v4, bytes32 r4, bytes32 s4) = vm.sign(alice.ethPrivateKey, finalIntentSignedHash);
-        
         registry.submitRegistrationIntent(finalIntentMessage, v4, r4, s4);
         console.log("Final registration intent submitted - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(bob.pqFingerprint));
         

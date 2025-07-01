@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import subprocess
 import sys
-import os
 from pathlib import Path
 from eth_utils import keccak
+
+def encode_packed(*args):
+    """Encode packed data (equivalent to abi.encodePacked)"""
+    result = b''
+    for arg in args:
+        if isinstance(arg, bytes):
+            result += arg
+        elif isinstance(arg, str):
+            result += arg.encode('utf-8')
+        elif isinstance(arg, int):
+            result += arg.to_bytes(32, 'big')
+    return result
 
 # Add the project root to the Python path
 project_root = Path(__file__).resolve().parents[4]  # epervier-registry
@@ -96,22 +108,29 @@ def generate_registration_confirmation_vector(actor_name):
     # Sign the base ETH message using EIP712
     domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
     struct_hash = get_registration_confirmation_struct_hash(actor["pq_fingerprint"], eth_nonce)
-    signature = sign_eip712_message(eth_private_key_hex, domain_separator, struct_hash)
     
-    # Extract signature components
-    v = signature["v"]
-    r = signature["r"]
-    s = signature["s"]
+    # DEBUG: Print struct hash and EIP712 digest for comparison
+    if actor_name == "alice":
+        print(f"DEBUG: Struct hash for {actor_name}: {struct_hash.hex()}")
+        eip712_digest = get_eip712_digest(domain_separator, struct_hash)
+        print(f"DEBUG: EIP712 digest for {actor_name}: {eip712_digest.hex()}")
     
-
+    # Use the same approach as the working registration intent
+    from eth_utils import keccak
+    digest = keccak(encode_packed(b'\x19\x01', domain_separator, struct_hash))
+    sig = Account._sign_hash(digest, private_key=account.key)
+    signature = {"v": sig.v, "r": sig.r, "s": sig.s}
     
-    print(f"Generated ETH signature for confirmation: v={v}, r={hex(r)}, s={hex(s)}")
-    print(f"ETH address from signature: {account.address}")
+    # Verify the signature by recovering the address from the signature
+    recovered_address = Account._recover_hash(digest, vrs=(signature['v'], signature['r'], signature['s']))
+    
+    print(f"Generated ETH signature for confirmation: v={signature['v']}, r={hex(signature['r'])}, s={hex(signature['s'])}")
+    print(f"ETH address from signature: {recovered_address}")
     print(f"Expected ETH address: {actor['eth_address']}")
     
     # Verify the signature matches the expected address
-    if account.address.lower() != actor['eth_address'].lower():
-        raise ValueError(f"ETH signature address mismatch: {account.address} vs {actor['eth_address']}")
+    if recovered_address.lower() != actor['eth_address'].lower():
+        raise ValueError(f"ETH signature address mismatch: {recovered_address} vs {actor['eth_address']}")
     
     # Get PQ nonce (should be 1 for confirmation after intent)
     pq_nonce = 1
@@ -120,15 +139,17 @@ def generate_registration_confirmation_vector(actor_name):
     # DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
     pattern = "Confirm bonding to ETH Address "
     eth_address_bytes = bytes.fromhex(actor["eth_address"][2:])  # Remove 0x prefix
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
     
-    # Build the message: pattern + ethAddress + baseETHMessage + v + r + s + pqNonce
+    # Build the message: DOMAIN_SEPARATOR + pattern + ethAddress + baseETHMessage + v + r + s + pqNonce
     message = (
+        domain_separator_bytes +
         pattern.encode() +
         eth_address_bytes +
         base_eth_message +
-        v.to_bytes(1, 'big') +
-        r.to_bytes(32, 'big') +
-        s.to_bytes(32, 'big') +
+        signature['v'].to_bytes(1, 'big') +
+        signature['r'].to_bytes(32, 'big') +
+        signature['s'].to_bytes(32, 'big') +
         pq_nonce.to_bytes(32, 'big')
     )
     

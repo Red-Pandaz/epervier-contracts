@@ -3,6 +3,10 @@ from pathlib import Path
 import subprocess
 from eth_account import Account
 from eth_utils import keccak
+import sys
+sys.path.append(str(Path(__file__).resolve().parents[2]))  # Add python directory to path
+from eip712_helpers import get_unregistration_confirmation_struct_hash, sign_eip712_message
+from eip712_config import DOMAIN_SEPARATOR
 
 print("Script loaded successfully!")
 
@@ -11,7 +15,7 @@ project_root = Path(__file__).resolve().parents[4]
 
 ACTORS_CONFIG_PATH = project_root / "test" / "test_keys" / "actors_config.json"
 OUTPUT_PATH = project_root / "test/test_vectors/unregister/unregistration_confirmation_vectors.json"
-DOMAIN_SEPARATOR = keccak(b"PQRegistry")
+DOMAIN_SEPARATOR = bytes.fromhex(DOMAIN_SEPARATOR[2:])
 
 # Helper to convert int to bytes32
 int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
@@ -34,15 +38,14 @@ def build_base_pq_unregistration_confirm_message(domain_separator, eth_address, 
 def create_eth_confirm_message(domain_separator, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
     """
     Create ETH message for unregistration confirmation
-    Format: DOMAIN_SEPARATOR + "Confirm unregistration from Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
-    This is signed by the ETH Address
+    Format: "Confirm unregistration from Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    This is signed by the ETH Address (no domain separator in content for EIP712)
     """
     pattern = b"Confirm unregistration from Epervier Fingerprint "
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
         base_pq_message +
@@ -98,14 +101,13 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
     return out
 
 
-def sign_with_eth_key(eth_message, eth_private_key):
-    # Use Ethereum's personal_sign format
-    eth_message_length = len(eth_message)
-    eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(eth_message_length).encode() + eth_message
-    eth_message_hash = keccak(eth_signed_message)
-    account = Account.from_key(eth_private_key)
-    sig = Account._sign_hash(eth_message_hash, private_key=account.key)
-    return {"v": sig.v, "r": sig.r, "s": sig.s}
+def sign_with_eth_key(eth_message, eth_private_key, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
+    """Sign a message with ETH private key using EIP712"""
+    # Use EIP712 structured signing
+    # DOMAIN_SEPARATOR is already bytes from the import
+    struct_hash = get_unregistration_confirmation_struct_hash(pq_fingerprint, eth_nonce)
+    signature = sign_eip712_message(eth_private_key, DOMAIN_SEPARATOR, struct_hash)
+    return signature
 
 
 def main():
@@ -146,7 +148,7 @@ def main():
         
         # 4. ETH sign the confirmation message
         print("Signing with ETH key...")
-        eth_sig = sign_with_eth_key(eth_confirmation_message, eth_private_key)
+        eth_sig = sign_with_eth_key(eth_confirmation_message, eth_private_key, pq_fingerprint, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce)
         print(f"ETH signature generated: v={eth_sig['v']}, r={eth_sig['r']}, s={eth_sig['s']}")
         
         # 5. Collect all fields
