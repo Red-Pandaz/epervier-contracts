@@ -616,20 +616,34 @@ contract PQRegistry {
             bytes memory basePQMessage
         ) = MessageParser.parseETHChangeETHAddressConfirmationMessage(ethMessage);
         
-        // STEP 2: Verify the ETH signature using EIP712
-        bytes32 structHash = SignatureExtractor.getChangeETHAddressConfirmationStructHash(pqFingerprint, ethNonce);
+        // STEP 2: Parse the base PQ change address confirmation message
+        (address oldEthAddress, address newEthAddress, uint256 pqNonce) = MessageParser.parseBasePQChangeETHAddressConfirmMessage(basePQMessage);
+        
+        // STEP 3: Verify the ETH signature using EIP712 (use old ETH address from PQ message)
+        bytes32 structHash = SignatureExtractor.getChangeETHAddressConfirmationStructHash(oldEthAddress, ethNonce);
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        // DEBUG: Print the values for comparison with Python
+        console.log("DEBUG: Contract oldEthAddress:", oldEthAddress);
+        console.log("DEBUG: Contract ethNonce:", ethNonce);
+        console.log("DEBUG: Contract structHash (bytes32):");
+        console.logBytes32(structHash);
+        console.log("DEBUG: Contract digest (bytes32):");
+        console.logBytes32(digest);
+        
+        // DEBUG: Print the packed bytes that are being hashed
+        bytes memory packed = abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash);
+        console.log("DEBUG: Contract packed bytes:");
+        console.logBytes(packed);
         
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
-        
-        // STEP 3: Parse the base PQ change address confirmation message
-        (address oldEthAddress, address newEthAddress, uint256 pqNonce) = MessageParser.parseBasePQChangeETHAddressConfirmMessage(basePQMessage);
         
         // STEP 4: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
         
         // STEP 5: Cross-reference validation
+        require(pqFingerprint == recoveredFingerprint, "PQ fingerprint mismatch: ETH message vs recovered PQ signature");
         require(newEthAddress == recoveredETHAddress, "ETH Address mismatch: PQ message vs recovered ETH signature");
         
         // STEP 6: State validation

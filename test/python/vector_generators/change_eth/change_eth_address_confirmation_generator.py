@@ -28,11 +28,13 @@ def get_actor_config():
 def create_base_pq_confirm_message(old_eth_address, new_eth_address, pq_nonce):
     """
     Create base PQ message for change ETH Address confirmation
-    Format: "Confirm changing bound ETH Address for Epervier Fingerprint from " + oldEthAddress + " to " + newEthAddress + pqNonce
-    This is signed by the PQ key (no domain separator in content)
+    Format: DOMAIN_SEPARATOR + "Confirm changing bound ETH Address for Epervier Fingerprint from " + oldEthAddress + " to " + newEthAddress + pqNonce
+    This is signed by the PQ key (includes domain separator in content)
     """
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
     pattern = b"Confirm changing bound ETH Address for Epervier Fingerprint from "
     message = (
+        domain_separator +
         pattern +
         bytes.fromhex(old_eth_address[2:]) +  # Remove "0x" prefix
         b" to " +
@@ -46,7 +48,16 @@ def sign_eth_message(message_bytes, private_key, old_eth_address, eth_nonce):
     # Use EIP712 structured signing
     domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
     struct_hash = get_change_eth_address_confirmation_struct_hash(old_eth_address, eth_nonce)
-    signature = sign_eip712_message(private_key, domain_separator, struct_hash)
+    digest = get_eip712_digest(domain_separator, struct_hash)
+    
+    # DEBUG: Print the values for comparison with Solidity
+    print(f"DEBUG: Python old_eth_address: {old_eth_address}")
+    print(f"DEBUG: Python eth_nonce: {eth_nonce}")
+    print(f"DEBUG: Python type_hash: {CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH}")
+    print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
+    print(f"DEBUG: Python digest: {digest.hex()}")
+    
+    signature = sign_eip712_message(digest, private_key)
     return signature
 
 def sign_pq_message(message, pq_private_key_file):

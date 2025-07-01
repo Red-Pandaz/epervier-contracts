@@ -8,11 +8,12 @@ import hashlib
 import struct
 from typing import List, Dict, Any
 from eth_account import Account
+from eth_utils import keccak
 from eip712_config import *
 
 def keccak256(data: bytes) -> bytes:
     """Compute keccak256 hash of data"""
-    return hashlib.sha3_256(data).digest()
+    return keccak(data)
 
 def encode_packed(*args) -> bytes:
     """Encode packed data (equivalent to abi.encodePacked)"""
@@ -139,7 +140,11 @@ def get_domain_separator(contract_address: str) -> bytes:
 
 def get_eip712_digest(domain_separator: bytes, struct_hash: bytes) -> bytes:
     """Compute the EIP712 digest"""
-    return keccak256(encode_packed(b'\x19\x01', domain_separator, struct_hash))
+    packed = encode_packed(b'\x19\x01', domain_separator, struct_hash)
+    print(f"DEBUG: Python packed bytes: {packed.hex()}")
+    result = keccak256(packed)
+    print(f"DEBUG: Python digest result: {result.hex()}")
+    return result
 
 def get_registration_intent_struct_hash(
     eth_nonce: int,
