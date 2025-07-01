@@ -13,8 +13,10 @@ from eth_hash.auto import keccak
 project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.insert(0, str(project_root / "ETHFALCON" / "python-ref"))
 
-# Domain separator (same as in the contract)
-DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
+# Add the python directory to the path for EIP712 imports
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from eip712_helpers import *
+from eip712_config import *
 
 def get_actor_config():
     """Load actor configuration from JSON file"""
@@ -23,15 +25,14 @@ def get_actor_config():
         config = json.load(f)
         return config["actors"]
 
-def create_base_pq_confirm_message(domain_separator, old_eth_address, new_eth_address, pq_nonce):
+def create_base_pq_confirm_message(old_eth_address, new_eth_address, pq_nonce):
     """
     Create base PQ message for change ETH Address confirmation
-    Format: DOMAIN_SEPARATOR + "Confirm changing bound ETH Address for Epervier Fingerprint from " + oldEthAddress + " to " + newEthAddress + pqNonce
-    This is signed by the PQ key
+    Format: "Confirm changing bound ETH Address for Epervier Fingerprint from " + oldEthAddress + " to " + newEthAddress + pqNonce
+    This is signed by the PQ key (no domain separator in content)
     """
     pattern = b"Confirm changing bound ETH Address for Epervier Fingerprint from "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(old_eth_address[2:]) +  # Remove "0x" prefix
         b" to " +
@@ -40,18 +41,13 @@ def create_base_pq_confirm_message(domain_separator, old_eth_address, new_eth_ad
     )
     return message
 
-def sign_eth_message(message_bytes, private_key):
-    """Sign a message with ETH private key (Ethereum Signed Message)"""
-    prefix = b"\x19Ethereum Signed Message:\n" + str(len(message_bytes)).encode()
-    eth_signed_message = prefix + message_bytes
-    eth_signed_message_hash = keccak(eth_signed_message)
-    account = Account.from_key(private_key)
-    sig = Account._sign_hash(eth_signed_message_hash, private_key=account.key)
-    return {
-        "v": sig.v,
-        "r": hex(sig.r),
-        "s": hex(sig.s)
-    }
+def sign_eth_message(message_bytes, private_key, old_eth_address, eth_nonce):
+    """Sign a message with ETH private key using EIP712"""
+    # Use EIP712 structured signing
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    struct_hash = get_change_eth_address_confirmation_struct_hash(old_eth_address, eth_nonce)
+    signature = sign_eip712_message(private_key, domain_separator, struct_hash)
+    return signature
 
 def sign_pq_message(message, pq_private_key_file):
     """Sign a message with PQ private key using sign_cli.py"""
@@ -108,18 +104,17 @@ def sign_pq_message(message, pq_private_key_file):
         print(f"Error in PQ signing: {e}")
         return None
 
-def create_eth_confirm_message(domain_separator, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
+def create_eth_confirm_message(pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
     """
     Create ETH message for change ETH Address confirmation
-    Format: DOMAIN_SEPARATOR + "Confirm change ETH Address for Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
-    This is signed by the ETH key
+    Format: "Confirm change ETH Address for Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    This is signed by the ETH key (no domain separator in content)
     """
     pattern = b"Confirm change ETH Address for Epervier Fingerprint "
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
         base_pq_message +
@@ -153,14 +148,14 @@ def generate_change_eth_address_confirmation_vectors():
         eth_nonce = 1  # Next actor's ETH nonce (1 for confirmation)
         pq_nonce = 3   # Current actor's PQ nonce (3 for confirmation)
 
-        base_pq_message = create_base_pq_confirm_message(DOMAIN_SEPARATOR, old_eth_address, new_eth_address, pq_nonce)
+        base_pq_message = create_base_pq_confirm_message(old_eth_address, new_eth_address, pq_nonce)
         pq_signature = sign_pq_message(base_pq_message, current_actor["pq_private_key_file"])
         if pq_signature is None:
             print(f"Failed to generate PQ signature for {current_actor_name}")
             continue
 
-        eth_message = create_eth_confirm_message(DOMAIN_SEPARATOR, pq_fingerprint, base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], eth_nonce)
-        eth_signature = sign_eth_message(eth_message, next_actor["eth_private_key"])
+        eth_message = create_eth_confirm_message(pq_fingerprint, base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], eth_nonce)
+        eth_signature = sign_eth_message(eth_message, next_actor["eth_private_key"], old_eth_address, eth_nonce)
 
         confirmation_vector = {
             "current_actor": current_actor_name,

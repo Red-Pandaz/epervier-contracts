@@ -7,6 +7,25 @@ pragma solidity ^0.8.19;
  */
 library SignatureExtractor {
     
+    // EIP-712 Domain Separator
+    string public constant DOMAIN_NAME = "PQRegistry";
+    string public constant DOMAIN_VERSION = "1";
+    uint256 public constant CHAIN_ID = 11155420; // Optimism Sepolia
+    
+    // Domain Separator Type Hash
+    bytes32 public constant DOMAIN_SEPARATOR_TYPE_HASH = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+    
+    // EIP-712 Type Hashes
+    bytes32 public constant REGISTRATION_INTENT_TYPE_HASH = keccak256("RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)");
+    bytes32 public constant REGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant REMOVE_INTENT_TYPE_HASH = keccak256("RemoveIntent(address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH = keccak256("ChangeETHAddressIntent(address newETHAddress,uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = keccak256("ChangeETHAddressConfirmation(address oldETHAddress,uint256 ethNonce)");
+    bytes32 public constant UNREGISTRATION_INTENT_TYPE_HASH = keccak256("UnregistrationIntent(uint256 ethNonce)");
+    bytes32 public constant UNREGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("UnregistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant REMOVE_CHANGE_INTENT_TYPE_HASH = keccak256("RemoveChangeIntent(uint256 ethNonce)");
+    bytes32 public constant REMOVE_UNREGISTRATION_INTENT_TYPE_HASH = keccak256("RemoveUnregistrationIntent(uint256 ethNonce)");
+    
     /**
      * @dev Extract ETH signature from PQ message
      * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce + ethSignature
@@ -329,6 +348,179 @@ library SignatureExtractor {
         } else {
             revert("Invalid message type");
         }
+    }
+    
+    /**
+     * @dev Compute the EIP-712 domain separator
+     * @param verifyingContract The address of the verifying contract
+     * @return The domain separator as bytes32
+     */
+    function getDomainSeparator(address verifyingContract) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                DOMAIN_SEPARATOR_TYPE_HASH,
+                keccak256(bytes(DOMAIN_NAME)),
+                keccak256(bytes(DOMAIN_VERSION)),
+                CHAIN_ID,
+                verifyingContract
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for RegistrationIntent
+     */
+    function getRegistrationIntentStructHash(
+        uint256 ethNonce,
+        bytes memory salt,
+        uint256[32] memory cs1,
+        uint256[32] memory cs2,
+        uint256 hint,
+        bytes memory basePQMessage
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                REGISTRATION_INTENT_TYPE_HASH,
+                ethNonce,
+                keccak256(salt),
+                keccak256(abi.encodePacked(cs1)),
+                keccak256(abi.encodePacked(cs2)),
+                hint,
+                keccak256(basePQMessage)
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for RegistrationConfirmation
+     */
+    function getRegistrationConfirmationStructHash(
+        address pqFingerprint,
+        uint256 ethNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                REGISTRATION_CONFIRMATION_TYPE_HASH,
+                pqFingerprint,
+                ethNonce
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for RemoveIntent
+     */
+    function getRemoveIntentStructHash(
+        address pqFingerprint,
+        uint256 ethNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                REMOVE_INTENT_TYPE_HASH,
+                pqFingerprint,
+                ethNonce
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for ChangeETHAddressIntent
+     */
+    function getChangeETHAddressIntentStructHash(
+        address newETHAddress,
+        uint256 ethNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH,
+                newETHAddress,
+                ethNonce
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for ChangeETHAddressConfirmation
+     */
+    function getChangeETHAddressConfirmationStructHash(
+        address oldETHAddress,
+        uint256 ethNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH,
+                oldETHAddress,
+                ethNonce
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for UnregistrationIntent
+     */
+    function getUnregistrationIntentStructHash(
+        uint256 ethNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                UNREGISTRATION_INTENT_TYPE_HASH,
+                ethNonce
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for UnregistrationConfirmation
+     */
+    function getUnregistrationConfirmationStructHash(
+        address pqFingerprint,
+        uint256 ethNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                UNREGISTRATION_CONFIRMATION_TYPE_HASH,
+                pqFingerprint,
+                ethNonce
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for RemoveChangeIntent
+     */
+    function getRemoveChangeIntentStructHash(
+        uint256 ethNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                REMOVE_CHANGE_INTENT_TYPE_HASH,
+                ethNonce
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 struct hash for RemoveUnregistrationIntent
+     */
+    function getRemoveUnregistrationIntentStructHash(
+        uint256 ethNonce
+    ) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                REMOVE_UNREGISTRATION_INTENT_TYPE_HASH,
+                ethNonce
+            )
+        );
+    }
+    
+    /**
+     * @dev Compute the EIP-712 digest for a struct hash
+     * @param domainSeparator The domain separator
+     * @param structHash The struct hash
+     * @return The EIP-712 digest
+     */
+    function getEIP712Digest(bytes32 domainSeparator, bytes32 structHash) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
     }
 }
 

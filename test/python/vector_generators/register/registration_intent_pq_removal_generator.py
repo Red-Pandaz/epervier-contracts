@@ -23,6 +23,11 @@ sys.path.insert(0, str(project_root))
 # Add ETHFALCON to the path for imports
 sys.path.insert(0, str(project_root / "ETHFALCON" / "python-ref"))
 
+# Add the python directory to the path for EIP712 imports
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from eip712_helpers import *
+from eip712_config import *
+
 # Load actors configuration
 ACTORS_CONFIG_PATH = project_root / "test" / "test_keys" / "actors_config.json"
 
@@ -31,21 +36,17 @@ def get_actor_config():
     with open(ACTORS_CONFIG_PATH, "r") as f:
         return json.load(f)["actors"]
 
-# Domain separator from the contract (as bytes32)
-DOMAIN_SEPARATOR = keccak(b"PQRegistry")
-
 # Helper to convert int to bytes32
 int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
 
-def create_remove_registration_message(domain_separator, eth_address, pq_nonce):
+def create_remove_registration_message(eth_address, pq_nonce):
     """
     Create PQ message for removing registration intent
-    Format: DOMAIN_SEPARATOR + "Remove registration intent from ETH Address " + ethAddress + pqNonce
-    This is signed by the PQ key
+    Format: "Remove registration intent from ETH Address " + ethAddress + pqNonce
+    This is signed by the PQ key (no domain separator in content)
     """
     pattern = b"Remove registration intent from ETH Address "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix
         pq_nonce.to_bytes(32, "big")
@@ -121,7 +122,7 @@ def generate_pq_removal_vectors():
         
         # PQ-side removal vector
         pq_nonce = 1  # Nonce after submitting registration intent
-        pq_message = create_remove_registration_message(DOMAIN_SEPARATOR, actor_data["eth_address"], pq_nonce)
+        pq_message = create_remove_registration_message(actor_data["eth_address"], pq_nonce)
         pq_signature = sign_pq_message(pq_message, actor_data["pq_private_key_file"])
         
         if pq_signature is None:

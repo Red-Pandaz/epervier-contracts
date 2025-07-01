@@ -14,13 +14,17 @@ sys.path.insert(0, str(project_root))
 # Add ETHFALCON to the path for imports
 sys.path.insert(0, str(project_root / "ETHFALCON" / "python-ref"))
 
+# Add the python directory to the path for EIP712 imports
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from eip712_helpers import *
+from eip712_config import *
+
 print(f"DEBUG: project_root = {project_root}")
 print(f"DEBUG: falcon path = {project_root / 'ETHFALCON' / 'python-ref'}")
 print(f"DEBUG: falcon.py exists = {(project_root / 'ETHFALCON' / 'python-ref' / 'falcon.py').exists()}")
 print(f"DEBUG: sys.path[0] = {sys.path[0]}")
 
 # Constants and functions from registration_intent_generator
-DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 ACTORS_CONFIG_PATH = project_root / "test" / "test_keys" / "actors_config.json"
 
 OUTPUT_PATH = project_root / "test/test_vectors/register/registration_confirmation_vectors.json"
@@ -30,15 +34,14 @@ def get_actor_config():
     with open(ACTORS_CONFIG_PATH, "r") as f:
         return json.load(f)["actors"]
 
-def create_base_eth_message(domain_separator, pq_fingerprint, eth_nonce):
+def create_base_eth_message(pq_fingerprint, eth_nonce):
     """
     Create base ETH message for registration confirmation
-    Format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
-    This is signed by the ETH Address
+    Format: "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    This is signed by the ETH Address (no domain separator in content)
     """
     base_eth_pattern = "Confirm bonding to Epervier Fingerprint "
     message = (
-        domain_separator +
         base_eth_pattern.encode() +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
         eth_nonce.to_bytes(32, 'big')
@@ -73,8 +76,8 @@ def generate_registration_confirmation_vector(actor_name):
     eth_nonce = 1
     
     # Construct the BaseETHRegistrationConfirmationMessage according to schema
-    # DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
-    base_eth_message = create_base_eth_message(DOMAIN_SEPARATOR, actor["pq_fingerprint"], eth_nonce)
+    # "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    base_eth_message = create_base_eth_message(actor["pq_fingerprint"], eth_nonce)
     
     print(f"Generated base ETH message: {base_eth_message.hex()}")
     print(f"Length of base ETH message (bytes): {len(base_eth_message)}")
@@ -90,14 +93,17 @@ def generate_registration_confirmation_vector(actor_name):
     # Create account from private key
     account = Account.from_key(eth_private_key_hex)
     
-    # Sign the base ETH message
-    message_hash = encode_defunct(base_eth_message)
-    signed_message = account.sign_message(message_hash)
+    # Sign the base ETH message using EIP712
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    struct_hash = get_registration_confirmation_struct_hash(actor["pq_fingerprint"], eth_nonce)
+    signature = sign_eip712_message(eth_private_key_hex, domain_separator, struct_hash)
     
     # Extract signature components
-    v = signed_message.v
-    r = signed_message.r
-    s = signed_message.s
+    v = signature["v"]
+    r = signature["r"]
+    s = signature["s"]
+    
+
     
     print(f"Generated ETH signature for confirmation: v={v}, r={hex(r)}, s={hex(s)}")
     print(f"ETH address from signature: {account.address}")
@@ -115,9 +121,8 @@ def generate_registration_confirmation_vector(actor_name):
     pattern = "Confirm bonding to ETH Address "
     eth_address_bytes = bytes.fromhex(actor["eth_address"][2:])  # Remove 0x prefix
     
-    # Build the message: DOMAIN_SEPARATOR + pattern + ethAddress + baseETHMessage + v + r + s + pqNonce
+    # Build the message: pattern + ethAddress + baseETHMessage + v + r + s + pqNonce
     message = (
-        DOMAIN_SEPARATOR +
         pattern.encode() +
         eth_address_bytes +
         base_eth_message +

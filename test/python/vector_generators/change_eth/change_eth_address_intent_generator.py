@@ -19,10 +19,16 @@ import sys
 from pathlib import Path
 from eth_account import Account
 from eth_utils import keccak
+import re
 
 # Add the project root to the Python path
 project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.insert(0, str(project_root))
+
+# Add the python directory to the path for EIP712 imports
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from eip712_helpers import *
+from eip712_config import *
 
 # Load actors configuration
 ACTORS_CONFIG_PATH = project_root / "test" / "test_keys" / "actors_config.json"
@@ -35,18 +41,16 @@ def get_actor_config():
     with open(ACTORS_CONFIG_PATH, "r") as f:
         return json.load(f)["actors"]
 
-# Domain separator from the contract
-DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 
-def create_base_eth_message(domain_separator, pq_fingerprint, new_eth_address, eth_nonce):
+
+def create_base_eth_message(pq_fingerprint, new_eth_address, eth_nonce):
     """
     Create base ETH message for change ETH Address intent
-    Format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
-    This is signed by Bob (new ETH Address)
+    Format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+    This is signed by Bob (new ETH Address) (no domain separator in content)
     """
     pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
         b" to " +
@@ -55,15 +59,14 @@ def create_base_eth_message(domain_separator, pq_fingerprint, new_eth_address, e
     )
     return message
 
-def create_base_pq_message(domain_separator, old_eth_address, new_eth_address, base_eth_message, v, r, s, pq_nonce):
+def create_base_pq_message(old_eth_address, new_eth_address, base_eth_message, v, r, s, pq_nonce):
     """
     Create base PQ message for change ETH Address intent
-    Format: DOMAIN_SEPARATOR + "Intent to change bound ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
-    This is signed by Alice (PQ key)
+    Format: "Intent to change bound ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
+    This is signed by Alice (PQ key) (no domain separator in content)
     """
     pattern = b"Intent to change bound ETH Address from "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(old_eth_address[2:]) +  # Remove "0x" prefix
         b" to " +
@@ -76,18 +79,13 @@ def create_base_pq_message(domain_separator, old_eth_address, new_eth_address, b
     )
     return message
 
-def sign_eth_message(message_bytes, private_key):
-    """Sign a message with ETH private key (Ethereum Signed Message)"""
-    prefix = b"\x19Ethereum Signed Message:\n" + str(len(message_bytes)).encode()
-    eth_signed_message = prefix + message_bytes
-    eth_signed_message_hash = keccak(eth_signed_message)
-    account = Account.from_key(private_key)
-    sig = Account._sign_hash(eth_signed_message_hash, private_key=account.key)
-    return {
-        "v": sig.v,
-        "r": hex(sig.r),
-        "s": hex(sig.s)
-    }
+def sign_eth_message(message_bytes, private_key, new_eth_address, eth_nonce):
+    """Sign a message with ETH private key using EIP712"""
+    # Use EIP712 structured signing
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    struct_hash = get_change_eth_address_intent_struct_hash(new_eth_address, eth_nonce)
+    signature = sign_eip712_message(private_key, domain_separator, struct_hash)
+    return signature
 
 def sign_pq_message(message, pq_private_key_file):
     """Sign a message with PQ private key using sign_cli.py"""
@@ -108,7 +106,8 @@ def sign_pq_message(message, pq_private_key_file):
         
         print(f"Running command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=project_root / "ETHFALCON" / "python-ref")
-        
+        print(f"DEBUG: PQ sign_cli result.stdout: {result.stdout}")
+        print(f"DEBUG: PQ sign_cli result.stderr: {result.stderr}")
         if result.returncode != 0:
             print(f"Error signing message: {result.stderr}")
             return None
@@ -118,16 +117,72 @@ def sign_pq_message(message, pq_private_key_file):
         
         # Parse the signature components from stdout
         lines = result.stdout.splitlines()
+        print(f"DEBUG: All PQ signing output lines: {lines}")
         signature_data = {}
-        for line in lines:
-            if line.startswith("salt:"):
-                signature_data["salt"] = bytes.fromhex(line.split()[1])
-            elif line.startswith("hint:"):
-                signature_data["hint"] = int(line.split()[1])
-            elif line.startswith("cs1:"):
-                signature_data["cs1"] = [int(x, 16) for x in line.split()[1:]]
-            elif line.startswith("cs2:"):
-                signature_data["cs2"] = [int(x, 16) for x in line.split()[1:]]
+        try:
+            print(f"DEBUG: PQ signing output lines:")
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                print(f"DEBUG: Line: '{line}'")
+                
+                if line.startswith("salt:"):
+                    signature_data["salt"] = bytes.fromhex(line.split()[1])
+                    i += 1
+                elif line.startswith("hint:"):
+                    signature_data["hint"] = int(line.split()[1])
+                    i += 1
+                elif line.startswith("cs1:"):
+                    # Collect all cs1 values across multiple lines
+                    cs1_content = line[4:].strip()  # Remove "cs1:" prefix
+                    i += 1
+                    # Continue reading lines until we hit another key or end
+                    while i < len(lines) and not lines[i].startswith(("salt:", "hint:", "cs1:", "cs2:")):
+                        cs1_content += " " + lines[i].strip()
+                        i += 1
+                    
+                    # Parse the collected cs1 values
+                    values = cs1_content.split()
+                    parsed = []
+                    for x in values:
+                        print(f"DEBUG: cs1 value: '{x}' type: {type(x)}")
+                        if x and re.match(r'^0x[0-9a-fA-F]+$', x):
+                            try:
+                                parsed.append(int(x[2:], 16))
+                            except Exception as e:
+                                print(f"Error parsing cs1 value '{x}': {e}")
+                        elif x:
+                            print(f"Skipping non-hex cs1 value: '{x}'")
+                    signature_data["cs1"] = parsed
+                    
+                elif line.startswith("cs2:"):
+                    # Collect all cs2 values across multiple lines
+                    cs2_content = line[4:].strip()  # Remove "cs2:" prefix
+                    i += 1
+                    # Continue reading lines until we hit another key or end
+                    while i < len(lines) and not lines[i].startswith(("salt:", "hint:", "cs1:", "cs2:")):
+                        cs2_content += " " + lines[i].strip()
+                        i += 1
+                    
+                    # Parse the collected cs2 values
+                    values = cs2_content.split()
+                    parsed = []
+                    for x in values:
+                        print(f"DEBUG: cs2 value: '{x}' type: {type(x)}")
+                        if x and re.match(r'^0x[0-9a-fA-F]+$', x):
+                            try:
+                                parsed.append(int(x[2:], 16))
+                            except Exception as e:
+                                print(f"Error parsing cs2 value '{x}': {e}")
+                        elif x:
+                            print(f"Skipping non-hex cs2 value: '{x}'")
+                    signature_data["cs2"] = parsed
+                else:
+                    i += 1
+        except Exception as e:
+            print(f"Exception during PQ signature parsing: {e}")
+            print(f"Offending line: '{line}'")
+            return None
         
         if not all(key in signature_data for key in ["salt", "hint", "cs1", "cs2"]):
             print(f"Failed to parse signature components")
@@ -172,13 +227,14 @@ def generate_change_eth_address_intent_vectors():
         pq_nonce = 2  # Current actor's PQ nonce (2 for change ETH address intent after registration)
         
         # Step 1: Next actor signs the base ETH message
-        base_eth_message = create_base_eth_message(DOMAIN_SEPARATOR, pq_fingerprint, new_eth_address, eth_nonce)
-        eth_signature = sign_eth_message(base_eth_message, next_actor["eth_private_key"])  # Next actor signs
+        base_eth_message = create_base_eth_message(pq_fingerprint, new_eth_address, eth_nonce)
+        eth_signature = sign_eth_message(base_eth_message, next_actor["eth_private_key"], new_eth_address, eth_nonce)  # Next actor signs
+        print(f"DEBUG: eth_signature = {eth_signature}")
         
         # Step 2: Current actor's PQ key signs the complete message containing next actor's signature
         base_pq_message = create_base_pq_message(
-            DOMAIN_SEPARATOR, old_eth_address, new_eth_address, base_eth_message,
-            eth_signature["v"], int(eth_signature["r"], 16), int(eth_signature["s"], 16), pq_nonce)
+            old_eth_address, new_eth_address, base_eth_message,
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], pq_nonce)
         pq_signature = sign_pq_message(base_pq_message, current_actor["pq_private_key_file"])  # Current actor's PQ key signs
         
         if pq_signature is None:
@@ -188,27 +244,26 @@ def generate_change_eth_address_intent_vectors():
         # Create the full ETH message for contract submission
         # The basePQMessage should be the message that was signed by the PQ key
         base_pq_message_for_contract = (
-            DOMAIN_SEPARATOR +
             b"Intent to change bound ETH Address from " +
             bytes.fromhex(old_eth_address[2:]) +  # Remove "0x" prefix
             b" to " +
             bytes.fromhex(new_eth_address[2:]) +  # Remove "0x" prefix
             base_eth_message +
             eth_signature["v"].to_bytes(1, "big") +
-            int(eth_signature["r"], 16).to_bytes(32, "big") +
-            int(eth_signature["s"], 16).to_bytes(32, "big") +
+            eth_signature["r"].to_bytes(32, "big") +
+            eth_signature["s"].to_bytes(32, "big") +
             pq_nonce.to_bytes(32, "big")
         )
         
         eth_message = (
-            DOMAIN_SEPARATOR +
+            bytes.fromhex(DOMAIN_SEPARATOR[2:]) +
             b"Intent to change ETH Address and bond with Epervier Fingerprint " +
             bytes.fromhex(pq_fingerprint[2:]) +
             base_pq_message_for_contract +
             bytes.fromhex(pq_signature["salt"]) +
             b"".join(int(x, 16).to_bytes(32, "big") for x in pq_signature["cs1"]) +
             b"".join(int(x, 16).to_bytes(32, "big") for x in pq_signature["cs2"]) +
-            pq_signature["hint"].to_bytes(32, "big") +
+            int(pq_signature["hint"]).to_bytes(32, "big") +
             eth_nonce.to_bytes(32, "big")
         )
         

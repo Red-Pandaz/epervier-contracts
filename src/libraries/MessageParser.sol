@@ -59,33 +59,33 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](6);
         string[] memory fieldTypes = new string[](6);
         
-        // basePQMessage: starts after DOMAIN_SEPARATOR (32) + pattern (27) = 59, length = 111
-        fieldOffsets[0] = 59;
+        // basePQMessage: starts after pattern (27) = 27, length = 111
+        fieldOffsets[0] = 27;
         fieldLengths[0] = 111;
         fieldTypes[0] = "bytes";
         
-        // salt: starts after basePQMessage = 59 + 111 = 170, length = 40
-        fieldOffsets[1] = 170;
+        // salt: starts after basePQMessage = 27 + 111 = 138, length = 40
+        fieldOffsets[1] = 138;
         fieldLengths[1] = 40;
         fieldTypes[1] = "bytes";
         
-        // cs1: starts after salt = 170 + 40 = 210, length = 32 * 32 = 1024
-        fieldOffsets[2] = 210;
+        // cs1: starts after salt = 138 + 40 = 178, length = 32 * 32 = 1024
+        fieldOffsets[2] = 178;
         fieldLengths[2] = 1024;
         fieldTypes[2] = "uint256[32]";
         
-        // cs2: starts after cs1 = 210 + 1024 = 1234, length = 32 * 32 = 1024
-        fieldOffsets[3] = 1234;
+        // cs2: starts after cs1 = 178 + 1024 = 1202, length = 32 * 32 = 1024
+        fieldOffsets[3] = 1202;
         fieldLengths[3] = 1024;
         fieldTypes[3] = "uint256[32]";
         
-        // hint: starts after cs2 = 1234 + 1024 = 2258, length = 32
-        fieldOffsets[4] = 2258;
+        // hint: starts after cs2 = 1202 + 1024 = 2226, length = 32
+        fieldOffsets[4] = 2226;
         fieldLengths[4] = 32;
         fieldTypes[4] = "uint256";
         
-        // ethNonce: starts after hint = 2258 + 32 = 2290, length = 32
-        fieldOffsets[5] = 2290;
+        // ethNonce: starts after hint = 2226 + 32 = 2258, length = 32
+        fieldOffsets[5] = 2258;
         fieldLengths[5] = 32;
         fieldTypes[5] = "uint256";
         
@@ -132,13 +132,13 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (40) = 72
-        fieldOffsets[0] = 72;
+        // pqFingerprint: starts after pattern (40) = 40
+        fieldOffsets[0] = 40;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // ethNonce: starts after pqFingerprint = 72 + 20 = 92
-        fieldOffsets[1] = 92;
+        // ethNonce: starts after pqFingerprint = 40 + 20 = 60
+        fieldOffsets[1] = 60;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
@@ -170,8 +170,8 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](6);
         string[] memory fieldTypes = new string[](6);
         
-        // DOMAIN_SEPARATOR (32 bytes) + pattern (31 bytes) + ethAddress (20 bytes) + baseETHMessage (variable) + v (1 byte) + r (32 bytes) + s (32 bytes) + pqNonce (32 bytes)
-        fieldOffsets[0] = 32 + 31; // ethAddress starts after DOMAIN_SEPARATOR + pattern
+        // pattern (31 bytes) + ethAddress (20 bytes) + baseETHMessage (variable) + v (1 byte) + r (32 bytes) + s (32 bytes) + pqNonce (32 bytes)
+        fieldOffsets[0] = 31; // ethAddress starts after pattern
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
@@ -225,7 +225,7 @@ library MessageParser {
         bytes memory pattern = "Confirm unregistration from ETH Address ";
         
         uint256 manualPatternIndex = type(uint256).max;
-        for (uint i = 32; i <= message.length - pattern.length; i++) {
+        for (uint i = 0; i <= message.length - pattern.length; i++) {
             bool found = true;
             for (uint j = 0; j < pattern.length; j++) {
                 if (message[i + j] != pattern[j]) {
@@ -282,23 +282,23 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](4);
         string[] memory fieldTypes = new string[](4);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (64) = 96
-        fieldOffsets[0] = 96;
+        // pqFingerprint: starts after pattern (64) = 64
+        fieldOffsets[0] = 64;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // " to " pattern: starts after pqFingerprint = 96 + 20 = 116, length = 4
-        fieldOffsets[1] = 116;
+        // " to " pattern: starts after pqFingerprint = 64 + 20 = 84, length = 4
+        fieldOffsets[1] = 84;
         fieldLengths[1] = 4;
         fieldTypes[1] = "string";
         
-        // newEthAddress: starts after " to " = 116 + 4 = 120, length = 20
-        fieldOffsets[2] = 120;
+        // newEthAddress: starts after " to " = 84 + 4 = 88, length = 20
+        fieldOffsets[2] = 88;
         fieldLengths[2] = 20;
         fieldTypes[2] = "address";
         
-        // ethNonce: starts after newEthAddress = 120 + 20 = 140, length = 32
-        fieldOffsets[3] = 140;
+        // ethNonce: starts after newEthAddress = 88 + 20 = 108, length = 32
+        fieldOffsets[3] = 108;
         fieldLengths[3] = 32;
         fieldTypes[3] = "uint256";
         
@@ -337,38 +337,38 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](7);
         string[] memory fieldTypes = new string[](7);
         
-        // oldEthAddress: starts after DOMAIN_SEPARATOR (32) + pattern (40) = 72
-        fieldOffsets[0] = 72;
+        // oldEthAddress: starts after pattern (40) = 40
+        fieldOffsets[0] = 40;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // " to " pattern: starts after oldEthAddress = 72 + 20 = 92, length = 4
-        fieldOffsets[1] = 92;
+        // " to " pattern: starts after oldEthAddress = 40 + 20 = 60, length = 4
+        fieldOffsets[1] = 60;
         fieldLengths[1] = 4;
         fieldTypes[1] = "string";
         
-        // newEthAddress: starts after " to " = 92 + 4 = 96, length = 20
-        fieldOffsets[2] = 96;
+        // newEthAddress: starts after " to " = 60 + 4 = 64, length = 20
+        fieldOffsets[2] = 64;
         fieldLengths[2] = 20;
         fieldTypes[2] = "address";
         
-        // baseETHMessage: starts after newEthAddress = 96 + 20 = 116, length = 172
-        fieldOffsets[3] = 116;
+        // baseETHMessage: starts after newEthAddress = 64 + 20 = 84, length = 172
+        fieldOffsets[3] = 84;
         fieldLengths[3] = 172;
         fieldTypes[3] = "bytes";
         
-        // v: starts after baseETHMessage = 116 + 172 = 288, length = 1
-        fieldOffsets[4] = 288;
+        // v: starts after baseETHMessage = 84 + 172 = 256, length = 1
+        fieldOffsets[4] = 256;
         fieldLengths[4] = 1;
         fieldTypes[4] = "uint8";
         
-        // r: starts after v = 288 + 1 = 289, length = 32
-        fieldOffsets[5] = 289;
+        // r: starts after v = 256 + 1 = 257, length = 32
+        fieldOffsets[5] = 257;
         fieldLengths[5] = 32;
         fieldTypes[5] = "bytes32";
         
-        // s: starts after r = 289 + 32 = 321, length = 32
-        fieldOffsets[6] = 321;
+        // s: starts after r = 257 + 32 = 289, length = 32
+        fieldOffsets[6] = 289;
         fieldLengths[6] = 32;
         fieldTypes[6] = "bytes32";
         
@@ -414,23 +414,23 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](4);
         string[] memory fieldTypes = new string[](4);
         
-        // oldEthAddress: starts after DOMAIN_SEPARATOR (32) + pattern (65) = 97
-        fieldOffsets[0] = 97;
+        // oldEthAddress: starts after pattern (65) = 65
+        fieldOffsets[0] = 65;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // " to " pattern: starts after oldEthAddress = 97 + 20 = 117, length = 4
-        fieldOffsets[1] = 117;
+        // " to " pattern: starts after oldEthAddress = 65 + 20 = 85, length = 4
+        fieldOffsets[1] = 85;
         fieldLengths[1] = 4;
         fieldTypes[1] = "string";
         
-        // newEthAddress: starts after " to " = 117 + 4 = 121, length = 20
-        fieldOffsets[2] = 121;
+        // newEthAddress: starts after " to " = 85 + 4 = 89, length = 20
+        fieldOffsets[2] = 89;
         fieldLengths[2] = 20;
         fieldTypes[2] = "address";
         
-        // pqNonce: starts after newEthAddress = 121 + 20 = 141, length = 32
-        fieldOffsets[3] = 141;
+        // pqNonce: starts after newEthAddress = 89 + 20 = 109, length = 32
+        fieldOffsets[3] = 109;
         fieldLengths[3] = 32;
         fieldTypes[3] = "uint256";
         
@@ -464,13 +464,13 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (47) = 79
-        fieldOffsets[0] = 79;
+        // pqFingerprint: starts after pattern (47) = 47
+        fieldOffsets[0] = 47;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // ethNonce: starts after pqFingerprint = 79 + 20 = 99
-        fieldOffsets[1] = 99;
+        // ethNonce: starts after pqFingerprint = 47 + 20 = 67
+        fieldOffsets[1] = 67;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
@@ -569,38 +569,38 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](7);
         string[] memory fieldTypes = new string[](7);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (49) = 81
-        fieldOffsets[0] = 81;
+        // pqFingerprint: starts after pattern (49) = 49
+        fieldOffsets[0] = 49;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // basePQMessage: starts after pqFingerprint = 81 + 20 = 101, length = 111
-        fieldOffsets[1] = 101;
+        // basePQMessage: starts after pqFingerprint = 49 + 20 = 69, length = 111
+        fieldOffsets[1] = 69;
         fieldLengths[1] = 111;
         fieldTypes[1] = "bytes";
         
-        // salt: starts after basePQMessage = 101 + 111 = 212, length = 40
-        fieldOffsets[2] = 212;
+        // salt: starts after basePQMessage = 69 + 111 = 180, length = 40
+        fieldOffsets[2] = 180;
         fieldLengths[2] = 40;
         fieldTypes[2] = "bytes";
         
-        // cs1: starts after salt = 212 + 40 = 252, length = 32 * 32 = 1024
-        fieldOffsets[3] = 252;
+        // cs1: starts after salt = 180 + 40 = 220, length = 32 * 32 = 1024
+        fieldOffsets[3] = 220;
         fieldLengths[3] = 1024;
         fieldTypes[3] = "uint256[32]";
         
-        // cs2: starts after cs1 = 252 + 1024 = 1276, length = 32 * 32 = 1024
-        fieldOffsets[4] = 1276;
+        // cs2: starts after cs1 = 220 + 1024 = 1244, length = 32 * 32 = 1024
+        fieldOffsets[4] = 1244;
         fieldLengths[4] = 1024;
         fieldTypes[4] = "uint256[32]";
         
-        // hint: starts after cs2 = 1276 + 1024 = 2300, length = 32
-        fieldOffsets[5] = 2300;
+        // hint: starts after cs2 = 1244 + 1024 = 2268, length = 32
+        fieldOffsets[5] = 2268;
         fieldLengths[5] = 32;
         fieldTypes[5] = "uint256";
         
-        // ethNonce: starts after hint = 2300 + 32 = 2332, length = 32
-        fieldOffsets[6] = 2332;
+        // ethNonce: starts after hint = 2268 + 32 = 2300, length = 32
+        fieldOffsets[6] = 2300;
         fieldLengths[6] = 32;
         fieldTypes[6] = "uint256";
         
@@ -658,38 +658,38 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](7);
         string[] memory fieldTypes = new string[](7);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (52) = 84
-        fieldOffsets[0] = 84;
+        // pqFingerprint: starts after pattern (52) = 52
+        fieldOffsets[0] = 52;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // basePQMessage: starts after pqFingerprint = 84 + 20 = 104, length = 173
-        fieldOffsets[1] = 104;
+        // basePQMessage: starts after pqFingerprint = 52 + 20 = 72, length = 173
+        fieldOffsets[1] = 72;
         fieldLengths[1] = 173;
         fieldTypes[1] = "bytes";
         
-        // salt: starts after basePQMessage = 104 + 173 = 277, length = 40
-        fieldOffsets[2] = 277;
+        // salt: starts after basePQMessage = 72 + 173 = 245, length = 40
+        fieldOffsets[2] = 245;
         fieldLengths[2] = 40;
         fieldTypes[2] = "bytes";
         
-        // cs1: starts after salt = 277 + 40 = 317, length = 32 * 32 = 1024
-        fieldOffsets[3] = 317;
+        // cs1: starts after salt = 245 + 40 = 285, length = 32 * 32 = 1024
+        fieldOffsets[3] = 285;
         fieldLengths[3] = 1024;
         fieldTypes[3] = "uint256[32]";
         
-        // cs2: starts after cs1 = 317 + 1024 = 1341, length = 32 * 32 = 1024
-        fieldOffsets[4] = 1341;
+        // cs2: starts after cs1 = 285 + 1024 = 1309, length = 32 * 32 = 1024
+        fieldOffsets[4] = 1309;
         fieldLengths[4] = 1024;
         fieldTypes[4] = "uint256[32]";
         
-        // hint: starts after cs2 = 1341 + 1024 = 2365, length = 32
-        fieldOffsets[5] = 2365;
+        // hint: starts after cs2 = 1309 + 1024 = 2333, length = 32
+        fieldOffsets[5] = 2333;
         fieldLengths[5] = 32;
         fieldTypes[5] = "uint256";
         
-        // ethNonce: starts after hint = 2365 + 32 = 2397, length = 32
-        fieldOffsets[6] = 2397;
+        // ethNonce: starts after hint = 2333 + 32 = 2365, length = 32
+        fieldOffsets[6] = 2365;
         fieldLengths[6] = 32;
         fieldTypes[6] = "uint256";
         
@@ -736,8 +736,8 @@ library MessageParser {
      */
     function parseETHAddressFromETHUnregistrationConfirmationMessage(bytes memory message) internal pure returns (address fingerprintAddress) {
         bytes memory pattern = "Confirm unregistration from Epervier Fingerprint ";
-        uint startOffset = 32; // Skip DOMAIN_SEPARATOR
-        uint patternIndex = findPattern(message, pattern, true); // true = skip DOMAIN_SEPARATOR
+        uint startOffset = 0; // No DOMAIN_SEPARATOR to skip
+        uint patternIndex = findPattern(message, pattern, false); // false = don't skip DOMAIN_SEPARATOR
         if (patternIndex == type(uint).max) {
             return address(0);
         }
@@ -775,14 +775,6 @@ library MessageParser {
             return abi.decode(nonceBytes, (uint256));
         } else if (messageType == 1) {
             // Confirmation message: ETH nonce is the last 32 bytes
-            require(message.length >= 32, "Message too short for ETH nonce");
-            bytes memory nonceBytes = new bytes(32);
-            for (uint j = 0; j < 32; j++) {
-                nonceBytes[j] = message[message.length - 32 + j];
-            }
-            return abi.decode(nonceBytes, (uint256));
-        } else if (messageType == 2) {
-            // Unregistration confirmation message: ETH nonce is the last 32 bytes
             require(message.length >= 32, "Message too short for ETH nonce");
             bytes memory nonceBytes = new bytes(32);
             for (uint j = 0; j < 32; j++) {
@@ -931,13 +923,13 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (53) = 85
-        fieldOffsets[0] = 85;
+        // pqFingerprint: starts after pattern (53) = 53
+        fieldOffsets[0] = 53;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // ethNonce: starts after pqFingerprint = 85 + 20 = 105
-        fieldOffsets[1] = 105;
+        // ethNonce: starts after pqFingerprint = 53 + 20 = 73
+        fieldOffsets[1] = 73;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
@@ -965,13 +957,13 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (47) = 79
-        fieldOffsets[0] = 79;
+        // pqFingerprint: starts after pattern (47) = 47
+        fieldOffsets[0] = 47;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // ethNonce: starts after pqFingerprint = 79 + 20 = 99
-        fieldOffsets[1] = 99;
+        // ethNonce: starts after pqFingerprint = 47 + 20 = 67
+        fieldOffsets[1] = 67;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
@@ -998,12 +990,12 @@ library MessageParser {
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
-        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (44) = 76
-        fieldOffsets[0] = 76;
+        // ethAddress: starts after pattern (44) = 44
+        fieldOffsets[0] = 44;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
-        // pqNonce: starts after ethAddress = 76 + 20 = 96
-        fieldOffsets[1] = 96;
+        // pqNonce: starts after ethAddress = 44 + 20 = 64
+        fieldOffsets[1] = 64;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         bytes[] memory parsedFields = parseMessageFields(message, pattern, 44, fieldOffsets, fieldLengths, fieldTypes);
@@ -1028,13 +1020,13 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (38) = 70
-        fieldOffsets[0] = 70;
+        // ethAddress: starts after pattern (38) = 38
+        fieldOffsets[0] = 38;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // pqNonce: starts after ethAddress = 70 + 20 = 90
-        fieldOffsets[1] = 90;
+        // pqNonce: starts after ethAddress = 38 + 20 = 58
+        fieldOffsets[1] = 58;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
@@ -1062,13 +1054,13 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
         
-        // ethAddress: starts after DOMAIN_SEPARATOR (32) + pattern (46) = 78
-        fieldOffsets[0] = 78;
+        // ethAddress: starts after pattern (46) = 46
+        fieldOffsets[0] = 46;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // pqNonce: starts after ethAddress = 78 + 20 = 98
-        fieldOffsets[1] = 98;
+        // pqNonce: starts after ethAddress = 46 + 20 = 66
+        fieldOffsets[1] = 66;
         fieldLengths[1] = 32;
         fieldTypes[1] = "uint256";
         
@@ -1100,28 +1092,28 @@ library MessageParser {
         uint256[] memory fieldLengths = new uint256[](7);
         string[] memory fieldTypes = new string[](7);
         
-        // pqFingerprint: starts after DOMAIN_SEPARATOR (32) + pattern (52) = 84
-        fieldOffsets[0] = 84;
+        // pqFingerprint: starts after pattern (52) = 52
+        fieldOffsets[0] = 52;
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // basePQMessage: starts after pqFingerprint = 84 + 20 = 104, length = 173
-        fieldOffsets[1] = 104;
+        // basePQMessage: starts after pqFingerprint = 52 + 20 = 72, length = 173
+        fieldOffsets[1] = 72;
         fieldLengths[1] = 173;
         fieldTypes[1] = "bytes";
         
-        // salt: starts after basePQMessage = 104 + 173 = 277, length = 40
-        fieldOffsets[2] = 277;
+        // salt: starts after basePQMessage = 72 + 173 = 245, length = 40
+        fieldOffsets[2] = 245;
         fieldLengths[2] = 40;
         fieldTypes[2] = "bytes";
         
-        // cs1: starts after salt = 277 + 40 = 317, length = 32 * 32 = 1024
-        fieldOffsets[3] = 317;
+        // cs1: starts after salt = 245 + 40 = 285, length = 32 * 32 = 1024
+        fieldOffsets[3] = 285;
         fieldLengths[3] = 1024;
         fieldTypes[3] = "uint256[32]";
         
-        // cs2: starts after cs1 = 317 + 1024 = 1341, length = 32 * 32 = 1024
-        fieldOffsets[4] = 1341;
+        // cs2: starts after cs1 = 285 + 1024 = 1309, length = 32 * 32 = 1024
+        fieldOffsets[4] = 1309;
         fieldLengths[4] = 1024;
         fieldTypes[4] = "uint256[32]";
         

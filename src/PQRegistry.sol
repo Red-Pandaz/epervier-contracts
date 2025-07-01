@@ -84,6 +84,16 @@ contract PQRegistry {
     string public constant DOMAIN_VERSION = "1";
     bytes32 public DOMAIN_SEPARATOR;
     
+    // EIP-712 Type Hashes
+    bytes32 public constant REGISTRATION_INTENT_TYPE_HASH = keccak256("RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)");
+    bytes32 public constant REGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant REMOVE_INTENT_TYPE_HASH = keccak256("RemoveIntent(address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH = keccak256("ChangeETHAddressIntent(address newETHAddress,uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = keccak256("ChangeETHAddressConfirmation(address oldETHAddress,uint256 ethNonce)");
+    bytes32 public constant UNREGISTRATION_INTENT_TYPE_HASH = keccak256("UnregistrationIntent(uint256 ethNonce)");
+    bytes32 public constant UNREGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("UnregistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant REMOVE_CHANGE_INTENT_TYPE_HASH = keccak256("RemoveChangeIntent(uint256 ethNonce)");
+    
     constructor(
         address _epervierVerifier,
         address _console
@@ -122,20 +132,7 @@ contract PQRegistry {
     ) external {
         console.log("=== submitRegistrationIntent ===");
         
-        // STEP 1: Verify the ETH signature
-        bytes32 ethMessageHash = keccak256(ethMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
-        
-        address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
-        require(recoveredETHAddress != address(0), "Invalid ETH signature");
-        
-        // Debug logging
-        emit DebugParseStep("eth_message_length", ethMessage.length);
-        emit DebugParseStep("eth_message_hash", uint256(ethMessageHash));
-        emit DebugParseStep("eth_signed_message_hash", uint256(ethSignedMessageHash));
-        emit DebugParseStep("eth_signature_recovered", uint256(uint160(recoveredETHAddress)));
-    
-        // STEP 2: Parse the ETH registration intent message
+        // STEP 1: Parse the ETH registration intent message
         (
             uint256 ethNonce,
             bytes memory salt,
@@ -144,6 +141,34 @@ contract PQRegistry {
             uint256 hint,
             bytes memory basePQMessage
         ) = MessageParser.parseETHRegistrationIntentMessage(ethMessage);
+        
+        // STEP 2: Verify the ETH signature using EIP712
+        // Convert uint256[] to uint256[32] for the struct hash
+        uint256[32] memory cs1Array;
+        uint256[32] memory cs2Array;
+        for (uint256 i = 0; i < 32; i++) {
+            cs1Array[i] = cs1[i];
+            cs2Array[i] = cs2[i];
+        }
+        
+        bytes32 structHash = SignatureExtractor.getRegistrationIntentStructHash(
+            ethNonce,
+            salt,
+            cs1Array,
+            cs2Array,
+            hint,
+            basePQMessage
+        );
+        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        require(recoveredETHAddress != address(0), "Invalid ETH signature");
+        
+        // Debug logging
+        emit DebugParseStep("eth_message_length", ethMessage.length);
+        emit DebugParseStep("struct_hash", uint256(structHash));
+        emit DebugParseStep("eip712_digest", uint256(digest));
+        emit DebugParseStep("eth_signature_recovered", uint256(uint160(recoveredETHAddress)));
         
         // STEP 3: Parse the base PQ message
         (address intentAddress, uint256 pqNonce) = MessageParser.parseBasePQRegistrationIntentMessage(basePQMessage);
@@ -226,10 +251,13 @@ contract PQRegistry {
         // STEP 4: Parse the base ETH confirmation message
         (address pqFingerprint, uint256 ethNonce) = MessageParser.parseBaseETHRegistrationConfirmationMessage(baseETHMessage);
         
-        // STEP 5: Verify the ETH signature
-        bytes32 ethMessageHash = keccak256(baseETHMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(baseETHMessage.length), baseETHMessage));
-        address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
+        // STEP 5: Verify the ETH signature using EIP712
+        bytes32 structHash = SignatureExtractor.getRegistrationConfirmationStructHash(
+            pqFingerprint,
+            ethNonce
+        );
+        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
 
         // STEP 6: Cross-reference validation
@@ -291,15 +319,18 @@ contract PQRegistry {
         bytes32 r,
         bytes32 s
     ) external {
-        // STEP 1: Verify the ETH signature
-        bytes32 ethMessageHash = keccak256(ethMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
-        
-        address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
-        require(recoveredETHAddress != address(0), "Invalid ETH signature");
-        
-        // STEP 2: Parse the ETH remove intent message
+        // STEP 1: Parse the ETH remove intent message
         (address pqFingerprint, uint256 ethNonce) = MessageParser.parseETHRemoveRegistrationIntentMessage(ethMessage);
+        
+        // STEP 2: Verify the ETH signature using EIP712
+        bytes32 structHash = SignatureExtractor.getRemoveIntentStructHash(
+            pqFingerprint,
+            ethNonce
+        );
+        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 3: State validation
         Intent storage intent = pendingIntents[recoveredETHAddress];
@@ -390,15 +421,15 @@ contract PQRegistry {
         bytes32 r,
         bytes32 s
     ) external {
-        // STEP 1: Verify the ETH signature
-        bytes32 ethMessageHash = keccak256(ethMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
-        
-        address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
-        require(recoveredETHAddress != address(0), "Invalid ETH signature");
-        
-        // STEP 2: Parse the ETH remove change intent message
+        // STEP 1: Parse the ETH remove change intent message
         (address pqFingerprint, uint256 ethNonce) = MessageParser.parseETHRemoveChangeIntentMessage(ethMessage);
+        
+        // STEP 2: Verify the ETH signature using EIP712
+        bytes32 structHash = SignatureExtractor.getRemoveChangeIntentStructHash(ethNonce);
+        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 3: State validation
         ChangeETHAddressIntent storage intent = changeETHAddressIntents[pqFingerprint];
@@ -530,11 +561,14 @@ contract PQRegistry {
         // STEP 3: Parse the base ETH message
         (address ethMessagePqFingerprint, address ethMessageNewEthAddress, uint256 ethNonce) = MessageParser.parseBaseETHChangeETHAddressIntentMessage(baseETHMessage);
         
-        // STEP 4: Verify the ETH signature
-        bytes32 ethMessageHash = keccak256(baseETHMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(baseETHMessage.length), baseETHMessage));
+        // STEP 4: Verify the ETH signature using EIP712
+        bytes32 structHash = SignatureExtractor.getChangeETHAddressIntentStructHash(
+            ethMessageNewEthAddress,
+            ethNonce
+        );
+        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
-        address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
+        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 5: Cross-reference validation
@@ -582,14 +616,7 @@ contract PQRegistry {
         bytes32 r,
         bytes32 s
     ) external {
-        // STEP 1: Verify the ETH signature
-        bytes32 ethMessageHash = keccak256(ethMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
-        
-        address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
-        require(recoveredETHAddress != address(0), "Invalid ETH signature");
-        
-        // STEP 2: Parse the ETH change address confirmation message
+        // STEP 1: Parse the ETH change address confirmation message
         (
             address pqFingerprint,
             uint256 ethNonce,
@@ -599,6 +626,13 @@ contract PQRegistry {
             uint256 hint,
             bytes memory basePQMessage
         ) = MessageParser.parseETHChangeETHAddressConfirmationMessage(ethMessage);
+        
+        // STEP 2: Verify the ETH signature using EIP712
+        bytes32 structHash = SignatureExtractor.getChangeETHAddressConfirmationStructHash(pqFingerprint, ethNonce);
+        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 3: Parse the base PQ change address confirmation message
         (address oldEthAddress, address newEthAddress, uint256 pqNonce) = MessageParser.parseBasePQChangeETHAddressConfirmMessage(basePQMessage);
@@ -706,9 +740,10 @@ contract PQRegistry {
         require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
         require(pqKeyNonces[recoveredFingerprint] == parsedPQNonce, "Invalid PQ nonce");
         
-        // STEP 7: Verify the ETH signature
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(baseETHMessage.length), baseETHMessage));
-        address ethSigner = ECDSA.recover(ethSignedMessageHash, v, r, s);
+        // STEP 7: Verify the ETH signature using EIP712
+        bytes32 structHash = SignatureExtractor.getUnregistrationIntentStructHash(ethNonce);
+        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        address ethSigner = ECDSA.recover(digest, v, r, s);
         require(ethSigner == intentAddress, "ETH signature must be from intent address");
         
         // STEP 8: Store the unregistration intent
@@ -744,12 +779,8 @@ contract PQRegistry {
         bytes32 r,
         bytes32 s
     ) external {
-        // STEP 1: Verify the ETH signature
-        bytes32 ethMessageHash = keccak256(ethMessage);
-        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(ethMessage.length), ethMessage));
-        
-        address recoveredETHAddress = ECDSA.recover(ethSignedMessageHash, v, r, s);
-        require(recoveredETHAddress != address(0), "Invalid ETH signature");
+        // STEP 1: Parse the ETH unregistration confirmation message to get nonce
+        uint256 ethNonce = MessageParser.extractEthNonce(ethMessage, 0);
         
         // STEP 2: Parse PQ signature components from the ETH message
         bytes memory salt = MessageParser.extractPQSalt(ethMessage, 2);
@@ -764,6 +795,13 @@ contract PQRegistry {
         // STEP 4: Parse the fingerprint address from the ETH message
         address fingerprintAddress = MessageParser.parseETHAddressFromETHUnregistrationConfirmationMessage(ethMessage);
         require(fingerprintAddress == recoveredFingerprint, "Fingerprint address mismatch: ETH message vs recovered PQ signature");
+        
+        // STEP 5: Verify the ETH signature using EIP712
+        bytes32 structHash = SignatureExtractor.getUnregistrationConfirmationStructHash(fingerprintAddress, ethNonce);
+        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 5: Parse the base PQ message
         (address basePQEthAddress, ) = MessageParser.parseBasePQUnregistrationConfirmMessage(basePQMessage);
@@ -780,7 +818,6 @@ contract PQRegistry {
         require(intent.publicKeyAddress == recoveredFingerprint, "PQ fingerprint mismatch: ETH message vs recovered PQ signature");
         
         // STEP 8: Extract and validate nonces
-        uint256 ethNonce = MessageParser.extractEthNonce(ethMessage, 2);
         uint256 pqNonce = MessageParser.extractPQNonce(basePQMessage, 0);
         require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");

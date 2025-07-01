@@ -62,7 +62,7 @@ VECTOR_GENERATORS = [
         "description": "PQ-controlled change ETH address intent messages"
     },
     {
-        "name": "Change ETH Address Confirmation",
+"name": "Change ETH Address Confirmation",
         "script": "change_eth/change_eth_address_confirmation_generator.py",
         "output": "change_eth/change_eth_address_confirmation_vectors.json",
         "description": "ETH-controlled change ETH address confirmation messages"

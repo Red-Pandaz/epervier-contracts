@@ -13,8 +13,10 @@ from eth_hash.auto import keccak
 project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.append(str(project_root))
 
-# Domain separator (same as in the contract)
-DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
+# Add the python directory to the path for EIP712 imports
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from eip712_helpers import *
+from eip712_config import *
 
 def get_actor_config():
     """Load actor configuration from JSON file"""
@@ -23,32 +25,27 @@ def get_actor_config():
         config = json.load(f)
         return config["actors"]
 
-def create_remove_registration_message(domain_separator, pq_fingerprint, eth_nonce):
+def create_remove_registration_message(pq_fingerprint, eth_nonce):
     """
     Create ETH message for removing registration intent
-    Format: DOMAIN_SEPARATOR + "Remove registration intent from Epervier Fingerprint " + pqFingerprint + ethNonce
-    This is signed by the ETH Address
+    Format: "Remove registration intent from Epervier Fingerprint " + pqFingerprint + ethNonce
+    This is signed by the ETH Address (no domain separator in content)
     """
     pattern = b"Remove registration intent from Epervier Fingerprint "
     message = (
-        domain_separator +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
         eth_nonce.to_bytes(32, "big")
     )
     return message
 
-def sign_eth_message(message, eth_private_key):
-    """Sign a message with ETH private key"""
-    from eth_account import Account
-    
-    # Use Ethereum's personal_sign format
-    eth_message_length = len(message)
-    eth_signed_message = b"\x19Ethereum Signed Message:\n" + str(eth_message_length).encode() + message
-    eth_message_hash = keccak(eth_signed_message)
-    account = Account.from_key(eth_private_key)
-    sig = Account._sign_hash(eth_message_hash, private_key=account.key)
-    return {"v": sig.v, "r": sig.r, "s": sig.s}
+def sign_eth_message(message, eth_private_key, pq_fingerprint, eth_nonce):
+    """Sign a message with ETH private key using EIP712"""
+    # Use EIP712 structured signing
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    struct_hash = get_remove_intent_struct_hash(pq_fingerprint, eth_nonce)
+    signature = sign_eip712_message(eth_private_key, domain_separator, struct_hash)
+    return signature
 
 def generate_remove_registration_intent_vectors():
     """Generate test vectors for removing registration intents for all 10 actors"""
@@ -71,8 +68,8 @@ def generate_remove_registration_intent_vectors():
         eth_nonce = 1  # ETH nonce for remove operation
 
         # Create the ETH remove message and sign it with ETH key
-        eth_message = create_remove_registration_message(DOMAIN_SEPARATOR, pq_fingerprint, eth_nonce)
-        eth_signature = sign_eth_message(eth_message, eth_private_key)
+        eth_message = create_remove_registration_message(pq_fingerprint, eth_nonce)
+        eth_signature = sign_eth_message(eth_message, eth_private_key, pq_fingerprint, eth_nonce)
         
         if eth_signature is None:
             print(f"Failed to generate ETH signature for {current_actor_name}")
