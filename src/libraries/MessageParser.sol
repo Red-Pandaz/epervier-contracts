@@ -626,33 +626,28 @@ library MessageParser {
         fieldLengths[0] = 20;
         fieldTypes[0] = "address";
         
-        // basePQMessage: starts after pqFingerprint = 49 + 20 = 69, length = 111
+        // basePQMessage: starts after pqFingerprint = 49 + 20 = 69, length = 124
         fieldOffsets[1] = 69;
-        fieldLengths[1] = 111;
+        fieldLengths[1] = 124;
         fieldTypes[1] = "bytes";
-        
-        // salt: starts after basePQMessage = 69 + 111 = 180, length = 40
-        fieldOffsets[2] = 180;
+        // salt: starts after basePQMessage = 69 + 124 = 193, length = 40
+        fieldOffsets[2] = 193;
         fieldLengths[2] = 40;
         fieldTypes[2] = "bytes";
-        
-        // cs1: starts after salt = 180 + 40 = 220, length = 32 * 32 = 1024
-        fieldOffsets[3] = 220;
+        // cs1: starts after salt = 193 + 40 = 233, length = 1024
+        fieldOffsets[3] = 233;
         fieldLengths[3] = 1024;
         fieldTypes[3] = "uint256[32]";
-        
-        // cs2: starts after cs1 = 220 + 1024 = 1244, length = 32 * 32 = 1024
-        fieldOffsets[4] = 1244;
+        // cs2: starts after cs1 = 233 + 1024 = 1257, length = 1024
+        fieldOffsets[4] = 1257;
         fieldLengths[4] = 1024;
         fieldTypes[4] = "uint256[32]";
-        
-        // hint: starts after cs2 = 1244 + 1024 = 2268, length = 32
-        fieldOffsets[5] = 2268;
+        // hint: starts after cs2 = 1257 + 1024 = 2281, length = 32
+        fieldOffsets[5] = 2281;
         fieldLengths[5] = 32;
         fieldTypes[5] = "uint256";
-        
-        // ethNonce: starts after hint = 2268 + 32 = 2300, length = 32
-        fieldOffsets[6] = 2300;
+        // ethNonce: starts after hint = 2281 + 32 = 2313, length = 32
+        fieldOffsets[6] = 2313;
         fieldLengths[6] = 32;
         fieldTypes[6] = "uint256";
         
@@ -690,6 +685,55 @@ library MessageParser {
         
         hint = uint256(bytes32(parsedFields[5]));
         ethNonce = uint256(bytes32(parsedFields[6]));
+        // Add debug logs for parsed signature components
+        console.logBytes(salt);
+        console.log("cs1[0]:", cs1[0]);
+        console.log("cs2[0]:", cs2[0]);
+        console.log("hint:", hint);
+        console.log("ethNonce:", ethNonce);
+
+        // Debug: print pattern
+        bytes memory patternBytes = new bytes(49);
+        for (uint i = 0; i < 49; i++) patternBytes[i] = message[i];
+        console.log("pattern length:", patternBytes.length);
+        console.logBytes(patternBytes);
+        // Debug: print pqFingerprint
+        bytes memory pqFingerprintBytes = new bytes(20);
+        for (uint i = 0; i < 20; i++) pqFingerprintBytes[i] = message[49 + i];
+        console.log("pqFingerprint length:", pqFingerprintBytes.length);
+        console.logBytes(pqFingerprintBytes);
+        // Debug: print basePQMessage
+        bytes memory basePQMessageBytes = new bytes(124);
+        for (uint i = 0; i < 124; i++) basePQMessageBytes[i] = message[69 + i];
+        console.log("basePQMessage length:", basePQMessageBytes.length);
+        console.logBytes(basePQMessageBytes);
+        // Debug: print salt
+        bytes memory saltBytes = new bytes(40);
+        for (uint i = 0; i < 40; i++) saltBytes[i] = message[193 + i];
+        console.log("salt length:", saltBytes.length);
+        console.logBytes(saltBytes);
+        // Debug: print cs1
+        bytes memory cs1Bytes = new bytes(1024);
+        for (uint i = 0; i < 1024; i++) cs1Bytes[i] = message[233 + i];
+        console.log("cs1 length:", cs1Bytes.length);
+        console.logBytes(cs1Bytes);
+        // Debug: print cs2
+        bytes memory cs2Bytes = new bytes(1024);
+        for (uint i = 0; i < 1024; i++) cs2Bytes[i] = message[1257 + i];
+        console.log("cs2 length:", cs2Bytes.length);
+        console.logBytes(cs2Bytes);
+        // Debug: print hint
+        bytes memory hintBytes = new bytes(32);
+        for (uint256 i = 0; i < 32; i++) {
+            hintBytes[i] = message[2281 + i];
+        }
+        console.logBytes(hintBytes); // Debug: print raw hint bytes
+        uint256 hint = uint256(bytes32(hintBytes));
+        // Debug: print ethNonce
+        bytes memory ethNonceBytes = new bytes(32);
+        for (uint i = 0; i < 32; i++) ethNonceBytes[i] = message[2313 + i];
+        console.log("ethNonce length:", ethNonceBytes.length);
+        console.logBytes(ethNonceBytes);
     }
     
     /**
@@ -1426,32 +1470,56 @@ library MessageParser {
      * @param messageType 0=Registration, 1=ChangeETHAddress, 2=Unregistration
      * Registration format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
      * ChangeETHAddress format: DOMAIN_SEPARATOR + "Confirm change ETH Address" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
-     * Unregistration format: DOMAIN_SEPARATOR + "Confirm unregistration" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
+     * Unregistration format: "Confirm unregistration from Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function extractPQSalt(bytes memory message, uint8 messageType) internal pure returns (bytes memory salt) {
-        uint256 patternLength;
         if (messageType == 0) {
             // Registration: "Intent to pair Epervier Key" (27 bytes)
-            patternLength = 27;
+            uint256 patternLength = 27;
+            
+            // Check if message is long enough to contain the pattern + ethNonce + salt
+            require(message.length >= 32 + patternLength + 32 + 40, "Message too short for PQ salt");
+            
+            // Extract the salt (40 bytes after DOMAIN_SEPARATOR + pattern + ethNonce)
+            bytes memory saltBytes = new bytes(40);
+            for (uint j = 0; j < 40; j++) {
+                saltBytes[j] = message[32 + patternLength + 32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + offset
+            }
+            return saltBytes;
         } else if (messageType == 1) {
             // ChangeETHAddress: "Intent to change ETH Address and bond with Epervier Fingerprint " (64 bytes)
-            patternLength = 64;
+            uint256 patternLength = 64;
+            
+            // Check if message is long enough to contain the pattern + ethNonce + salt
+            require(message.length >= 32 + patternLength + 32 + 40, "Message too short for PQ salt");
+            
+            // Extract the salt (40 bytes after DOMAIN_SEPARATOR + pattern + ethNonce)
+            bytes memory saltBytes = new bytes(40);
+            for (uint j = 0; j < 40; j++) {
+                saltBytes[j] = message[32 + patternLength + 32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + offset
+            }
+            return saltBytes;
         } else if (messageType == 2) {
             // Unregistration: "Confirm unregistration from Epervier Fingerprint " (49 bytes)
-            patternLength = 49;
+            uint256 patternLength = 49;
+            uint256 pqFingerprintLength = 20;
+            uint256 baseMessageLength = 124; // BasePQUnregistrationConfirmMessage
+            
+            // Salt starts after: pattern + pqFingerprint + basePQMessage
+            uint256 saltStart = patternLength + pqFingerprintLength + baseMessageLength;
+            
+            // Check if message is long enough to contain the salt
+            require(message.length >= saltStart + 40, "Message too short for PQ salt");
+            
+            // Extract the salt (40 bytes)
+            bytes memory saltBytes = new bytes(40);
+            for (uint j = 0; j < 40; j++) {
+                saltBytes[j] = message[saltStart + j];
+            }
+            return saltBytes;
         } else {
             revert("Invalid message type");
         }
-        
-        // Check if message is long enough to contain the pattern + ethNonce + salt
-        require(message.length >= 32 + patternLength + 32 + 40, "Message too short for PQ salt");
-        
-        // Extract the salt (40 bytes after DOMAIN_SEPARATOR + pattern + ethNonce)
-        bytes memory saltBytes = new bytes(40);
-        for (uint j = 0; j < 40; j++) {
-            saltBytes[j] = message[32 + patternLength + 32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + offset
-        }
-        return saltBytes;
     }
 
     /**
@@ -1459,31 +1527,63 @@ library MessageParser {
      * @param messageType 0=Registration, 1=ChangeETHAddress, 2=Unregistration
      */
     function extractPQCs1(bytes memory message, uint8 messageType) internal pure returns (uint256[] memory cs1) {
-        uint256 patternLength;
         if (messageType == 0) {
-            patternLength = 27;
+            uint256 patternLength = 27;
+            
+            // Check if message is long enough to contain the pattern + ethNonce + salt + cs1
+            require(message.length >= 32 + patternLength + 32 + 40 + 32*32, "Message too short for PQ cs1");
+            
+            // Extract cs1 (32 uint256 values after salt)
+            cs1 = new uint256[](32);
+            for (uint i = 0; i < 32; i++) {
+                bytes memory cs1Bytes = new bytes(32);
+                for (uint j = 0; j < 32; j++) {
+                    cs1Bytes[j] = message[32 + patternLength + 32 + 40 + i*32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + offset
+                }
+                cs1[i] = abi.decode(cs1Bytes, (uint256));
+            }
+            return cs1;
         } else if (messageType == 1) {
-            patternLength = 64;
+            uint256 patternLength = 64;
+            
+            // Check if message is long enough to contain the pattern + ethNonce + salt + cs1
+            require(message.length >= 32 + patternLength + 32 + 40 + 32*32, "Message too short for PQ cs1");
+            
+            // Extract cs1 (32 uint256 values after salt)
+            cs1 = new uint256[](32);
+            for (uint i = 0; i < 32; i++) {
+                bytes memory cs1Bytes = new bytes(32);
+                for (uint j = 0; j < 32; j++) {
+                    cs1Bytes[j] = message[32 + patternLength + 32 + 40 + i*32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + offset
+                }
+                cs1[i] = abi.decode(cs1Bytes, (uint256));
+            }
+            return cs1;
         } else if (messageType == 2) {
             // Unregistration: "Confirm unregistration from Epervier Fingerprint " (49 bytes)
-            patternLength = 49;
+            uint256 patternLength = 49;
+            uint256 pqFingerprintLength = 20;
+            uint256 baseMessageLength = 124; // BasePQUnregistrationConfirmMessage
+            
+            // cs1 starts after: pattern + pqFingerprint + basePQMessage + salt
+            uint256 cs1Start = patternLength + pqFingerprintLength + baseMessageLength + 40;
+            
+            // Check if message is long enough to contain cs1
+            require(message.length >= cs1Start + 32*32, "Message too short for PQ cs1");
+            
+            // Extract cs1 (32 uint256 values)
+            cs1 = new uint256[](32);
+            for (uint i = 0; i < 32; i++) {
+                bytes memory cs1Bytes = new bytes(32);
+                for (uint j = 0; j < 32; j++) {
+                    cs1Bytes[j] = message[cs1Start + i*32 + j];
+                }
+                cs1[i] = abi.decode(cs1Bytes, (uint256));
+            }
+            return cs1;
         } else {
             revert("Invalid message type");
         }
-        
-        // Check if message is long enough to contain the pattern + ethNonce + salt + cs1
-        require(message.length >= 32 + patternLength + 32 + 40 + 32*32, "Message too short for PQ cs1");
-        
-        // Extract cs1 (32 uint256 values after salt)
-        cs1 = new uint256[](32);
-        for (uint i = 0; i < 32; i++) {
-            bytes memory cs1Bytes = new bytes(32);
-            for (uint j = 0; j < 32; j++) {
-                cs1Bytes[j] = message[32 + patternLength + 32 + 40 + i*32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + offset
-            }
-            cs1[i] = abi.decode(cs1Bytes, (uint256));
-        }
-        return cs1;
     }
 
     /**
@@ -1491,31 +1591,63 @@ library MessageParser {
      * @param messageType 0=Registration, 1=ChangeETHAddress, 2=Unregistration
      */
     function extractPQCs2(bytes memory message, uint8 messageType) internal pure returns (uint256[] memory cs2) {
-        uint256 patternLength;
         if (messageType == 0) {
-            patternLength = 27;
+            uint256 patternLength = 27;
+            
+            // Check if message is long enough to contain the pattern + ethNonce + salt + cs1 + cs2
+            require(message.length >= 32 + patternLength + 32 + 40 + 32*32 + 32*32, "Message too short for PQ cs2");
+            
+            // Extract cs2 (32 uint256 values after cs1)
+            cs2 = new uint256[](32);
+            for (uint i = 0; i < 32; i++) {
+                bytes memory cs2Bytes = new bytes(32);
+                for (uint j = 0; j < 32; j++) {
+                    cs2Bytes[j] = message[32 + patternLength + 32 + 40 + 32*32 + i*32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + cs1 + offset
+                }
+                cs2[i] = abi.decode(cs2Bytes, (uint256));
+            }
+            return cs2;
         } else if (messageType == 1) {
-            patternLength = 64;
+            uint256 patternLength = 64;
+            
+            // Check if message is long enough to contain the pattern + ethNonce + salt + cs1 + cs2
+            require(message.length >= 32 + patternLength + 32 + 40 + 32*32 + 32*32, "Message too short for PQ cs2");
+            
+            // Extract cs2 (32 uint256 values after cs1)
+            cs2 = new uint256[](32);
+            for (uint i = 0; i < 32; i++) {
+                bytes memory cs2Bytes = new bytes(32);
+                for (uint j = 0; j < 32; j++) {
+                    cs2Bytes[j] = message[32 + patternLength + 32 + 40 + 32*32 + i*32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + cs1 + offset
+                }
+                cs2[i] = abi.decode(cs2Bytes, (uint256));
+            }
+            return cs2;
         } else if (messageType == 2) {
             // Unregistration: "Confirm unregistration from Epervier Fingerprint " (49 bytes)
-            patternLength = 49;
+            uint256 patternLength = 49;
+            uint256 pqFingerprintLength = 20;
+            uint256 baseMessageLength = 124; // BasePQUnregistrationConfirmMessage
+            
+            // cs2 starts after: pattern + pqFingerprint + basePQMessage + salt + cs1
+            uint256 cs2Start = patternLength + pqFingerprintLength + baseMessageLength + 40 + 32*32;
+            
+            // Check if message is long enough to contain cs2
+            require(message.length >= cs2Start + 32*32, "Message too short for PQ cs2");
+            
+            // Extract cs2 (32 uint256 values)
+            cs2 = new uint256[](32);
+            for (uint i = 0; i < 32; i++) {
+                bytes memory cs2Bytes = new bytes(32);
+                for (uint j = 0; j < 32; j++) {
+                    cs2Bytes[j] = message[cs2Start + i*32 + j];
+                }
+                cs2[i] = abi.decode(cs2Bytes, (uint256));
+            }
+            return cs2;
         } else {
             revert("Invalid message type");
         }
-        
-        // Check if message is long enough to contain the pattern + ethNonce + salt + cs1 + cs2
-        require(message.length >= 32 + patternLength + 32 + 40 + 32*32 + 32*32, "Message too short for PQ cs2");
-        
-        // Extract cs2 (32 uint256 values after cs1)
-        cs2 = new uint256[](32);
-        for (uint i = 0; i < 32; i++) {
-            bytes memory cs2Bytes = new bytes(32);
-            for (uint j = 0; j < 32; j++) {
-                cs2Bytes[j] = message[32 + patternLength + 32 + 40 + 32*32 + i*32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + cs1 + offset
-            }
-            cs2[i] = abi.decode(cs2Bytes, (uint256));
-        }
-        return cs2;
     }
 
     /**
@@ -1523,29 +1655,56 @@ library MessageParser {
      * @param messageType 0=Registration, 1=ChangeETHAddress, 2=Unregistration
      */
     function extractPQHint(bytes memory message, uint8 messageType) internal pure returns (uint256 hint) {
-        uint256 patternLength;
         if (messageType == 0) {
-            patternLength = 27;
+            uint256 patternLength = 27;
+            
+            // Check if message is long enough to contain the pattern + ethNonce + salt + cs1 + cs2 + hint
+            require(message.length >= 32 + patternLength + 32 + 40 + 32*32 + 32*32 + 32, "Message too short for PQ hint");
+            
+            // Extract hint (32 bytes after cs2)
+            bytes memory hintBytes = new bytes(32);
+            for (uint256 i = 0; i < 32; i++) {
+                hintBytes[i] = message[32 + patternLength + 32 + 40 + 32*32 + 32*32 + i]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + cs1 + cs2 + offset
+            }
+            hint = abi.decode(hintBytes, (uint256));
+            return hint;
         } else if (messageType == 1) {
-            patternLength = 64;
+            uint256 patternLength = 64;
+            
+            // Check if message is long enough to contain the pattern + ethNonce + salt + cs1 + cs2 + hint
+            require(message.length >= 32 + patternLength + 32 + 40 + 32*32 + 32*32 + 32, "Message too short for PQ hint");
+            
+            // Extract hint (32 bytes after cs2)
+            bytes memory hintBytes = new bytes(32);
+            for (uint256 i = 0; i < 32; i++) {
+                hintBytes[i] = message[32 + patternLength + 32 + 40 + 32*32 + 32*32 + i]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + cs1 + cs2 + offset
+            }
+            hint = abi.decode(hintBytes, (uint256));
+            return hint;
         } else if (messageType == 2) {
             // Unregistration: "Confirm unregistration from Epervier Fingerprint " (49 bytes)
-            patternLength = 49;
+            uint256 patternLength = 49;
+            uint256 pqFingerprintLength = 20;
+            uint256 baseMessageLength = 124; // BasePQUnregistrationConfirmMessage
+            
+            // hint starts after: pattern + pqFingerprint + basePQMessage + salt + cs1 + cs2
+            uint256 hintStart = patternLength + pqFingerprintLength + baseMessageLength + 40 + 32*32 + 32*32;
+            
+            // Check if message is long enough to contain hint
+            require(message.length >= hintStart + 32, "Message too short for PQ hint");
+            
+            // Extract hint (32 bytes)
+            bytes memory hintBytes = new bytes(32);
+            for (uint256 i = 0; i < 32; i++) {
+                hintBytes[i] = message[hintStart + i];
+            }
+            console.logBytes(hintBytes); // Debug: print raw hint bytes
+            hint = abi.decode(hintBytes, (uint256));
+            
+            return hint;
         } else {
             revert("Invalid message type");
         }
-        
-        // Check if message is long enough to contain the pattern + ethNonce + salt + cs1 + cs2 + hint
-        require(message.length >= 32 + patternLength + 32 + 40 + 32*32 + 32*32 + 32, "Message too short for PQ hint");
-        
-        // Extract hint (32 bytes after cs2)
-        bytes memory hintBytes = new bytes(32);
-        for (uint j = 0; j < 32; j++) {
-            hintBytes[j] = message[32 + patternLength + 32 + 40 + 32*32 + 32*32 + j]; // DOMAIN_SEPARATOR + pattern + ethNonce + salt + cs1 + cs2 + offset
-        }
-        hint = abi.decode(hintBytes, (uint256));
-        
-        return hint;
     }
 
     /**
@@ -1555,9 +1714,9 @@ library MessageParser {
     function extractBasePQMessage(bytes memory message, uint8 messageType) internal pure returns (bytes memory basePQMessage) {
         if (messageType == 0) {
             // Registration: "Intent to pair Epervier Key" (27 bytes)
-            // Format: DOMAIN_SEPARATOR + pattern + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+            // Format: pattern + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
             uint256 patternLength = 27;
-            uint256 baseMessageStart = 32 + patternLength; // DOMAIN_SEPARATOR + pattern
+            uint256 baseMessageStart = patternLength; // pattern
             uint256 baseMessageLength = 111; // BasePQRegistrationIntentMessage length
             
             require(message.length >= baseMessageStart + baseMessageLength, "Message too short for base PQ message");
@@ -1569,9 +1728,9 @@ library MessageParser {
             return basePQMessage;
         } else if (messageType == 1) {
             // ChangeETHAddress: "Confirm change ETH Address for Epervier Fingerprint " (52 bytes)
-            // Format: DOMAIN_SEPARATOR + pattern + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+            // Format: pattern + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
             uint256 patternLength = 52;
-            uint256 baseMessageStart = 32 + patternLength + 20; // DOMAIN_SEPARATOR + pattern + pqFingerprint
+            uint256 baseMessageStart = patternLength + 20; // pattern + pqFingerprint
             uint256 baseMessageLength = 173; // BasePQChangeETHAddressConfirmMessage length
             
             require(message.length >= baseMessageStart + baseMessageLength, "Message too short for base PQ message");
@@ -1583,10 +1742,10 @@ library MessageParser {
             return basePQMessage;
         } else if (messageType == 2) {
             // Unregistration: "Confirm unregistration from Epervier Fingerprint " (49 bytes)
-            // Format: DOMAIN_SEPARATOR + pattern + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+            // Format: pattern + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
             uint256 patternLength = 49;
-            uint256 baseMessageStart = 32 + patternLength + 20; // DOMAIN_SEPARATOR + pattern + pqFingerprint
-            uint256 baseMessageLength = 124; // BasePQUnregistrationConfirmMessage length (updated from 123 to 124)
+            uint256 baseMessageStart = patternLength + 20; // pattern + pqFingerprint
+            uint256 baseMessageLength = 124; // BasePQUnregistrationConfirmMessage length
             require(baseMessageStart + baseMessageLength <= message.length, "Message too short for base PQ message");
             basePQMessage = new bytes(baseMessageLength);
             for (uint i = 0; i < baseMessageLength; i++) {

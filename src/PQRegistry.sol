@@ -782,34 +782,86 @@ contract PQRegistry {
     ) external {
         // STEP 1: Parse the ETH unregistration confirmation message to get nonce
         uint256 ethNonce = MessageParser.extractEthNonce(ethMessage, 0);
+        console.log("DEBUG: Contract extracted ethNonce:", ethNonce);
         
         // STEP 2: Parse PQ signature components from the ETH message
+        console.log("DEBUG: Contract ethMessage length:", ethMessage.length);
+        console.log("DEBUG: Contract ethMessage first 100 bytes:");
+        for (uint i = 0; i < 100 && i < ethMessage.length; i++) {
+            console.log("  byte", i, ":", uint8(ethMessage[i]));
+        }
+        
+        // Calculate expected offsets for unregistration message type 2
+        uint256 patternLength = 49; // "Confirm unregistration from Epervier Fingerprint "
+        uint256 pqFingerprintLength = 20;
+        uint256 baseMessageLength = 124; // BasePQUnregistrationConfirmMessage
+        uint256 saltStart = patternLength + pqFingerprintLength + baseMessageLength;
+        uint256 cs1Start = saltStart + 40;
+        uint256 cs2Start = cs1Start + 32*32;
+        uint256 hintStart = cs2Start + 32*32;
+        
+        console.log("DEBUG: Contract expected offsets for message type 2:");
+        console.log("  patternLength:", patternLength);
+        console.log("  pqFingerprintLength:", pqFingerprintLength);
+        console.log("  baseMessageLength:", baseMessageLength);
+        console.log("  saltStart:", saltStart);
+        console.log("  cs1Start:", cs1Start);
+        console.log("  cs2Start:", cs2Start);
+        console.log("  hintStart:", hintStart);
+        
         bytes memory salt = MessageParser.extractPQSalt(ethMessage, 2);
         uint256[] memory cs1 = MessageParser.extractPQCs1(ethMessage, 2);
         uint256[] memory cs2 = MessageParser.extractPQCs2(ethMessage, 2);
         uint256 hint = MessageParser.extractPQHint(ethMessage, 2);
         bytes memory basePQMessage = MessageParser.extractBasePQMessage(ethMessage, 2);
         
+        // DEBUG: Log signature components for comparison
+        console.log("DEBUG: Contract PQ signature components:");
+        console.log("  salt:", uint256(uint160(bytes20(salt))));
+        console.log("  hint:", hint);
+        console.log("  cs1[0]:", cs1[0]);
+        console.log("  cs1[1]:", cs1[1]);
+        console.log("  cs2[0]:", cs2[0]);
+        console.log("  cs2[1]:", cs2[1]);
+        console.log("  basePQMessage length:", basePQMessage.length);
+        
         // STEP 3: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
+        console.log("DEBUG: Contract recoveredFingerprint:", uint256(uint160(recoveredFingerprint)));
         
         // STEP 4: Parse the fingerprint address from the ETH message
         address fingerprintAddress = MessageParser.parseETHAddressFromETHUnregistrationConfirmationMessage(ethMessage);
+        console.log("DEBUG: Contract fingerprintAddress from message:", uint256(uint160(fingerprintAddress)));
         require(fingerprintAddress == recoveredFingerprint, "Fingerprint address mismatch: ETH message vs recovered PQ signature");
         
         // STEP 5: Verify the ETH signature using EIP712
         bytes32 structHash = SignatureExtractor.getUnregistrationConfirmationStructHash(fingerprintAddress, ethNonce);
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
+        // DEBUG: Log EIP712 signature verification details
+        console.log("DEBUG: Contract EIP712 signature verification:");
+        console.log("  DOMAIN_SEPARATOR:", uint256(DOMAIN_SEPARATOR));
+        console.log("  structHash:", uint256(structHash));
+        console.log("  digest:", uint256(digest));
+        console.log("  signature v:", v);
+        console.log("  signature r:", uint256(r));
+        console.log("  signature s:", uint256(s));
+        
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        console.log("DEBUG: Contract recoveredETHAddress:", uint256(uint160(recoveredETHAddress)));
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 5: Parse the base PQ message
         (address basePQEthAddress, ) = MessageParser.parseBasePQUnregistrationConfirmMessage(basePQMessage);
+        console.log("DEBUG: Contract basePQEthAddress:", uint256(uint160(basePQEthAddress)));
         
         // STEP 6: Cross-reference validationETH Address mismatch: PQ message vs stored registration
         address intentAddress = epervierKeyToAddress[recoveredFingerprint];
+        console.log("DEBUG: Contract intentAddress from mapping:", uint256(uint160(intentAddress)));
         require(intentAddress != address(0), "ETH Address not registered to PQ fingerprint");
+        console.log("DEBUG: Contract address comparison:");
+        console.log("  intentAddress:", uint256(uint160(intentAddress)));
+        console.log("  recoveredETHAddress:", uint256(uint160(recoveredETHAddress)));
         require(intentAddress == recoveredETHAddress, "ETH signature must be from registered address");
         require(basePQEthAddress == intentAddress, "ETH address mismatch: base PQ message vs intent address");
         

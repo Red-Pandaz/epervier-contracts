@@ -15,7 +15,7 @@ project_root = Path(__file__).resolve().parents[4]
 
 ACTORS_CONFIG_PATH = project_root / "test" / "test_keys" / "actors_config.json"
 OUTPUT_PATH = project_root / "test/test_vectors/unregister/unregistration_confirmation_vectors.json"
-DOMAIN_SEPARATOR = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
 
 # Helper to convert int to bytes32
 int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
@@ -111,10 +111,10 @@ def sign_with_eth_key(eth_message, eth_private_key, pq_fingerprint, base_pq_mess
     from eth_utils import keccak
     from eip712_helpers import encode_packed
     
-    # DOMAIN_SEPARATOR is already bytes from the import
-    digest = keccak(encode_packed(b'\x19\x01', DOMAIN_SEPARATOR, struct_hash))
+    # domain_separator_bytes is already bytes from the import
+    digest = keccak(encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
     
-    print(f"DEBUG: Python domain_separator_bytes: {DOMAIN_SEPARATOR.hex()}")
+    print(f"DEBUG: Python domain_separator_bytes: {domain_separator_bytes.hex()}")
     print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
     print(f"DEBUG: Python digest: {digest.hex()}")
     
@@ -122,6 +122,12 @@ def sign_with_eth_key(eth_message, eth_private_key, pq_fingerprint, base_pq_mess
     from eth_account import Account
     account = Account.from_key(eth_private_key)
     sig = Account._sign_hash(digest, private_key=account.key)
+    
+    # Verify the signature immediately
+    recovered_address = Account._recover_hash(digest, vrs=(sig.v, sig.r, sig.s))
+    print(f"DEBUG: Python recovered_address: {recovered_address}")
+    print(f"DEBUG: Python expected_address: {account.address}")
+    print(f"DEBUG: Python addresses_match: {recovered_address.lower() == account.address.lower()}")
     
     return {"v": sig.v, "r": sig.r, "s": sig.s}
 
@@ -139,11 +145,19 @@ def main():
         pq_private_key_file = actor["pq_private_key_file"]
         pq_fingerprint = actor["pq_fingerprint"]
         eth_nonce = 3 
-        pq_nonce = 3 
+        pq_nonce = 3
+        
+        # Debug: Show the private key being used
+        from eth_account import Account
+        debug_account = Account.from_key(eth_private_key)
+        print(f"DEBUG: Python using private_key: {eth_private_key}")
+        print(f"DEBUG: Python account address: {debug_account.address}")
+        print(f"DEBUG: Python expected address: {eth_address}")
+        print(f"DEBUG: Python addresses_match: {debug_account.address.lower() == eth_address.lower()}") 
         
         # 1. Build base PQ unregistration confirmation message
         print("Building base PQ unregistration confirmation message...")
-        base_pq_message = build_base_pq_unregistration_confirm_message(DOMAIN_SEPARATOR, eth_address, pq_nonce)
+        base_pq_message = build_base_pq_unregistration_confirm_message(domain_separator_bytes, eth_address, pq_nonce)
         print(f"Base PQ message length: {len(base_pq_message)} bytes")
         
         # 2. PQ sign the base message
@@ -153,14 +167,58 @@ def main():
             print(f"Failed to generate PQ signature for {actor_name}!")
             continue
         print(f"PQ signature generated: {len(pq_sig)} components")
+        print(f"DEBUG: Python PQ signature components:")
+        print(f"  salt: {pq_sig['salt'].hex()}")
+        print(f"  hint: {pq_sig['hint']}")
+        print(f"  cs1[0]: {pq_sig['cs1'][0]}")
+        print(f"  cs1[1]: {pq_sig['cs1'][1]}")
+        print(f"  cs2[0]: {pq_sig['cs2'][0]}")
+        print(f"  cs2[1]: {pq_sig['cs2'][1]}")
+        print(f"  base_pq_message: {base_pq_message.hex()}")
         
         # 3. Build ETH unregistration confirmation message
         print("Building ETH unregistration confirmation message...")
         eth_confirmation_message = create_eth_confirm_message(
-            DOMAIN_SEPARATOR, pq_fingerprint, base_pq_message, 
+            domain_separator_bytes, pq_fingerprint, base_pq_message, 
             pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
         )
         print(f"ETH confirmation message length: {len(eth_confirmation_message)} bytes")
+        print(f"ETH confirmation message (hex): {eth_confirmation_message.hex()}")
+        # Print offsets and lengths for each field
+        pattern_len = 49
+        pq_fp_len = 20
+        base_pq_len = len(base_pq_message)
+        salt_len = len(pq_sig["salt"])
+        cs1_len = 32*32
+        cs2_len = 32*32
+        hint_len = 32
+        eth_nonce_len = 32
+        print(f"Field offsets and lengths:")
+        print(f"  pattern: offset 0, length {pattern_len}")
+        print(f"  pqFingerprint: offset {pattern_len}, length {pq_fp_len}")
+        print(f"  basePQMessage: offset {pattern_len + pq_fp_len}, length {base_pq_len}")
+        print(f"  salt: offset {pattern_len + pq_fp_len + base_pq_len}, length {salt_len}")
+        print(f"  cs1: offset {pattern_len + pq_fp_len + base_pq_len + salt_len}, length {cs1_len}")
+        print(f"  cs2: offset {pattern_len + pq_fp_len + base_pq_len + salt_len + cs1_len}, length {cs2_len}")
+        print(f"  hint: offset {pattern_len + pq_fp_len + base_pq_len + salt_len + cs1_len + cs2_len}, length {hint_len}")
+        print(f"  ethNonce: offset {pattern_len + pq_fp_len + base_pq_len + salt_len + cs1_len + cs2_len + hint_len}, length {eth_nonce_len}")
+        # Print hex slices for each field
+        offset = 0
+        print(f"  pattern: {eth_confirmation_message[offset:offset+pattern_len].hex()}")
+        offset += pattern_len
+        print(f"  pqFingerprint: {eth_confirmation_message[offset:offset+pq_fp_len].hex()}")
+        offset += pq_fp_len
+        print(f"  basePQMessage: {eth_confirmation_message[offset:offset+base_pq_len].hex()}")
+        offset += base_pq_len
+        print(f"  salt: {eth_confirmation_message[offset:offset+salt_len].hex()}")
+        offset += salt_len
+        print(f"  cs1: {eth_confirmation_message[offset:offset+cs1_len].hex()}")
+        offset += cs1_len
+        print(f"  cs2: {eth_confirmation_message[offset:offset+cs2_len].hex()}")
+        offset += cs2_len
+        print(f"  hint: {eth_confirmation_message[offset:offset+hint_len].hex()}")
+        offset += hint_len
+        print(f"  ethNonce: {eth_confirmation_message[offset:offset+eth_nonce_len].hex()}")
         
         # 4. ETH sign the confirmation message
         print("Signing with ETH key...")

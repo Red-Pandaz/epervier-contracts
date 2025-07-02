@@ -184,7 +184,7 @@
     "fields": [
       {"name": "pattern", "type": "string", "length": 49, "value": "Confirm unregistration from Epervier Fingerprint "},
       {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint to unregister"},
-      {"name": "basePQMessage", "type": "BasePQUnregistrationConfirmMessage", "length": 123, "description": "Base PQ message that was signed"},
+      {"name": "basePQMessage", "type": "BasePQUnregistrationConfirmMessage", "length": 124, "description": "Base PQ message that was signed"},
       {"name": "salt", "type": "bytes", "length": 40, "description": "PQ signature salt component"},
       {"name": "cs1", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs1 component"},
       {"name": "cs2", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs2 component"},

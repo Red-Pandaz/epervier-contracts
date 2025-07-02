@@ -299,15 +299,12 @@ def get_unregistration_confirmation_struct_hash(pq_fingerprint: str, eth_nonce: 
     """Compute the struct hash for UnregistrationConfirmation(address pqFingerprint,uint256 ethNonce)"""
     from eth_utils import keccak, to_checksum_address
     from eth_abi import encode
-    
     type_hash = bytes.fromhex(UNREGISTRATION_CONFIRMATION_TYPE_HASH[2:])  # Remove '0x' prefix
     pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
-    
     print(f"DEBUG: type_hash: {type_hash.hex()}")
     print(f"DEBUG: pq_fingerprint: {pq_fingerprint}")
     print(f"DEBUG: pq_fingerprint_checksum: {pq_fingerprint_checksum}")
     print(f"DEBUG: eth_nonce: {eth_nonce}")
-    
     # Use abi.encode like the contract implementation
     encoded_data = encode([
         'bytes32',
@@ -318,12 +315,9 @@ def get_unregistration_confirmation_struct_hash(pq_fingerprint: str, eth_nonce: 
         pq_fingerprint_checksum,
         eth_nonce
     ])
-    
     print(f"DEBUG: encoded_data: {encoded_data.hex()}")
-    
     struct_hash = keccak(encoded_data)
     print(f"DEBUG: struct_hash: {struct_hash.hex()}")
-    
     return struct_hash
 
 def get_remove_change_intent_struct_hash(eth_nonce: int) -> bytes:
