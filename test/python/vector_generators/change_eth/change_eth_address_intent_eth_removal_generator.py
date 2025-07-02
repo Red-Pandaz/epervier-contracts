@@ -44,10 +44,10 @@ def create_eth_cancel_change_eth_address_message(pq_fingerprint, eth_nonce):
     )
     return message
 
-def sign_eth_message_eip712(eth_nonce, private_key):
+def sign_eth_message_eip712(pq_fingerprint, eth_nonce, private_key):
     """Sign a message with ETH private key using EIP-712 standards"""
     # Get the struct hash for RemoveChangeIntent
-    struct_hash = get_remove_change_intent_struct_hash(eth_nonce)
+    struct_hash = get_remove_change_intent_struct_hash(pq_fingerprint, eth_nonce)
     
     # Get the domain separator (use the hardcoded one from config)
     domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
@@ -59,6 +59,7 @@ def sign_eth_message_eip712(eth_nonce, private_key):
     signature = sign_eip712_message(digest, private_key)
     
     # DEBUG: Print all the values for debugging
+    print(f"DEBUG: pq_fingerprint: {pq_fingerprint}")
     print(f"DEBUG: eth_nonce: {eth_nonce}")
     print(f"DEBUG: struct_hash: {struct_hash.hex()}")
     print(f"DEBUG: domain_separator: {domain_separator.hex()}")
@@ -102,7 +103,7 @@ def generate_eth_cancel_change_eth_address_intent_vectors():
         eth_message = create_eth_cancel_change_eth_address_message(pq_fingerprint, eth_nonce)
         
         # Sign using EIP-712 standards
-        eth_signature = sign_eth_message_eip712(eth_nonce, eth_private_key)
+        eth_signature = sign_eth_message_eip712(pq_fingerprint, eth_nonce, eth_private_key)
         
         if eth_signature is None:
             print(f"Failed to generate ETH signature for {current_actor_name} -> {next_actor_name}")

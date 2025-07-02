@@ -59,21 +59,21 @@ def encode_structured_data(data: Dict[str, Any]) -> bytes:
 
 def encode_registration_intent_data(message: Dict[str, Any]) -> bytes:
     """Encode RegistrationIntent data"""
-    eth_nonce = message["ethNonce"]
     salt = bytes.fromhex(message["salt"])
     cs1 = message["cs1"]
     cs2 = message["cs2"]
     hint = message["hint"]
     base_pq_message = bytes.fromhex(message["basePQMessage"])
+    eth_nonce = message["ethNonce"]
     
-    # Encode each field
+    # Encode each field in the new order: salt, cs1, cs2, hint, base_pq_message, eth_nonce
     encoded = (
-        eth_nonce.to_bytes(32, 'big') +
         salt +
         encode_packed(*[x.to_bytes(32, 'big') for x in cs1]) +
         encode_packed(*[x.to_bytes(32, 'big') for x in cs2]) +
         hint.to_bytes(32, 'big') +
-        base_pq_message
+        base_pq_message +
+        eth_nonce.to_bytes(32, 'big')
     )
     return encoded
 
@@ -151,33 +151,33 @@ def get_eip712_digest(domain_separator: bytes, struct_hash: bytes) -> bytes:
     return result
 
 def get_registration_intent_struct_hash(
-    eth_nonce: int,
     salt: bytes,
     cs1: List[int],
     cs2: List[int],
     hint: int,
-    base_pq_message: bytes
+    base_pq_message: bytes,
+    eth_nonce: int
 ) -> bytes:
     """Compute the struct hash for RegistrationIntent"""
     struct_data = encode_structured_data({
         "types": {
             "RegistrationIntent": [
-                {"name": "ethNonce", "type": "uint256"},
                 {"name": "salt", "type": "bytes"},
                 {"name": "cs1", "type": "uint256[32]"},
                 {"name": "cs2", "type": "uint256[32]"},
                 {"name": "hint", "type": "uint256"},
-                {"name": "basePQMessage", "type": "bytes"}
+                {"name": "basePQMessage", "type": "bytes"},
+                {"name": "ethNonce", "type": "uint256"}
             ]
         },
         "primaryType": "RegistrationIntent",
         "message": {
-            "ethNonce": eth_nonce,
             "salt": salt.hex(),
             "cs1": cs1,
             "cs2": cs2,
             "hint": hint,
-            "basePQMessage": base_pq_message.hex()
+            "basePQMessage": base_pq_message.hex(),
+            "ethNonce": eth_nonce
         }
     })
     
@@ -219,74 +219,85 @@ def get_remove_intent_struct_hash(pq_fingerprint: str, eth_nonce: int) -> bytes:
     ])
     return keccak(encoded)
 
-def get_change_eth_address_intent_struct_hash(new_eth_address: str, eth_nonce: int) -> bytes:
+def get_change_eth_address_intent_struct_hash(new_eth_address: str, pq_fingerprint: str, eth_nonce: int) -> bytes:
     """
-    Compute the struct hash for ChangeETHAddressIntent(address newETHAddress,uint256 ethNonce)
-    Using keccak-packed encoding like the working registration generator
+    Compute the struct hash for ChangeETHAddressIntent(address newETHAddress,address pqFingerprint,uint256 ethNonce)
+    Using abi.encode like the contract implementation
     """
     from eth_utils import keccak, to_checksum_address
+    from eth_abi import encode
     
     type_hash = bytes.fromhex(CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH[2:])
     
-    # Convert hex string to checksum address for proper encoding
+    # Convert hex strings to checksum addresses for proper encoding
     new_eth_address_checksum = to_checksum_address(new_eth_address)
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
     
     print(f"DEBUG: type_hash: {type_hash.hex()}")
     print(f"DEBUG: new_eth_address: {new_eth_address}")
     print(f"DEBUG: new_eth_address_checksum: {new_eth_address_checksum}")
+    print(f"DEBUG: pq_fingerprint: {pq_fingerprint}")
+    print(f"DEBUG: pq_fingerprint_checksum: {pq_fingerprint_checksum}")
     print(f"DEBUG: eth_nonce: {eth_nonce}")
     
-    # Use keccak-packed encoding like the working registration generator
-    # For address: use 20 bytes (not padded to 32)
-    address_bytes = bytes.fromhex(new_eth_address_checksum[2:])  # Remove 0x prefix, 20 bytes
+    # Use abi.encode like the contract implementation
+    encoded_data = encode([
+        'bytes32',
+        'address',
+        'address',
+        'uint256'
+    ], [
+        type_hash,
+        new_eth_address_checksum,
+        pq_fingerprint_checksum,
+        eth_nonce
+    ])
     
-    # For uint256: convert to 32 bytes
-    nonce_bytes = eth_nonce.to_bytes(32, 'big')
+    print(f"DEBUG: encoded_data: {encoded_data.hex()}")
     
-    print(f"DEBUG: address_bytes (20 bytes): {address_bytes.hex()}")
-    print(f"DEBUG: nonce_bytes: {nonce_bytes.hex()}")
-    
-    # Use keccak-packed encoding: type_hash + address (20 bytes) + nonce (32 bytes)
-    packed = type_hash + address_bytes + nonce_bytes
-    print(f"DEBUG: packed: {packed.hex()}")
-    
-    struct_hash = keccak(packed)
+    struct_hash = keccak(encoded_data)
     print(f"DEBUG: PYTHON struct_hash: {struct_hash.hex()}")
     
     return struct_hash
 
-def get_change_eth_address_confirmation_struct_hash(old_eth_address: str, eth_nonce: int) -> bytes:
-    """Compute the struct hash for ChangeETHAddressConfirmation(address oldETHAddress,uint256 ethNonce)"""
+def get_change_eth_address_confirmation_struct_hash(old_eth_address: str, pq_fingerprint: str, eth_nonce: int) -> bytes:
+    """Compute the struct hash for ChangeETHAddressConfirmation(address oldETHAddress,address pqFingerprint,uint256 ethNonce)"""
     from eth_utils import keccak, to_checksum_address
     from eth_abi import encode
     type_hash = bytes.fromhex(CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH[2:])  # Remove '0x' prefix
     old_eth_address_checksum = to_checksum_address(old_eth_address)
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
     encoded = encode([
         'bytes32',
+        'address',
         'address',
         'uint256'
     ], [
         type_hash,
         old_eth_address_checksum,
+        pq_fingerprint_checksum,
         eth_nonce
     ])
     return keccak(encoded)
 
-def get_unregistration_intent_struct_hash(eth_nonce: int) -> bytes:
+def get_unregistration_intent_struct_hash(pq_fingerprint: str, eth_nonce: int) -> bytes:
     """
-    Compute the struct hash for UnregistrationIntent(uint256 ethNonce)
+    Compute the struct hash for UnregistrationIntent(address pqFingerprint,uint256 ethNonce)
     Using abi.encode like the contract implementation
     """
-    from eth_utils import keccak
+    from eth_utils import keccak, to_checksum_address
     from eth_abi import encode
     
     type_hash = bytes.fromhex(UNREGISTRATION_INTENT_TYPE_HASH[2:])
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
     
     print(f"DEBUG: type_hash: {type_hash.hex()}")
+    print(f"DEBUG: pq_fingerprint: {pq_fingerprint}")
+    print(f"DEBUG: pq_fingerprint_checksum: {pq_fingerprint_checksum}")
     print(f"DEBUG: eth_nonce: {eth_nonce}")
     
     # Use abi.encode like the contract implementation
-    encoded_data = encode(['bytes32', 'uint256'], [type_hash, eth_nonce])
+    encoded_data = encode(['bytes32', 'address', 'uint256'], [type_hash, pq_fingerprint_checksum, eth_nonce])
     
     print(f"DEBUG: encoded_data: {encoded_data.hex()}")
     
@@ -295,8 +306,8 @@ def get_unregistration_intent_struct_hash(eth_nonce: int) -> bytes:
     
     return struct_hash
 
-def get_unregistration_confirmation_struct_hash(pq_fingerprint: str, eth_nonce: int) -> bytes:
-    """Compute the struct hash for UnregistrationConfirmation(address pqFingerprint,uint256 ethNonce)"""
+def get_unregistration_confirmation_struct_hash(pq_fingerprint: str, base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int) -> bytes:
+    """Compute the struct hash for UnregistrationConfirmation(address pqFingerprint,bytes basePQMessage,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,uint256 ethNonce)"""
     from eth_utils import keccak, to_checksum_address
     from eth_abi import encode
     type_hash = bytes.fromhex(UNREGISTRATION_CONFIRMATION_TYPE_HASH[2:])  # Remove '0x' prefix
@@ -309,10 +320,20 @@ def get_unregistration_confirmation_struct_hash(pq_fingerprint: str, eth_nonce: 
     encoded_data = encode([
         'bytes32',
         'address',
+        'bytes32',  # keccak256(basePQMessage)
+        'bytes32',  # keccak256(salt)
+        'bytes32',  # keccak256(abi.encodePacked(cs1))
+        'bytes32',  # keccak256(abi.encodePacked(cs2))
+        'uint256',
         'uint256'
     ], [
         type_hash,
         pq_fingerprint_checksum,
+        keccak(base_pq_message),
+        keccak(salt),
+        keccak(encode_packed(*[x.to_bytes(32, 'big') for x in cs1])),
+        keccak(encode_packed(*[x.to_bytes(32, 'big') for x in cs2])),
+        hint,
         eth_nonce
     ])
     print(f"DEBUG: encoded_data: {encoded_data.hex()}")
@@ -320,21 +341,24 @@ def get_unregistration_confirmation_struct_hash(pq_fingerprint: str, eth_nonce: 
     print(f"DEBUG: struct_hash: {struct_hash.hex()}")
     return struct_hash
 
-def get_remove_change_intent_struct_hash(eth_nonce: int) -> bytes:
+def get_remove_change_intent_struct_hash(pq_fingerprint: str, eth_nonce: int) -> bytes:
     """
-    Compute the struct hash for RemoveChangeIntent(uint256 ethNonce)
+    Compute the struct hash for RemoveChangeIntent(address pqFingerprint,uint256 ethNonce)
     Using abi.encode like the contract implementation
     """
-    from eth_utils import keccak
+    from eth_utils import keccak, to_checksum_address
     from eth_abi import encode
     
     type_hash = bytes.fromhex(REMOVE_CHANGE_INTENT_TYPE_HASH[2:])
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
     
     print(f"DEBUG: type_hash: {type_hash.hex()}")
+    print(f"DEBUG: pq_fingerprint: {pq_fingerprint}")
+    print(f"DEBUG: pq_fingerprint_checksum: {pq_fingerprint_checksum}")
     print(f"DEBUG: eth_nonce: {eth_nonce}")
     
-    # Use abi.encode like the contract: abi.encode(REMOVE_CHANGE_INTENT_TYPE_HASH, ethNonce)
-    encoded_data = encode(['bytes32', 'uint256'], [type_hash, eth_nonce])
+    # Use abi.encode like the contract: abi.encode(REMOVE_CHANGE_INTENT_TYPE_HASH, pqFingerprint, ethNonce)
+    encoded_data = encode(['bytes32', 'address', 'uint256'], [type_hash, pq_fingerprint_checksum, eth_nonce])
     
     print(f"DEBUG: encoded_data: {encoded_data.hex()}")
     

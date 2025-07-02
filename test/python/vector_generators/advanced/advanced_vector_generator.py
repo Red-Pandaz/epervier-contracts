@@ -23,13 +23,26 @@ import hashlib
 import hmac
 import subprocess
 
-# Add the parent directory to the path to import the basic generator
+# Add the parent directory to the path to import the basic generator and eip712_config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(str(Path(__file__).resolve().parents[2]))  # test/python
+
+# Import EIP712 config
+from eip712_config import (
+    DOMAIN_SEPARATOR, 
+    REGISTRATION_INTENT_TYPE_HASH,
+    REGISTRATION_CONFIRMATION_TYPE_HASH,
+    REMOVE_INTENT_TYPE_HASH,
+    CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH,
+    CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH,
+    UNREGISTRATION_INTENT_TYPE_HASH,
+    UNREGISTRATION_CONFIRMATION_TYPE_HASH,
+    REMOVE_CHANGE_INTENT_TYPE_HASH
+)
 
 # Define constants and helper functions
-PROJECT_ROOT = Path(__file__).resolve().parents[3]  # epervier-registry
-ACTORS_CONFIG_PATH = PROJECT_ROOT / "test/test_keys/actors_config.json"
-DOMAIN_SEPARATOR = Web3.keccak(b"PQRegistry")
+PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
+ACTORS_CONFIG_PATH = PROJECT_ROOT / "test" / "test_keys" / "actors_config.json"
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADVANCED_VECTOR_DIR = os.path.join(os.path.dirname(__file__), '../../test_vectors/advanced')
 OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/advanced/test8_unregister_revoke_unregister_confirm_unregistration_confirmation_vectors.json"
@@ -162,19 +175,148 @@ def generate_epervier_signature(message: bytes, actor: str) -> Dict[str, Any]:
     return None
 
 def generate_eth_signature(message: bytes, private_key: str) -> Dict[str, Any]:
-    """Generate ETH signature for a message"""
-    from eth_account.messages import encode_defunct
-    
+    """Generate ETH signature for a message using EIP-712 structured signing"""
     account = Account.from_key(private_key)
-    message_hash = encode_defunct(message)
-    signed_message = account.sign_message(message_hash)
     
+    # For EIP-712, we need to create the struct hash and then the digest
+    # The message should already be the struct-encoded data (without domain separator)
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, keccak(message)))
+    
+    # Sign the digest
+    sig = Account._sign_hash(digest, private_key=account.key)
     return {
-        "v": signed_message.v,
-        "r": signed_message.r,  # Return as integer like working generator
-        "s": signed_message.s,  # Return as integer like working generator
-        "signature": signed_message.signature.hex()
+        "v": sig.v,
+        "r": sig.r,
+        "s": sig.s,
+        "signature": sig.signature.hex()
     }
+
+def sign_registration_intent_eip712(eth_nonce: int, salt: bytes, cs1: List[int], cs2: List[int], hint: int, base_pq_message: bytes, private_key: str) -> Dict[str, Any]:
+    """Sign registration intent using EIP-712 structured data"""
+    # Create the struct hash for the message components
+    struct_hash = keccak(abi_encode_packed(
+        keccak(b"RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)"),
+        eth_nonce.to_bytes(32, 'big'),
+        keccak(salt),
+        keccak(abi_encode_packed(*[x.to_bytes(32, 'big') for x in cs1])),
+        keccak(abi_encode_packed(*[x.to_bytes(32, 'big') for x in cs2])),
+        hint.to_bytes(32, 'big'),
+        keccak(base_pq_message)
+    ))
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
+
+def sign_registration_confirmation_eip712(pq_fingerprint: str, eth_nonce: int, private_key: str) -> Dict[str, Any]:
+    """Sign registration confirmation using EIP-712 structured data"""
+    # Create the struct hash for the message components
+    struct_hash = keccak(abi_encode_packed(
+        keccak(b"RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)"),
+        bytes.fromhex(pq_fingerprint[2:]),  # Remove '0x' prefix
+        eth_nonce.to_bytes(32, 'big')
+    ))
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
+
+def sign_change_eth_address_intent_eip712(pq_fingerprint: str, new_eth_address: str, eth_nonce: int, private_key: str) -> Dict[str, Any]:
+    """Sign change ETH address intent using EIP-712 structured data"""
+    # Create the struct hash for the message components
+    struct_hash = keccak(abi_encode_packed(
+        keccak(b"ChangeETHAddressIntent(address pqFingerprint,address newETHAddress,uint256 ethNonce)"),
+        bytes.fromhex(pq_fingerprint[2:]),  # Remove '0x' prefix
+        bytes.fromhex(new_eth_address[2:]),  # Remove '0x' prefix
+        eth_nonce.to_bytes(32, 'big')
+    ))
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
+
+def sign_change_eth_address_confirmation_eip712(old_eth_address: str, new_eth_address: str, base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int, private_key: str) -> Dict[str, Any]:
+    """Sign change ETH address confirmation using EIP-712 structured data"""
+    # Create the struct hash for the message components
+    struct_hash = keccak(abi_encode_packed(
+        keccak(b"ChangeETHAddressConfirmation(address oldETHAddress,address newETHAddress,uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)"),
+        bytes.fromhex(old_eth_address[2:]),  # Remove '0x' prefix
+        bytes.fromhex(new_eth_address[2:]),  # Remove '0x' prefix
+        eth_nonce.to_bytes(32, 'big'),
+        keccak(salt),
+        keccak(abi_encode_packed(*[x.to_bytes(32, 'big') for x in cs1])),
+        keccak(abi_encode_packed(*[x.to_bytes(32, 'big') for x in cs2])),
+        hint.to_bytes(32, 'big'),
+        keccak(base_pq_message)
+    ))
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
+
+def sign_unregistration_intent_eip712(pq_fingerprint: str, eth_nonce: int, private_key: str) -> Dict[str, Any]:
+    """Sign unregistration intent using EIP-712 structured data"""
+    # Create the struct hash for the message components
+    struct_hash = keccak(abi_encode_packed(
+        keccak(b"UnregistrationIntent(address pqFingerprint,uint256 ethNonce)"),
+        bytes.fromhex(pq_fingerprint[2:]),  # Remove '0x' prefix
+        eth_nonce.to_bytes(32, 'big')
+    ))
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
+
+def sign_unregistration_confirmation_eip712(eth_address: str, base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int, private_key: str) -> Dict[str, Any]:
+    """Sign unregistration confirmation using EIP-712 structured data"""
+    # Create the struct hash for the message components
+    struct_hash = keccak(abi_encode_packed(
+        keccak(b"UnregistrationConfirmation(address ethAddress,uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)"),
+        bytes.fromhex(eth_address[2:]),  # Remove '0x' prefix
+        eth_nonce.to_bytes(32, 'big'),
+        keccak(salt),
+        keccak(abi_encode_packed(*[x.to_bytes(32, 'big') for x in cs1])),
+        keccak(abi_encode_packed(*[x.to_bytes(32, 'big') for x in cs2])),
+        hint.to_bytes(32, 'big'),
+        keccak(base_pq_message)
+    ))
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
 
 def abi_encode_packed(*args):
     """Concatenate arguments without padding (like Solidity's abi.encodePacked)"""
@@ -205,7 +347,7 @@ def create_base_pq_registration_intent_message(eth_address: str, pq_nonce: int) 
 
 def create_eth_registration_intent_message(base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int) -> bytes:
     """Create ETH registration intent message according to schema - matching working generator format"""
-    # ETHRegistrationIntentMessage: DOMAIN_SEPARATOR + pattern + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    # ETHRegistrationIntentMessage: pattern + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
     # Use exact same format as working generator
     pattern = b"Intent to pair Epervier Key"  # bytes, not string
     
@@ -213,7 +355,7 @@ def create_eth_registration_intent_message(base_pq_message: bytes, salt: bytes, 
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     
     return (
-        DOMAIN_SEPARATOR + pattern + base_pq_message + salt +
+        pattern + base_pq_message + salt +
         pack_uint256_array(cs1) + pack_uint256_array(cs2) +
         hint.to_bytes(32, 'big') + eth_nonce.to_bytes(32, 'big')
     )
@@ -225,7 +367,6 @@ def create_base_eth_registration_confirmation_message(pq_fingerprint: str, eth_n
     
     # Manual concatenation to ensure correct format
     message = (
-        DOMAIN_SEPARATOR +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix, convert to raw bytes
         eth_nonce.to_bytes(32, 'big')
@@ -267,7 +408,6 @@ def create_base_eth_change_eth_address_intent_message(pq_fingerprint: str, new_e
     print(f"DEBUG: eth_nonce length: {len(eth_nonce_bytes)} value: {eth_nonce_bytes.hex()}")
 
     base_message = (
-        DOMAIN_SEPARATOR +  # Include domain separator like working generator
         pattern +
         pq_fingerprint_bytes +
         pattern2 +
@@ -291,7 +431,6 @@ def create_pq_change_eth_address_intent_message(old_eth_address: str, new_eth_ad
     """Create PQ change address intent message according to working vector schema"""
     pattern = b"Intent to change bound ETH Address from "
     pattern2 = b" to "
-    message = DOMAIN_SEPARATOR
     message += pattern
     message += bytes.fromhex(old_eth_address[2:])
     message += pattern2
@@ -333,7 +472,6 @@ def create_eth_change_eth_address_confirmation_message(pq_fingerprint: str, base
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     
     message = (
-        DOMAIN_SEPARATOR +  # 32 bytes
         pattern +  # 52 bytes
         bytes.fromhex(pq_fingerprint[2:]) +  # 20 bytes
         base_pq_message +  # 173 bytes
@@ -343,7 +481,7 @@ def create_eth_change_eth_address_confirmation_message(pq_fingerprint: str, base
         hint.to_bytes(32, 'big') +  # 32 bytes
         eth_nonce.to_bytes(32, 'big')  # 32 bytes
     )
-    print(f"DEBUG: Final message length: {len(message)} (should be 2429)")
+    print(f"DEBUG: Final message length: {len(message)} (should be 2397)")
     return message
 
 def create_base_eth_unregistration_intent_message(pq_fingerprint: str, eth_nonce: int) -> bytes:
@@ -433,7 +571,6 @@ def create_eth_unregistration_confirm_message(pq_fingerprint: str, base_pq_messa
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     
     message = (
-        DOMAIN_SEPARATOR +
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +
         base_pq_message +
@@ -471,12 +608,12 @@ def create_pq_remove_registration_intent_message(eth_address: str, pq_nonce: int
 
 def create_eth_remove_change_intent_message(pq_fingerprint: str, eth_nonce: int) -> bytes:
     """Create ETH remove change intent message according to schema"""
-    # ETHRemoveChangeIntentMessage: DOMAIN_SEPARATOR + pattern + pqFingerprint + ethNonce
+    # ETHRemoveChangeIntentMessage: pattern + pqFingerprint + ethNonce
     pattern = b"Remove change intent from Epervier Fingerprint "
     pq_fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])  # Convert hex address to bytes
     eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
     
-    message = DOMAIN_SEPARATOR + pattern + pq_fingerprint_bytes + eth_nonce_bytes
+    message = pattern + pq_fingerprint_bytes + eth_nonce_bytes
     return message
 
 def create_pq_remove_change_intent_message(eth_address: str, pq_nonce: int) -> bytes:
@@ -586,8 +723,16 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
 
-        # Generate ETH signature
-        eth_signature = generate_eth_signature(eth_message, actor_data["eth_private_key"])
+        # Generate ETH signature using EIP-712
+        eth_signature = sign_registration_intent_eip712(
+            eth_nonce,
+            pq_signature["salt"],
+            pq_signature["cs1"],
+            pq_signature["cs2"],
+            pq_signature["hint"],
+            base_pq_message,
+            actor_data["eth_private_key"]
+        )
 
         return {
             "actor": actor,
@@ -625,8 +770,16 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
 
-        # Generate ETH signature using the ETH actor's key
-        eth_signature = generate_eth_signature(eth_message, eth_actor_data["eth_private_key"])
+        # Generate ETH signature using the ETH actor's key with EIP-712
+        eth_signature = sign_registration_intent_eip712(
+            eth_nonce,
+            pq_signature["salt"],
+            pq_signature["cs1"],
+            pq_signature["cs2"],
+            pq_signature["hint"],
+            base_pq_message,
+            eth_actor_data["eth_private_key"]
+        )
 
         return {
             "pq_actor": pq_actor,
@@ -651,8 +804,12 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
         
-        # Generate ETH signature
-        eth_signature = generate_eth_signature(base_eth_message, actor_data["eth_private_key"])
+        # Generate ETH signature using EIP-712
+        eth_signature = sign_registration_confirmation_eip712(
+            actor_data["pq_fingerprint"],
+            eth_nonce,
+            actor_data["eth_private_key"]
+        )
         
         # Create PQ confirmation message
         pq_message = create_pq_registration_confirmation_message(
@@ -708,8 +865,13 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
         
-        # Generate ETH signature with the new ETH address's private key
-        eth_signature = generate_eth_signature(base_eth_message, new_eth_private_key)
+        # Generate ETH signature with the new ETH address's private key using EIP-712
+        eth_signature = sign_change_eth_address_intent_eip712(
+            actor_data["pq_fingerprint"],
+            resolved_new_eth_address,
+            eth_nonce,
+            new_eth_private_key
+        )
         
         # Create PQ change intent message
         pq_message = create_pq_change_eth_address_intent_message(
@@ -776,8 +938,18 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
         
-        # Generate ETH signature with the new ETH address's private key
-        eth_signature = generate_eth_signature(eth_message, new_eth_private_key)
+        # Generate ETH signature with the new ETH address's private key using EIP-712
+        eth_signature = sign_change_eth_address_confirmation_eip712(
+            actor_data["eth_address"],
+            resolved_new_eth_address,
+            base_pq_message,
+            pq_signature["salt"],
+            pq_signature["cs1"],
+            pq_signature["cs2"],
+            pq_signature["hint"],
+            eth_nonce,
+            new_eth_private_key
+        )
         
         return {
             "current_actor": actor,
@@ -803,8 +975,12 @@ class AdvancedVectorGenerator:
             pq_nonce
         )
         
-        # Generate ETH signature
-        eth_signature = generate_eth_signature(base_eth_message, actor_data["eth_private_key"])
+        # Generate ETH signature using EIP-712
+        eth_signature = sign_unregistration_intent_eip712(
+            actor_data["pq_fingerprint"],
+            eth_nonce,
+            actor_data["eth_private_key"]
+        )
         
         # Create PQ unregistration intent message
         pq_message = create_pq_unregistration_intent_message(
@@ -857,8 +1033,17 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
         
-        # Generate ETH signature
-        eth_signature = self.sign_with_eth_key(eth_message, actor_data["eth_private_key"])
+        # Generate ETH signature using EIP-712
+        eth_signature = sign_unregistration_confirmation_eip712(
+            actor_data["eth_address"],
+            base_pq_message,
+            pq_signature["salt"],
+            pq_signature["cs1"],
+            pq_signature["cs2"],
+            pq_signature["hint"],
+            eth_nonce,
+            actor_data["eth_private_key"]
+        )
         
         return {
             "actor": actor,
@@ -877,11 +1062,27 @@ class AdvancedVectorGenerator:
         actor_data = self.actors[actor]
         
         if removal_type == "registration_eth":
+            # For ETH removal, we need to create the struct hash for EIP-712 signing
+            struct_hash = keccak(abi_encode_packed(
+                keccak(b"RemoveIntent(address pqFingerprint,uint256 ethNonce)"),
+                bytes.fromhex(actor_data["pq_fingerprint"][2:]),  # Remove '0x' prefix
+                eth_nonce.to_bytes(32, 'big')
+            ))
+            
+            # Create EIP712 digest with domain separator
+            domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+            digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+            
+            # Sign the digest
+            account = Account.from_key(actor_data["eth_private_key"])
+            sig = Account._sign_hash(digest, private_key=account.key)
+            signature = {"v": sig.v, "r": sig.r, "s": sig.s}
+            
+            # Create the message for the vector (this should match what the contract expects)
             message = create_eth_remove_registration_intent_message(
                 actor_data["pq_fingerprint"],
                 eth_nonce
             )
-            signature = generate_eth_signature(message, actor_data["eth_private_key"])
             return {
                 "actor": actor,
                 "eth_address": actor_data["eth_address"],
@@ -909,11 +1110,28 @@ class AdvancedVectorGenerator:
         elif removal_type == "change_eth":
             # For change_eth removal, use the target PQ fingerprint (Alice's) instead of the actor's own
             pq_fingerprint = target_pq_fingerprint if target_pq_fingerprint else actor_data["pq_fingerprint"]
+            
+            # For ETH removal, we need to create the struct hash for EIP-712 signing
+            struct_hash = keccak(abi_encode_packed(
+                keccak(b"RemoveChangeIntent(address pqFingerprint,uint256 ethNonce)"),
+                bytes.fromhex(pq_fingerprint[2:]),  # Remove '0x' prefix
+                eth_nonce.to_bytes(32, 'big')
+            ))
+            
+            # Create EIP712 digest with domain separator
+            domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+            digest = keccak(abi_encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+            
+            # Sign the digest
+            account = Account.from_key(actor_data["eth_private_key"])
+            sig = Account._sign_hash(digest, private_key=account.key)
+            signature = {"v": sig.v, "r": sig.r, "s": sig.s}
+            
+            # Create the message for the vector (this should match what the contract expects)
             message = create_eth_remove_change_intent_message(
                 pq_fingerprint,
                 eth_nonce
             )
-            signature = generate_eth_signature(message, actor_data["eth_private_key"])
             return {
                 "actor": actor,
                 "eth_address": actor_data["eth_address"],
@@ -1297,8 +1515,12 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
         
-        # Generate ETH signature using the ETH actor's key
-        eth_signature = generate_eth_signature(base_eth_message, eth_actor_data["eth_private_key"])
+        # Generate ETH signature using the ETH actor's key with EIP-712
+        eth_signature = sign_registration_confirmation_eip712(
+            pq_fingerprint,
+            eth_nonce,
+            eth_actor_data["eth_private_key"]
+        )
         
         # Create PQ confirmation message with the target's ETH address
         pq_message = create_pq_registration_confirmation_message(
@@ -1340,8 +1562,12 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
 
-        # Generate ETH signature using the ETH actor's key
-        eth_signature = generate_eth_signature(base_eth_message, eth_actor_data["eth_private_key"])
+        # Generate ETH signature using the ETH actor's key with EIP-712
+        eth_signature = sign_unregistration_intent_eip712(
+            pq_actor_data["pq_fingerprint"],
+            eth_nonce,
+            eth_actor_data["eth_private_key"]
+        )
 
         # Create PQ unregistration intent message with the ETH address
         pq_message = create_pq_unregistration_intent_message(
@@ -1396,8 +1622,17 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
 
-        # Generate ETH signature
-        eth_signature = self.sign_with_eth_key(eth_message, eth_actor_data["eth_private_key"])
+        # Generate ETH signature using EIP-712
+        eth_signature = sign_unregistration_confirmation_eip712(
+            eth_actor_data["eth_address"],
+            base_pq_message,
+            pq_signature["salt"],
+            pq_signature["cs1"],
+            pq_signature["cs2"],
+            pq_signature["hint"],
+            eth_nonce,
+            eth_actor_data["eth_private_key"]
+        )
 
         return {
             "actor": pq_actor,

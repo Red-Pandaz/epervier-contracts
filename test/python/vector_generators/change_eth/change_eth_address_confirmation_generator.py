@@ -43,15 +43,16 @@ def create_base_pq_confirm_message(old_eth_address, new_eth_address, pq_nonce):
     )
     return message
 
-def sign_eth_message(message_bytes, private_key, old_eth_address, eth_nonce):
+def sign_eth_message(message_bytes, private_key, old_eth_address, pq_fingerprint, eth_nonce):
     """Sign a message with ETH private key using EIP712"""
     # Use EIP712 structured signing
     domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
-    struct_hash = get_change_eth_address_confirmation_struct_hash(old_eth_address, eth_nonce)
+    struct_hash = get_change_eth_address_confirmation_struct_hash(old_eth_address, pq_fingerprint, eth_nonce)
     digest = get_eip712_digest(domain_separator, struct_hash)
     
     # DEBUG: Print the values for comparison with Solidity
     print(f"DEBUG: Python old_eth_address: {old_eth_address}")
+    print(f"DEBUG: Python pq_fingerprint: {pq_fingerprint}")
     print(f"DEBUG: Python eth_nonce: {eth_nonce}")
     print(f"DEBUG: Python type_hash: {CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH}")
     print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
@@ -166,7 +167,7 @@ def generate_change_eth_address_confirmation_vectors():
             continue
 
         eth_message = create_eth_confirm_message(pq_fingerprint, base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], eth_nonce)
-        eth_signature = sign_eth_message(eth_message, next_actor["eth_private_key"], old_eth_address, eth_nonce)
+        eth_signature = sign_eth_message(eth_message, next_actor["eth_private_key"], old_eth_address, pq_fingerprint, eth_nonce)
 
         confirmation_vector = {
             "current_actor": current_actor_name,

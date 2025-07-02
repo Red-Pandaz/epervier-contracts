@@ -105,7 +105,7 @@ def sign_with_eth_key(eth_message, eth_private_key, pq_fingerprint, base_pq_mess
     """Sign a message with ETH private key using EIP712"""
     # Use EIP712 structured signing
     # First create the struct hash
-    struct_hash = get_unregistration_confirmation_struct_hash(pq_fingerprint, eth_nonce)
+    struct_hash = get_unregistration_confirmation_struct_hash(pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce)
     
     # Create EIP712 digest with domain separator (same as working registration generators)
     from eth_utils import keccak

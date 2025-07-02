@@ -96,14 +96,14 @@ def create_base_pq_message(old_eth_address, new_eth_address, base_eth_message, v
     
     return message
 
-def sign_eth_message(new_eth_address: str, eth_nonce: int, private_key: str) -> dict:
+def sign_eth_message(new_eth_address: str, pq_fingerprint: str, eth_nonce: int, private_key: str) -> dict:
     """
     Sign the change ETH address intent message using the same pattern as registration intent
     """
     from eth_utils import keccak
     
     # Get the struct hash using the same pattern as registration intent
-    struct_hash = get_change_eth_address_intent_struct_hash(new_eth_address, eth_nonce)
+    struct_hash = get_change_eth_address_intent_struct_hash(new_eth_address, pq_fingerprint, eth_nonce)
     
     # Create EIP712 digest with domain separator (same pattern as registration intent)
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
@@ -258,7 +258,7 @@ def generate_change_eth_address_intent_vectors():
         pq_nonce = 2  # Current actor's PQ nonce (2 for change ETH address intent after registration)
         
         # Step 1: Next actor signs the base ETH message
-        struct_hash = get_change_eth_address_intent_struct_hash(new_eth_address, eth_nonce)
+        struct_hash = get_change_eth_address_intent_struct_hash(new_eth_address, pq_fingerprint, eth_nonce)
         domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])
         digest = keccak(b'\x19\x01' + domain_separator_bytes + struct_hash)
         print(f"DEBUG: PYTHON struct_hash: {struct_hash.hex()}")
@@ -266,7 +266,7 @@ def generate_change_eth_address_intent_vectors():
         print(f"DEBUG: PYTHON digest: {digest.hex()}")
         # Recover address from signature (after signing, below)
         base_eth_message = create_base_eth_message(pq_fingerprint, new_eth_address, eth_nonce)
-        eth_signature = sign_eth_message(new_eth_address, eth_nonce, next_actor["eth_private_key"])  # Next actor signs
+        eth_signature = sign_eth_message(new_eth_address, pq_fingerprint, eth_nonce, next_actor["eth_private_key"])  # Next actor signs
         
         # Step 2: Current actor's PQ key signs the complete message containing next actor's signature
         base_pq_message = create_base_pq_message(

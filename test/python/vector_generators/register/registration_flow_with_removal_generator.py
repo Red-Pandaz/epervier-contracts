@@ -120,8 +120,8 @@ def sign_eth_message(message_bytes, private_key, message_type="registration_inte
     
     if message_type == "registration_intent":
         struct_hash = get_registration_intent_struct_hash(
-            kwargs["eth_nonce"], kwargs["salt"], kwargs["cs1"], 
-            kwargs["cs2"], kwargs["hint"], kwargs["base_pq_message"]
+            kwargs["salt"], kwargs["cs1"], kwargs["cs2"], 
+            kwargs["hint"], kwargs["base_pq_message"], kwargs["eth_nonce"]
         )
     elif message_type == "registration_confirmation":
         struct_hash = get_registration_confirmation_struct_hash(

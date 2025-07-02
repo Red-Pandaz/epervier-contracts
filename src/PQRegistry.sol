@@ -79,15 +79,16 @@ contract PQRegistry {
     string public constant DOMAIN_VERSION = "1";
     bytes32 public constant DOMAIN_SEPARATOR = 0x07668882b5c3598c149b213b1c16ab1dd94b45bc4837b468e006b97caef5df92;
     
-    // EIP-712 Type Hashes
-    bytes32 public constant REGISTRATION_INTENT_TYPE_HASH = keccak256("RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)");
+    // EIP-712 bytes32 public constant REGISTRATION_INTENT_TYPE_HASH = keccak256("RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)");
     bytes32 public constant REGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
     bytes32 public constant REMOVE_INTENT_TYPE_HASH = keccak256("RemoveIntent(address pqFingerprint,uint256 ethNonce)");
-    bytes32 public constant CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH = keccak256("ChangeETHAddressIntent(address newETHAddress,uint256 ethNonce)");
-    bytes32 public constant CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = keccak256("ChangeETHAddressConfirmation(address oldETHAddress,uint256 ethNonce)");
-    bytes32 public constant UNREGISTRATION_INTENT_TYPE_HASH = keccak256("UnregistrationIntent(uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH = keccak256("ChangeETHAddressIntent(address newETHAddress,address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = keccak256("ChangeETHAddressConfirmation(address oldETHAddress,address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant UNREGISTRATION_INTENT_TYPE_HASH = keccak256("UnregistrationIntent(address pqFingerprint,uint256 ethNonce)");
     bytes32 public constant UNREGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("UnregistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
-    bytes32 public constant REMOVE_CHANGE_INTENT_TYPE_HASH = keccak256("RemoveChangeIntent(uint256 ethNonce)");
+    bytes32 public constant REMOVE_CHANGE_INTENT_TYPE_HASH = keccak256("RemoveChangeIntent(address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant REMOVE_UNREGISTRATION_INTENT_TYPE_HASH = keccak256("RemoveUnregistrationIntent(uint256 ethNonce)");
+    
     
     constructor(
         address _epervierVerifier
@@ -133,12 +134,12 @@ contract PQRegistry {
         }
         
         bytes32 structHash = SignatureExtractor.getRegistrationIntentStructHash(
-            ethNonce,
             salt,
             cs1Array,
             cs2Array,
             hint,
-            basePQMessage
+            basePQMessage,
+            ethNonce
         );
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
@@ -405,7 +406,7 @@ contract PQRegistry {
         (address pqFingerprint, uint256 ethNonce) = MessageParser.parseETHRemoveChangeIntentMessage(ethMessage);
         
         // STEP 2: Verify the ETH signature using EIP712
-        bytes32 structHash = SignatureExtractor.getRemoveChangeIntentStructHash(ethNonce);
+        bytes32 structHash = SignatureExtractor.getRemoveChangeIntentStructHash(pqFingerprint, ethNonce);
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
         // DEBUG: Print the values for comparison with Python
@@ -553,6 +554,7 @@ contract PQRegistry {
         // STEP 4: Verify the ETH signature using EIP712
         bytes32 structHash = SignatureExtractor.getChangeETHAddressIntentStructHash(
             ethMessageNewEthAddress,
+            ethMessagePqFingerprint,
             ethNonce
         );
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
@@ -620,7 +622,14 @@ contract PQRegistry {
         (address oldEthAddress, address newEthAddress, uint256 pqNonce) = MessageParser.parseBasePQChangeETHAddressConfirmMessage(basePQMessage);
         
         // STEP 3: Verify the ETH signature using EIP712 (use old ETH address from PQ message)
-        bytes32 structHash = SignatureExtractor.getChangeETHAddressConfirmationStructHash(oldEthAddress, ethNonce);
+        // Convert cs1 and cs2 to fixed-size arrays for EIP-712 struct hash
+        uint256[32] memory cs1_fixed;
+        uint256[32] memory cs2_fixed;
+        for (uint i = 0; i < 32; i++) {
+            cs1_fixed[i] = cs1[i];
+            cs2_fixed[i] = cs2[i];
+        }
+        bytes32 structHash = SignatureExtractor.getChangeETHAddressConfirmationStructHash(oldEthAddress, pqFingerprint, ethNonce);
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
         // DEBUG: Print the values for comparison with Python
@@ -707,8 +716,8 @@ contract PQRegistry {
             bytes32 s
         ) = MessageParser.parsePQUnregistrationIntentMessage(pqMessage);
         
-        // STEP 3: Extract ETH nonce from the baseETHMessage
-        uint256 ethNonce = MessageParser.extractEthNonce(baseETHMessage, 0);
+        // STEP 3: Parse the base ETH message to get PQ fingerprint and ETH nonce
+        (address ethMessagePqFingerprint, uint256 ethNonce) = MessageParser.parseBaseETHUnregistrationIntentMessage(baseETHMessage);
         
         // STEP 4: Cross-reference validation
         require(parsedEthAddress != address(0), "Invalid intent address");
@@ -731,7 +740,7 @@ contract PQRegistry {
         require(pqKeyNonces[recoveredFingerprint] == parsedPQNonce, "Invalid PQ nonce");
         
         // STEP 7: Verify the ETH signature using EIP712
-        bytes32 structHash = SignatureExtractor.getUnregistrationIntentStructHash(ethNonce);
+        bytes32 structHash = SignatureExtractor.getUnregistrationIntentStructHash(ethMessagePqFingerprint, ethNonce);
         
         // DEBUG: Check if we're using the right domain separator
         bytes32 actualDomainSeparator = DOMAIN_SEPARATOR;
@@ -815,15 +824,12 @@ contract PQRegistry {
         uint256 hint = MessageParser.extractPQHint(ethMessage, 2);
         bytes memory basePQMessage = MessageParser.extractBasePQMessage(ethMessage, 2);
         
-        // DEBUG: Log signature components for comparison
-        console.log("DEBUG: Contract PQ signature components:");
-        console.log("  salt:", uint256(uint160(bytes20(salt))));
-        console.log("  hint:", hint);
-        console.log("  cs1[0]:", cs1[0]);
-        console.log("  cs1[1]:", cs1[1]);
-        console.log("  cs2[0]:", cs2[0]);
-        console.log("  cs2[1]:", cs2[1]);
-        console.log("  basePQMessage length:", basePQMessage.length);
+        uint256[32] memory cs1Array;
+        uint256[32] memory cs2Array;
+        for (uint i = 0; i < 32; i++) {
+            cs1Array[i] = cs1[i];
+            cs2Array[i] = cs2[i];
+        }
         
         // STEP 3: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(basePQMessage, salt, cs1, cs2, hint);
@@ -835,7 +841,15 @@ contract PQRegistry {
         require(fingerprintAddress == recoveredFingerprint, "Fingerprint address mismatch: ETH message vs recovered PQ signature");
         
         // STEP 5: Verify the ETH signature using EIP712
-        bytes32 structHash = SignatureExtractor.getUnregistrationConfirmationStructHash(fingerprintAddress, ethNonce);
+        bytes32 structHash = SignatureExtractor.getUnregistrationConfirmationStructHash(
+            fingerprintAddress,
+            basePQMessage,
+            salt,
+            cs1Array,
+            cs2Array,
+            hint,
+            ethNonce
+        );
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
         // DEBUG: Log EIP712 signature verification details

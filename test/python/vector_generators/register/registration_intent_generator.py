@@ -123,19 +123,17 @@ def sign_with_eth_key(eth_intent_message, eth_private_key, salt, cs1, cs2, hint,
     # Create the struct hash for the message components
     # For EIP712, we need the base PQ message WITH domain separator in the struct hash
     struct_hash = keccak(encode_packed(
-        keccak(b"RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)"),
-        eth_nonce.to_bytes(32, 'big'),
+        keccak(b"RegistrationIntent(bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage,uint256 ethNonce)"),
         keccak(salt),
         keccak(encode_packed(*[x.to_bytes(32, 'big') for x in cs1])),
         keccak(encode_packed(*[x.to_bytes(32, 'big') for x in cs2])),
         hint.to_bytes(32, 'big'),
-        keccak(base_pq_message)
+        keccak(base_pq_message),
+        eth_nonce.to_bytes(32, 'big')
     ))
-    
     # Create EIP712 digest with domain separator
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
     digest = keccak(encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
-    
     # Sign the digest
     account = Account.from_key(eth_private_key)
     sig = Account._sign_hash(digest, private_key=account.key)

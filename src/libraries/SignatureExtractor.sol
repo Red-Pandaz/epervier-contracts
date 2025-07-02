@@ -18,14 +18,14 @@ library SignatureExtractor {
     bytes32 public constant DOMAIN_SEPARATOR_TYPE_HASH = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     
     // EIP-712 Type Hashes
-    bytes32 public constant REGISTRATION_INTENT_TYPE_HASH = keccak256("RegistrationIntent(uint256 ethNonce,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage)");
+    bytes32 public constant REGISTRATION_INTENT_TYPE_HASH = keccak256("RegistrationIntent(bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,bytes basePQMessage,uint256 ethNonce)");
     bytes32 public constant REGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
     bytes32 public constant REMOVE_INTENT_TYPE_HASH = keccak256("RemoveIntent(address pqFingerprint,uint256 ethNonce)");
-    bytes32 public constant CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH = keccak256("ChangeETHAddressIntent(address newETHAddress,uint256 ethNonce)");
-    bytes32 public constant CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = keccak256("ChangeETHAddressConfirmation(address oldETHAddress,uint256 ethNonce)");
-    bytes32 public constant UNREGISTRATION_INTENT_TYPE_HASH = keccak256("UnregistrationIntent(uint256 ethNonce)");
-    bytes32 public constant UNREGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("UnregistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
-    bytes32 public constant REMOVE_CHANGE_INTENT_TYPE_HASH = keccak256("RemoveChangeIntent(uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH = keccak256("ChangeETHAddressIntent(address newETHAddress,address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = keccak256("ChangeETHAddressConfirmation(address oldETHAddress,address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant UNREGISTRATION_INTENT_TYPE_HASH = keccak256("UnregistrationIntent(address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant UNREGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("UnregistrationConfirmation(address pqFingerprint,bytes basePQMessage,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,uint256 ethNonce)");
+    bytes32 public constant REMOVE_CHANGE_INTENT_TYPE_HASH = keccak256("RemoveChangeIntent(address pqFingerprint,uint256 ethNonce)");
     bytes32 public constant REMOVE_UNREGISTRATION_INTENT_TYPE_HASH = keccak256("RemoveUnregistrationIntent(uint256 ethNonce)");
     
     /**
@@ -373,22 +373,22 @@ library SignatureExtractor {
      * @dev Compute the EIP-712 struct hash for RegistrationIntent
      */
     function getRegistrationIntentStructHash(
-        uint256 ethNonce,
         bytes memory salt,
         uint256[32] memory cs1,
         uint256[32] memory cs2,
         uint256 hint,
-        bytes memory basePQMessage
+        bytes memory basePQMessage,
+        uint256 ethNonce
     ) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 REGISTRATION_INTENT_TYPE_HASH,
-                ethNonce,
                 keccak256(salt),
                 keccak256(abi.encodePacked(cs1)),
                 keccak256(abi.encodePacked(cs2)),
                 hint,
-                keccak256(basePQMessage)
+                keccak256(basePQMessage),
+                ethNonce
             )
         );
     }
@@ -430,12 +430,14 @@ library SignatureExtractor {
      */
     function getChangeETHAddressIntentStructHash(
         address newETHAddress,
+        address pqFingerprint,
         uint256 ethNonce
     ) internal pure returns (bytes32) {
         return keccak256(
-            abi.encodePacked(
+            abi.encode(
                 CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH,
                 newETHAddress,
+                pqFingerprint,
                 ethNonce
             )
         );
@@ -446,12 +448,14 @@ library SignatureExtractor {
      */
     function getChangeETHAddressConfirmationStructHash(
         address oldETHAddress,
+        address pqFingerprint,
         uint256 ethNonce
     ) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH,
                 oldETHAddress,
+                pqFingerprint,
                 ethNonce
             )
         );
@@ -461,11 +465,13 @@ library SignatureExtractor {
      * @dev Compute the EIP-712 struct hash for UnregistrationIntent
      */
     function getUnregistrationIntentStructHash(
+        address pqFingerprint,
         uint256 ethNonce
     ) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 UNREGISTRATION_INTENT_TYPE_HASH,
+                pqFingerprint,
                 ethNonce
             )
         );
@@ -476,12 +482,22 @@ library SignatureExtractor {
      */
     function getUnregistrationConfirmationStructHash(
         address pqFingerprint,
+        bytes memory basePQMessage,
+        bytes memory salt,
+        uint256[32] memory cs1,
+        uint256[32] memory cs2,
+        uint256 hint,
         uint256 ethNonce
     ) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 UNREGISTRATION_CONFIRMATION_TYPE_HASH,
                 pqFingerprint,
+                keccak256(basePQMessage),
+                keccak256(salt),
+                keccak256(abi.encodePacked(cs1)),
+                keccak256(abi.encodePacked(cs2)),
+                hint,
                 ethNonce
             )
         );
@@ -491,11 +507,13 @@ library SignatureExtractor {
      * @dev Compute the EIP-712 struct hash for RemoveChangeIntent
      */
     function getRemoveChangeIntentStructHash(
+        address pqFingerprint,
         uint256 ethNonce
     ) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 REMOVE_CHANGE_INTENT_TYPE_HASH,
+                pqFingerprint,
                 ethNonce
             )
         );

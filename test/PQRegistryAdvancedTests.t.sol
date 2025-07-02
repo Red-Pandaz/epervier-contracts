@@ -140,11 +140,11 @@ contract PQRegistryAdvancedTests is Test {
 
     // Advanced Test 1: ETH Registration - PQ Removes - ETH Retries - PQ Confirms
     function testETHRegistrationWithPQRemovalAndRetry() public {
-        // Load the basic vectors we'll use for this test
-        string memory intentJson = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
-        string memory removalJson = vm.readFile("test/test_vectors/register/registration_pq_removal_vectors.json");
-        string memory confirmJson = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
-        string memory advancedJson = vm.readFile("test/test_vectors/test1_eth_retry_vectors.json");
+        // Load the advanced vectors for this test
+        string memory intentJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_registration_intent_vectors.json");
+        string memory removalJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_removal_registration_pq_vectors.json");
+        string memory confirmJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_registration_confirmation_vectors.json");
+        string memory advancedJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_vectors.json");
         
         // Get Alice's configuration
         Actor memory alice = getActor("alice");
@@ -157,8 +157,11 @@ contract PQRegistryAdvancedTests is Test {
         // Step 1: ETH creates registration intent (nonce 0)
         console.log("\n--- Step 1: ETH creates registration intent ---");
         bytes memory intentMessage = vm.parseBytes(vm.parseJsonString(intentJson, ".registration_intent[0].eth_message"));
-        bytes32 signedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(intentMessage.length), intentMessage));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, signedHash);
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.v")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
         
         registry.submitRegistrationIntent(intentMessage, v, r, s);
         
@@ -264,8 +267,11 @@ contract PQRegistryAdvancedTests is Test {
         // Step 1: PQ creates registration intent (nonce 0)
         console.log("\n--- Step 1: PQ creates registration intent ---");
         bytes memory intentMessage = vm.parseBytes(vm.parseJsonString(intentJson, ".registration_intent[1].eth_message"));
-        bytes32 signedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(intentMessage.length), intentMessage));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(bob.ethPrivateKey, signedHash);
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[1].eth_signature.v")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[1].eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[1].eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
         
         registry.submitRegistrationIntent(intentMessage, v, r, s);
         
@@ -285,8 +291,11 @@ contract PQRegistryAdvancedTests is Test {
         // Step 2: ETH removes registration intent (nonce 1)
         console.log("\n--- Step 2: ETH removes registration intent ---");
         bytes memory removalMessage = vm.parseBytes(vm.parseJsonString(removalJson, ".registration_eth_removal[1].eth_message"));
-        bytes32 removalSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(removalMessage.length), removalMessage));
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(bob.ethPrivateKey, removalSignedHash);
+        uint8 v2 = uint8(vm.parseUint(vm.parseJsonString(removalJson, ".registration_eth_removal[1].eth_signature.v")));
+        uint256 r2Decimal = vm.parseUint(vm.parseJsonString(removalJson, ".registration_eth_removal[1].eth_signature.r"));
+        uint256 s2Decimal = vm.parseUint(vm.parseJsonString(removalJson, ".registration_eth_removal[1].eth_signature.s"));
+        bytes32 r2 = bytes32(r2Decimal);
+        bytes32 s2 = bytes32(s2Decimal);
         
         registry.removeRegistrationIntentByETH(removalMessage, v2, r2, s2);
         
@@ -383,22 +392,34 @@ contract PQRegistryAdvancedTests is Test {
         // Step 1: Alice submits registration intent
         console.log("\n--- Step 1: Alice submits registration intent ---");
         bytes memory aliceIntentMessage = vm.parseBytes(vm.parseJsonString(intentJson, ".registration_intent[0].eth_message"));
-        bytes32 aliceIntentSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(aliceIntentMessage.length), aliceIntentMessage));
-        (uint8 v1, bytes32 r1, bytes32 s1) = vm.sign(alice.ethPrivateKey, aliceIntentSignedHash);
+        
+        // Use the pre-generated signature from the test vector
+        uint8 v1 = uint8(vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.v")));
+        uint256 r1Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.r"));
+        uint256 s1Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[0].eth_signature.s"));
+        bytes32 r1 = bytes32(r1Decimal);
+        bytes32 s1 = bytes32(s1Decimal);
+        
         registry.submitRegistrationIntent(aliceIntentMessage, v1, r1, s1);
         
         // Step 2: Bob submits registration intent
         console.log("\n--- Step 2: Bob submits registration intent ---");
         bytes memory bobIntentMessage = vm.parseBytes(vm.parseJsonString(intentJson, ".registration_intent[1].eth_message"));
-        bytes32 bobIntentSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(bobIntentMessage.length), bobIntentMessage));
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(bob.ethPrivateKey, bobIntentSignedHash);
+        uint8 v2 = uint8(vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[1].eth_signature.v")));
+        uint256 r2Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[1].eth_signature.r"));
+        uint256 s2Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[1].eth_signature.s"));
+        bytes32 r2 = bytes32(r2Decimal);
+        bytes32 s2 = bytes32(s2Decimal);
         registry.submitRegistrationIntent(bobIntentMessage, v2, r2, s2);
         
         // Step 3: Charlie submits registration intent
         console.log("\n--- Step 3: Charlie submits registration intent ---");
         bytes memory charlieIntentMessage = vm.parseBytes(vm.parseJsonString(intentJson, ".registration_intent[2].eth_message"));
-        bytes32 charlieIntentSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(charlieIntentMessage.length), charlieIntentMessage));
-        (uint8 v3, bytes32 r3, bytes32 s3) = vm.sign(charlie.ethPrivateKey, charlieIntentSignedHash);
+        uint8 v3 = uint8(vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[2].eth_signature.v")));
+        uint256 r3Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[2].eth_signature.r"));
+        uint256 s3Decimal = vm.parseUint(vm.parseJsonString(intentJson, ".registration_intent[2].eth_signature.s"));
+        bytes32 r3 = bytes32(r3Decimal);
+        bytes32 s3 = bytes32(s3Decimal);
         registry.submitRegistrationIntent(charlieIntentMessage, v3, r3, s3);
         
         // Optionally, add assertions here to check state after all intents
@@ -989,8 +1010,11 @@ contract PQRegistryAdvancedTests is Test {
         
         // Submit registration intent (AlicePQ + AliceETH)
         bytes memory intentMessage = vm.parseBytes(vm.parseJsonString(regIntentJson, ".registration_intent.eth_message"));
-        bytes32 signedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(intentMessage.length), intentMessage));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(alice.ethPrivateKey, signedHash);
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(regIntentJson, ".registration_intent.eth_signature.v")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(regIntentJson, ".registration_intent.eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(regIntentJson, ".registration_intent.eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
         
         registry.submitRegistrationIntent(intentMessage, v, r, s);
         console.log("Registration intent submitted - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
@@ -1026,8 +1050,11 @@ contract PQRegistryAdvancedTests is Test {
         
         // Confirm change ETH address (AlicePQ + BobETH)
         bytes memory changeConfirmMessage = vm.parseBytes(vm.parseJsonString(changeConfirmJson, ".change_eth_address_confirmation[0].eth_message"));
-        bytes32 changeConfirmSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(changeConfirmMessage.length), changeConfirmMessage));
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(bob.ethPrivateKey, changeConfirmSignedHash);
+        uint8 v2 = uint8(vm.parseUint(vm.parseJsonString(changeConfirmJson, ".change_eth_address_confirmation[0].eth_signature.v")));
+        uint256 r2Decimal = vm.parseUint(vm.parseJsonString(changeConfirmJson, ".change_eth_address_confirmation[0].eth_signature.r"));
+        uint256 s2Decimal = vm.parseUint(vm.parseJsonString(changeConfirmJson, ".change_eth_address_confirmation[0].eth_signature.s"));
+        bytes32 r2 = bytes32(r2Decimal);
+        bytes32 s2 = bytes32(s2Decimal);
         
         registry.confirmChangeETHAddress(changeConfirmMessage, v2, r2, s2);
         console.log("Change ETH address confirmed - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
@@ -1054,8 +1081,11 @@ contract PQRegistryAdvancedTests is Test {
         
         // Confirm unregistration (AlicePQ + BobETH)
         bytes memory unregConfirmMessage = vm.parseBytes(vm.parseJsonString(unregConfirmJson, ".unregistration_confirmation[0].eth_message"));
-        bytes32 unregConfirmSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(unregConfirmMessage.length), unregConfirmMessage));
-        (uint8 v3, bytes32 r3, bytes32 s3) = vm.sign(bob.ethPrivateKey, unregConfirmSignedHash);
+        uint8 v3 = uint8(vm.parseUint(vm.parseJsonString(unregConfirmJson, ".unregistration_confirmation[0].eth_signature.v")));
+        uint256 r3Decimal = vm.parseUint(vm.parseJsonString(unregConfirmJson, ".unregistration_confirmation[0].eth_signature.r"));
+        uint256 s3Decimal = vm.parseUint(vm.parseJsonString(unregConfirmJson, ".unregistration_confirmation[0].eth_signature.s"));
+        bytes32 r3 = bytes32(r3Decimal);
+        bytes32 s3 = bytes32(s3Decimal);
         
         registry.confirmUnregistration(unregConfirmMessage, v3, r3, s3);
         console.log("Unregistration confirmed - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
@@ -1079,8 +1109,11 @@ contract PQRegistryAdvancedTests is Test {
         
         // Submit final registration intent (BobPQ + AliceETH)
         bytes memory finalIntentMessage = vm.parseBytes(vm.parseJsonString(finalRegIntentJson, ".final_registration_intent[0].eth_message"));
-        bytes32 finalIntentSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", Strings.toString(finalIntentMessage.length), finalIntentMessage));
-        (uint8 v4, bytes32 r4, bytes32 s4) = vm.sign(alice.ethPrivateKey, finalIntentSignedHash);
+        uint8 v4 = uint8(vm.parseUint(vm.parseJsonString(finalRegIntentJson, ".final_registration_intent[0].eth_signature.v")));
+        uint256 r4Decimal = vm.parseUint(vm.parseJsonString(finalRegIntentJson, ".final_registration_intent[0].eth_signature.r"));
+        uint256 s4Decimal = vm.parseUint(vm.parseJsonString(finalRegIntentJson, ".final_registration_intent[0].eth_signature.s"));
+        bytes32 r4 = bytes32(r4Decimal);
+        bytes32 s4 = bytes32(s4Decimal);
         registry.submitRegistrationIntent(finalIntentMessage, v4, r4, s4);
         console.log("Final registration intent submitted - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(bob.pqFingerprint));
         

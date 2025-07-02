@@ -92,12 +92,9 @@ def create_eth_message_for_signing(domain_separator, eth_nonce, pq_message):
 def sign_with_eth_key(message_bytes, private_key, pq_fingerprint, eth_nonce):
     """Sign a message with ETH private key using EIP712"""
     # Use EIP712 structured signing for UnregistrationIntent
-    # The contract expects: UnregistrationIntent(uint256 ethNonce)
-    # Copy the exact pattern from working registration intent generator
-    struct_hash = keccak(encode_packed(
-        keccak(b"UnregistrationIntent(uint256 ethNonce)"),
-        eth_nonce.to_bytes(32, 'big')
-    ))
+    # The contract expects: UnregistrationIntent(address pqFingerprint,uint256 ethNonce)
+    # Use the helper function instead of manual calculation
+    struct_hash = get_unregistration_intent_struct_hash(pq_fingerprint, eth_nonce)
     
     # Create EIP712 digest with domain separator (same as working registration generator)
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
