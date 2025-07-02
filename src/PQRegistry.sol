@@ -732,7 +732,20 @@ contract PQRegistry {
         
         // STEP 7: Verify the ETH signature using EIP712
         bytes32 structHash = SignatureExtractor.getUnregistrationIntentStructHash(ethNonce);
-        bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
+        
+        // DEBUG: Check if we're using the right domain separator
+        bytes32 actualDomainSeparator = DOMAIN_SEPARATOR;
+        console.log("DEBUG: Contract actualDomainSeparator:", uint256(actualDomainSeparator));
+        console.log("DEBUG: Contract actualDomainSeparator hex:", uint256(actualDomainSeparator));
+        
+        bytes32 digest = SignatureExtractor.getEIP712Digest(actualDomainSeparator, structHash);
+        
+        // DEBUG: Show what the contract is computing
+        console.log("DEBUG: Contract structHash:", uint256(structHash));
+        console.log("DEBUG: Contract digest:", uint256(digest));
+        console.log("DEBUG: Contract ethNonce:", ethNonce);
+        console.log("DEBUG: Contract DOMAIN_SEPARATOR:", uint256(DOMAIN_SEPARATOR));
+        
         address ethSigner = ECDSA.recover(digest, v, r, s);
         require(ethSigner == intentAddress, "ETH signature must be from intent address");
         

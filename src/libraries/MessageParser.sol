@@ -553,13 +553,13 @@ library MessageParser {
         // DOMAIN_SEPARATOR: 32 bytes
         // pattern: 60 bytes ("Intent to unregister from Epervier Fingerprint from address ")
         // currentEthAddress: 20 bytes (offset 92)
-        // baseETHMessage: 131 bytes (offset 112)
-        // v: 1 byte (offset 243)
-        // r: 32 bytes (offset 244)
-        // s: 32 bytes (offset 276)
-        // pqNonce: 32 bytes (offset 308)
+        // baseETHMessage: 99 bytes (offset 112) - according to schema
+        // v: 1 byte (offset 211)
+        // r: 32 bytes (offset 212)
+        // s: 32 bytes (offset 244)
+        // pqNonce: 32 bytes (offset 276)
         
-        require(message.length >= 340, "Message too short for PQUnregistrationIntentMessage");
+        require(message.length >= 308, "Message too short for PQUnregistrationIntentMessage");
         
         // Extract ETH address (offset 92, length 20)
         bytes memory addrBytes = new bytes(20);
@@ -572,33 +572,33 @@ library MessageParser {
         }
         currentEthAddress = address(uint160(addr));
         
-        // Extract baseETHMessage (offset 112, length 131)
-        baseETHMessage = new bytes(131);
-        for (uint i = 0; i < 131; i++) {
+        // Extract baseETHMessage (offset 112, length 99)
+        baseETHMessage = new bytes(99);
+        for (uint i = 0; i < 99; i++) {
             baseETHMessage[i] = message[112 + i];
         }
         
-        // Extract v (offset 243, length 1)
-        v = uint8(message[243]);
+        // Extract v (offset 211, length 1)
+        v = uint8(message[211]);
         
-        // Extract r (offset 244, length 32)
+        // Extract r (offset 212, length 32)
         bytes memory rBytes = new bytes(32);
         for (uint i = 0; i < 32; i++) {
-            rBytes[i] = message[244 + i];
+            rBytes[i] = message[212 + i];
         }
         r = bytes32(rBytes);
         
-        // Extract s (offset 276, length 32)
+        // Extract s (offset 244, length 32)
         bytes memory sBytes = new bytes(32);
         for (uint i = 0; i < 32; i++) {
-            sBytes[i] = message[276 + i];
+            sBytes[i] = message[244 + i];
         }
         s = bytes32(sBytes);
         
-        // Extract pqNonce (offset 308, length 32)
+        // Extract pqNonce (offset 276, length 32)
         bytes memory nonceBytes = new bytes(32);
         for (uint i = 0; i < 32; i++) {
-            nonceBytes[i] = message[308 + i];
+            nonceBytes[i] = message[276 + i];
         }
         pqNonce = uint256(bytes32(nonceBytes));
     }

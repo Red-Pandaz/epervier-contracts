@@ -45,6 +45,9 @@ contract PQRegistryUnregistrationTest is Test {
             address(epervierVerifier)
         );
         
+        // Debug: Print the contract address
+        console.log("DEBUG: Contract address:", address(registry));
+        
         // Load actor data from centralized config
         loadActorsConfig();
         

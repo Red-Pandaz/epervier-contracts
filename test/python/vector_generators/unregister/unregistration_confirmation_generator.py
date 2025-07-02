@@ -5,7 +5,7 @@ from eth_account import Account
 from eth_utils import keccak
 import sys
 sys.path.append(str(Path(__file__).resolve().parents[2]))  # Add python directory to path
-from eip712_helpers import get_unregistration_confirmation_struct_hash, sign_eip712_message
+from eip712_helpers import get_unregistration_confirmation_struct_hash, sign_eip712_message, encode_packed
 from eip712_config import DOMAIN_SEPARATOR
 
 print("Script loaded successfully!")
@@ -104,10 +104,26 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
 def sign_with_eth_key(eth_message, eth_private_key, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
     """Sign a message with ETH private key using EIP712"""
     # Use EIP712 structured signing
-    # DOMAIN_SEPARATOR is already bytes from the import
+    # First create the struct hash
     struct_hash = get_unregistration_confirmation_struct_hash(pq_fingerprint, eth_nonce)
-    signature = sign_eip712_message(eth_private_key, DOMAIN_SEPARATOR, struct_hash)
-    return signature
+    
+    # Create EIP712 digest with domain separator (same as working registration generators)
+    from eth_utils import keccak
+    from eip712_helpers import encode_packed
+    
+    # DOMAIN_SEPARATOR is already bytes from the import
+    digest = keccak(encode_packed(b'\x19\x01', DOMAIN_SEPARATOR, struct_hash))
+    
+    print(f"DEBUG: Python domain_separator_bytes: {DOMAIN_SEPARATOR.hex()}")
+    print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
+    print(f"DEBUG: Python digest: {digest.hex()}")
+    
+    # Sign the digest using the same pattern as working registration generators
+    from eth_account import Account
+    account = Account.from_key(eth_private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
 
 
 def main():

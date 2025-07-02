@@ -140,9 +140,13 @@ def get_domain_separator(contract_address: str) -> bytes:
 
 def get_eip712_digest(domain_separator: bytes, struct_hash: bytes) -> bytes:
     """Compute the EIP712 digest"""
+    from eth_utils import keccak
     packed = encode_packed(b'\x19\x01', domain_separator, struct_hash)
     print(f"DEBUG: Python packed bytes: {packed.hex()}")
-    result = keccak256(packed)
+    print(f"DEBUG: Python packed bytes length: {len(packed)}")
+    print(f"DEBUG: Python domain_separator: {domain_separator.hex()}")
+    print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
+    result = keccak(packed)
     print(f"DEBUG: Python digest result: {result.hex()}")
     return result
 
@@ -269,38 +273,58 @@ def get_change_eth_address_confirmation_struct_hash(old_eth_address: str, eth_no
     return keccak(encoded)
 
 def get_unregistration_intent_struct_hash(eth_nonce: int) -> bytes:
-    """Compute the struct hash for UnregistrationIntent"""
-    struct_data = encode_structured_data({
-        "types": {
-            "UnregistrationIntent": [
-                {"name": "ethNonce", "type": "uint256"}
-            ]
-        },
-        "primaryType": "UnregistrationIntent",
-        "message": {
-            "ethNonce": eth_nonce
-        }
-    })
+    """
+    Compute the struct hash for UnregistrationIntent(uint256 ethNonce)
+    Using abi.encode like the contract implementation
+    """
+    from eth_utils import keccak
+    from eth_abi import encode
     
-    return keccak256(struct_data)
+    type_hash = bytes.fromhex(UNREGISTRATION_INTENT_TYPE_HASH[2:])
+    
+    print(f"DEBUG: type_hash: {type_hash.hex()}")
+    print(f"DEBUG: eth_nonce: {eth_nonce}")
+    
+    # Use abi.encode like the contract implementation
+    encoded_data = encode(['bytes32', 'uint256'], [type_hash, eth_nonce])
+    
+    print(f"DEBUG: encoded_data: {encoded_data.hex()}")
+    
+    struct_hash = keccak(encoded_data)
+    print(f"DEBUG: struct_hash: {struct_hash.hex()}")
+    
+    return struct_hash
 
 def get_unregistration_confirmation_struct_hash(pq_fingerprint: str, eth_nonce: int) -> bytes:
-    """Compute the struct hash for UnregistrationConfirmation"""
-    struct_data = encode_structured_data({
-        "types": {
-            "UnregistrationConfirmation": [
-                {"name": "pqFingerprint", "type": "address"},
-                {"name": "ethNonce", "type": "uint256"}
-            ]
-        },
-        "primaryType": "UnregistrationConfirmation",
-        "message": {
-            "pqFingerprint": pq_fingerprint,
-            "ethNonce": eth_nonce
-        }
-    })
+    """Compute the struct hash for UnregistrationConfirmation(address pqFingerprint,uint256 ethNonce)"""
+    from eth_utils import keccak, to_checksum_address
+    from eth_abi import encode
     
-    return keccak256(struct_data)
+    type_hash = bytes.fromhex(UNREGISTRATION_CONFIRMATION_TYPE_HASH[2:])  # Remove '0x' prefix
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
+    
+    print(f"DEBUG: type_hash: {type_hash.hex()}")
+    print(f"DEBUG: pq_fingerprint: {pq_fingerprint}")
+    print(f"DEBUG: pq_fingerprint_checksum: {pq_fingerprint_checksum}")
+    print(f"DEBUG: eth_nonce: {eth_nonce}")
+    
+    # Use abi.encode like the contract implementation
+    encoded_data = encode([
+        'bytes32',
+        'address',
+        'uint256'
+    ], [
+        type_hash,
+        pq_fingerprint_checksum,
+        eth_nonce
+    ])
+    
+    print(f"DEBUG: encoded_data: {encoded_data.hex()}")
+    
+    struct_hash = keccak(encoded_data)
+    print(f"DEBUG: struct_hash: {struct_hash.hex()}")
+    
+    return struct_hash
 
 def get_remove_change_intent_struct_hash(eth_nonce: int) -> bytes:
     """

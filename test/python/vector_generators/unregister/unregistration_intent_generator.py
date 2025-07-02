@@ -8,6 +8,18 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))  # Add python director
 from eip712_helpers import get_unregistration_intent_struct_hash, sign_eip712_message
 import hashlib
 
+def encode_packed(*args):
+    """Encode packed data (equivalent to abi.encodePacked)"""
+    result = b''
+    for arg in args:
+        if isinstance(arg, bytes):
+            result += arg
+        elif isinstance(arg, str):
+            result += arg.encode('utf-8')
+        elif isinstance(arg, int):
+            result += arg.to_bytes(32, 'big')
+    return result
+
 print("Script loaded successfully!")
 
 # Get the project root directory
@@ -15,7 +27,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
 ACTORS_CONFIG_PATH = PROJECT_ROOT / "test" / "test_keys" / "actors_config.json"
 OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/unregister/unregistration_intent_vectors.json"
 from eip712_config import DOMAIN_SEPARATOR
-DOMAIN_SEPARATOR = bytes.fromhex(DOMAIN_SEPARATOR[2:])
 
 # Helper to convert int to bytes32
 int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
@@ -33,7 +44,7 @@ def create_base_eth_message(domain_separator, pq_fingerprint, eth_nonce):
     Format: "Intent to unregister from Epervier Fingerprint " + pqFingerprint + ethNonce
     This is signed by the ETH Address (no domain separator in content for EIP712)
     """
-    pattern = b"Intent to unregister from Epervier Fingerprint "
+    pattern = b"Intent to unregister from Epervier Fingerprint "  # 47 bytes
     message = (
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
@@ -80,11 +91,27 @@ def create_eth_message_for_signing(domain_separator, eth_nonce, pq_message):
 
 def sign_with_eth_key(message_bytes, private_key, pq_fingerprint, eth_nonce):
     """Sign a message with ETH private key using EIP712"""
-    # Use EIP712 structured signing
-    # DOMAIN_SEPARATOR is already bytes from the import
-    struct_hash = get_unregistration_intent_struct_hash(eth_nonce)
-    signature = sign_eip712_message(private_key, DOMAIN_SEPARATOR, struct_hash)
-    return signature
+    # Use EIP712 structured signing for UnregistrationIntent
+    # The contract expects: UnregistrationIntent(uint256 ethNonce)
+    # Copy the exact pattern from working registration intent generator
+    struct_hash = keccak(encode_packed(
+        keccak(b"UnregistrationIntent(uint256 ethNonce)"),
+        eth_nonce.to_bytes(32, 'big')
+    ))
+    
+    # Create EIP712 digest with domain separator (same as working registration generator)
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    print(f"DEBUG: Python domain_separator_bytes: {domain_separator_bytes.hex()}")
+    print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
+    print(f"DEBUG: Python digest: {int.from_bytes(digest, 'big')}")
+    
+    # Sign the digest directly like the working registration generator
+    from eth_account import Account
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
 
 
 def sign_with_pq_key(message, pq_private_key_file):
@@ -145,8 +172,9 @@ def main():
         # 2. Create PQ message without ETH signature components (this is what ETH signs)
         # Format: DOMAIN_SEPARATOR + pattern + ethAddress + baseETHMessage + pqNonce
         pattern = b"Intent to unregister from Epervier Fingerprint from address "
+        domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
         pq_message_without_eth_sig = (
-            DOMAIN_SEPARATOR +
+            domain_separator_bytes +
             pattern +
             bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix
             base_eth_message +
@@ -156,7 +184,7 @@ def main():
         # 3. Create the ETH message that includes the PQ message without ETH signature
         # Format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint from address " + ethNonce + pqMessageWithoutSignature
         eth_message = (
-            DOMAIN_SEPARATOR +
+            domain_separator_bytes +
             b"Intent to unregister from Epervier Fingerprint from address " +
             eth_nonce.to_bytes(32, 'big') +
             pq_message_without_eth_sig
@@ -169,7 +197,7 @@ def main():
         
         # 5. Build complete PQ message with ETH signature components
         pq_message = create_base_pq_message(
-            DOMAIN_SEPARATOR, eth_address, base_eth_message,
+            domain_separator_bytes, eth_address, base_eth_message,
             v, r, s, pq_nonce)
         
         # 6. PQ sign the final PQ message
