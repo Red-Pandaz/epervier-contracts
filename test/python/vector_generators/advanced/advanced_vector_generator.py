@@ -194,6 +194,19 @@ def generate_eth_signature(message: bytes, private_key: str) -> Dict[str, Any]:
         "signature": sig.signature.hex()
     }
 
+def sign_eth_message(message_bytes: bytes, private_key: str) -> Dict[str, Any]:
+    """Sign a message with ETH private key (Ethereum Signed Message)"""
+    prefix = b"\x19Ethereum Signed Message:\n" + str(len(message_bytes)).encode()
+    eth_signed_message = prefix + message_bytes
+    eth_signed_message_hash = keccak(eth_signed_message)
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(eth_signed_message_hash, private_key=account.key)
+    return {
+        "v": sig.v,
+        "r": sig.r,  # Return as integer, not hex string
+        "s": sig.s   # Return as integer, not hex string
+    }
+
 def sign_registration_intent_eip712(eth_nonce: int, salt: bytes, cs1: List[int], cs2: List[int], hint: int, base_pq_message: bytes, private_key: str) -> Dict[str, Any]:
     """Sign registration intent using EIP-712 structured data"""
     # Create the struct hash for the message components
@@ -343,7 +356,8 @@ def create_base_pq_registration_intent_message(eth_address: str, pq_nonce: int) 
     # BasePQRegistrationIntentMessage: DOMAIN_SEPARATOR + pattern + ethAddress + pqNonce
     # Use exact same format as working generator
     pattern = b"Intent to pair ETH Address "  # bytes, not string
-    return DOMAIN_SEPARATOR + pattern + bytes.fromhex(eth_address[2:]) + pq_nonce.to_bytes(32, 'big')
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
+    return domain_separator_bytes + pattern + bytes.fromhex(eth_address[2:]) + pq_nonce.to_bytes(32, 'big')
 
 def create_eth_registration_intent_message(base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int) -> bytes:
     """Create ETH registration intent message according to schema - matching working generator format"""
@@ -379,8 +393,9 @@ def create_pq_registration_confirmation_message(eth_address: str, base_eth_messa
     pattern = b"Confirm bonding to ETH Address "  # Correct pattern matching MessageParser.sol
     
     # Manual concatenation to ensure correct format
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
     message = (
-        DOMAIN_SEPARATOR +
+        domain_separator_bytes +
         pattern +
         bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix, convert to raw bytes
         base_eth_message +
@@ -431,18 +446,22 @@ def create_pq_change_eth_address_intent_message(old_eth_address: str, new_eth_ad
     """Create PQ change address intent message according to working vector schema"""
     pattern = b"Intent to change bound ETH Address from "
     pattern2 = b" to "
-    message += pattern
-    message += bytes.fromhex(old_eth_address[2:])
-    message += pattern2
-    message += bytes.fromhex(new_eth_address[2:])
-    message += base_eth_message
-    message += v.to_bytes(1, 'big')
-    # Format r and s as integers to bytes
-    r_bytes = r.to_bytes(32, 'big')
-    s_bytes = s.to_bytes(32, 'big')
-    message += r_bytes
-    message += s_bytes
-    message += pq_nonce.to_bytes(32, 'big')
+    
+    # Convert DOMAIN_SEPARATOR to bytes
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
+    
+    message = (
+        domain_separator_bytes +
+        pattern +
+        bytes.fromhex(old_eth_address[2:]) +
+        pattern2 +
+        bytes.fromhex(new_eth_address[2:]) +
+        base_eth_message +
+        v.to_bytes(1, 'big') +
+        r.to_bytes(32, 'big') +
+        s.to_bytes(32, 'big') +
+        pq_nonce.to_bytes(32, 'big')
+    )
     print(f"DEBUG: Final PQ message length: {len(message)} bytes (should be ~385)")
     print(f"DEBUG: First 200 bytes: {message[:200].hex()}")
     return message
@@ -454,8 +473,9 @@ def create_base_pq_change_eth_address_confirm_message(old_eth_address: str, new_
     pattern2 = b" to "
     
     # Manual concatenation to ensure exact byte structure (173 bytes total)
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
     message = (
-        DOMAIN_SEPARATOR +
+        domain_separator_bytes +
         pattern +
         bytes.fromhex(old_eth_address[2:]) +  # Remove "0x" prefix, 20 bytes
         pattern2 +
@@ -559,7 +579,8 @@ def create_pq_unregistration_intent_message(eth_address: str, base_eth_message: 
 def create_base_pq_unregistration_confirm_message(eth_address: str, pq_nonce: int) -> bytes:
     """Create base PQ unregistration confirmation message"""
     pattern = b"Confirm unregistration from ETH Address "
-    return DOMAIN_SEPARATOR + pattern + bytes.fromhex(eth_address[2:]) + pq_nonce.to_bytes(32, 'big')
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
+    return domain_separator_bytes + pattern + bytes.fromhex(eth_address[2:]) + pq_nonce.to_bytes(32, 'big')
 
 def create_eth_unregistration_confirm_message(pq_fingerprint: str, base_pq_message: bytes, 
                                              salt: bytes, cs1: List[int], cs2: List[int], 
@@ -598,8 +619,9 @@ def create_pq_remove_registration_intent_message(eth_address: str, pq_nonce: int
     pattern = b"Remove registration intent from ETH Address "
     
     # Manual concatenation to ensure ETH address is raw bytes, not ASCII hex string
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
     message = (
-        DOMAIN_SEPARATOR +
+        domain_separator_bytes +
         pattern +
         bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix, convert to raw bytes
         pq_nonce.to_bytes(32, 'big')
@@ -622,8 +644,9 @@ def create_pq_remove_change_intent_message(eth_address: str, pq_nonce: int) -> b
     pattern = b"Remove change intent from ETH Address "
     
     # Manual concatenation to ensure ETH address is raw bytes, not ASCII hex string
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
     message = (
-        DOMAIN_SEPARATOR +
+        domain_separator_bytes +
         pattern +
         bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix, convert to raw bytes
         pq_nonce.to_bytes(32, 'big')
@@ -636,8 +659,9 @@ def create_pq_remove_unregistration_intent_message(eth_address: str, pq_nonce: i
     pattern = b"Remove unregistration intent from ETH Address "
     
     # Manual concatenation to ensure ETH address is raw bytes, not ASCII hex string
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
     message = (
-        DOMAIN_SEPARATOR +
+        domain_separator_bytes +
         pattern +
         bytes.fromhex(eth_address[2:]) +  # Remove "0x" prefix, convert to raw bytes
         pq_nonce.to_bytes(32, 'big')
@@ -938,18 +962,8 @@ class AdvancedVectorGenerator:
             eth_nonce
         )
         
-        # Generate ETH signature with the new ETH address's private key using EIP-712
-        eth_signature = sign_change_eth_address_confirmation_eip712(
-            actor_data["eth_address"],
-            resolved_new_eth_address,
-            base_pq_message,
-            pq_signature["salt"],
-            pq_signature["cs1"],
-            pq_signature["cs2"],
-            pq_signature["hint"],
-            eth_nonce,
-            new_eth_private_key
-        )
+        # Generate ETH signature with the new ETH address's private key using traditional signing
+        eth_signature = sign_eth_message(eth_message, new_eth_private_key)
         
         return {
             "current_actor": actor,
@@ -1468,11 +1482,12 @@ class AdvancedVectorGenerator:
         
         # Create confirmation message with exact same format as working vectors
         # This should be 304 bytes like the working vector
+        domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Convert to bytes
         pq_message = (
-            DOMAIN_SEPARATOR +
+            domain_separator_bytes +
             b"Confirm bonding to ETH Address " +
             eth_address_bytes +
-            DOMAIN_SEPARATOR +
+            domain_separator_bytes +
             b"Confirm bonding to Epervier Fingerprint " +
             pq_fingerprint_bytes +
             eth_nonce.to_bytes(32, 'big') +
@@ -1654,47 +1669,41 @@ class AdvancedVectorGenerator:
 
     def sign_with_pq_key_working(self, base_pq_message: bytes, pq_private_key_file: str) -> Optional[Dict[str, Any]]:
         """Sign with PQ key using the working approach from basic generator"""
-        from tempfile import NamedTemporaryFile
-        import os
         import subprocess
-        
-        # Write message to temp file
-        with NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(base_pq_message)
-            tmp.flush()
-            tmp_path = tmp.name
-        
-        project_root = Path(__file__).resolve().parents[3]
-        sign_cli = project_root / "ETHFALCON/python-ref/sign_cli.py"
-        privkey_path = project_root / "test/test_keys" / pq_private_key_file
-        venv_python = project_root / "ETHFALCON/python-ref/myenv/bin/python3"
-
-        cmd = [
-            str(venv_python), str(sign_cli), "sign",
-            f"--privkey={privkey_path}",
-            f"--data={base_pq_message.hex()}",
-            "--version=epervier"
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        os.unlink(tmp_path)
-        
-        # Parse output for salt, hint, cs1, cs2
-        lines = result.stdout.splitlines()
-        out = {}
-        for line in lines:
-            if line.startswith("salt:"):
-                out["salt"] = bytes.fromhex(line.split()[1])
-            elif line.startswith("hint:"):
-                out["hint"] = int(line.split()[1])
-            elif line.startswith("cs1:"):
-                out["cs1"] = [int(x, 16) for x in line.split()[1:]]
-            elif line.startswith("cs2:"):
-                out["cs2"] = [int(x, 16) for x in line.split()[1:]]
-        
-        if not all(k in out for k in ["salt", "hint", "cs1", "cs2"]):
+        try:
+            # Get the correct project root (4 levels up from this script)
+            project_root = Path(__file__).resolve().parents[4]
+            sign_cli = str(project_root / "ETHFALCON" / "python-ref" / "sign_cli.py")
+            privkey_path = str(project_root / "test" / "test_keys" / pq_private_key_file)
+            venv_python = str(project_root / "ETHFALCON" / "python-ref" / "myenv" / "bin" / "python3")
+            cmd = [
+                venv_python, sign_cli, "sign",
+                f"--privkey={privkey_path}",
+                f"--data={base_pq_message.hex()}",
+                "--version=epervier"
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"Error signing message: {result.stderr}")
+                return None
+            lines = result.stdout.splitlines()
+            signature_data = {}
+            for line in lines:
+                if line.startswith("salt:"):
+                    signature_data["salt"] = bytes.fromhex(line.split()[1])
+                elif line.startswith("hint:"):
+                    signature_data["hint"] = int(line.split()[1])
+                elif line.startswith("cs1:"):
+                    signature_data["cs1"] = [int(x, 16) for x in line.split()[1:]]
+                elif line.startswith("cs2:"):
+                    signature_data["cs2"] = [int(x, 16) for x in line.split()[1:]]
+            if not all(key in signature_data for key in ["salt", "hint", "cs1", "cs2"]):
+                print(f"Failed to parse signature components")
+                return None
+            return signature_data
+        except Exception as e:
+            print(f"Error in PQ signing: {e}")
             return None
-        return out
 
     def sign_with_eth_key(self, eth_message: bytes, eth_private_key: str) -> Dict[str, Any]:
         """Sign with ETH key using Ethereum's personal_sign format"""

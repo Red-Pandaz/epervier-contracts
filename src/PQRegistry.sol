@@ -405,38 +405,65 @@ contract PQRegistry {
         // STEP 1: Parse the ETH remove change intent message
         (address pqFingerprint, uint256 ethNonce) = MessageParser.parseETHRemoveChangeIntentMessage(ethMessage);
         
+        // COMPREHENSIVE DEBUG LOGGING
+        console.log("=== COMPREHENSIVE DEBUG LOGGING ===");
+        console.log("DEBUG: Parsed pqFingerprint:", uint256(uint160(pqFingerprint)));
+        console.log("DEBUG: Parsed pqFingerprint (hex): 0x", uint256(uint160(pqFingerprint)));
+        console.log("DEBUG: Parsed ethNonce:", ethNonce);
+        console.log("DEBUG: Raw pqFingerprint bytes:");
+        console.logBytes(abi.encode(pqFingerprint));
+        
         // STEP 2: Verify the ETH signature using EIP712
         bytes32 structHash = SignatureExtractor.getRemoveChangeIntentStructHash(pqFingerprint, ethNonce);
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
+        // DEBUG: Print the type hash for comparison
+        console.log("DEBUG: Solidity REMOVE_CHANGE_INTENT_TYPE_HASH:", uint256(SignatureExtractor.REMOVE_CHANGE_INTENT_TYPE_HASH));
+        
         // DEBUG: Print the values for comparison with Python
-        console.log("DEBUG: Contract type hash (bytes32):");
-        console.logBytes32(REMOVE_CHANGE_INTENT_TYPE_HASH);
-        console.log("DEBUG: Contract structHash:", uint256(structHash));
-        console.log("DEBUG: Contract DOMAIN_SEPARATOR (uint256):", uint256(DOMAIN_SEPARATOR));
-        console.log("DEBUG: Contract DOMAIN_SEPARATOR (bytes32):");
-        console.logBytes32(DOMAIN_SEPARATOR);
-        console.log("DEBUG: Contract hardcoded DOMAIN_SEPARATOR value (uint256):", uint256(0x07668882b5c3598c149b213b1c16ab1dd94b45bc4837b468e006b97caef5df92));
-        console.log("DEBUG: Contract digest (uint256):", uint256(digest));
-        console.log("DEBUG: Contract digest (bytes32):");
-        console.logBytes32(digest);
-        console.log("DEBUG: Contract digest (hex):");
-        console.log("0x", uint256(digest));
-        console.log("DEBUG: ACTUAL DOMAIN_SEPARATOR (bytes32):");
-        console.logBytes32(DOMAIN_SEPARATOR);
+        console.log("DEBUG: removeChangeETHAddressIntentByETH - structHash:", uint256(structHash));
+        console.log("DEBUG: removeChangeETHAddressIntentByETH - digest:", uint256(digest));
+        console.log("DEBUG: removeChangeETHAddressIntentByETH - digest (hex): 0x", uint256(digest));
         
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
 
-        // DEBUG: Log recoveredETHAddress and pqFingerprint
-        console.log("DEBUG: recoveredETHAddress:", recoveredETHAddress);
-        console.log("DEBUG: pqFingerprint:", pqFingerprint);
+        // COMPREHENSIVE ADDRESS LOGGING
+        console.log("DEBUG: Recovered ETH address:", uint256(uint160(recoveredETHAddress)));
+        console.log("DEBUG: Recovered ETH address (hex): 0x", uint256(uint160(recoveredETHAddress)));
+        console.log("DEBUG: Parsed pqFingerprint:", uint256(uint160(pqFingerprint)));
+        console.log("DEBUG: Parsed pqFingerprint (hex): 0x", uint256(uint160(pqFingerprint)));
 
         // STEP 3: State validation
         ChangeETHAddressIntent storage intent = changeETHAddressIntents[pqFingerprint];
+        console.log("DEBUG: Intent timestamp:", intent.timestamp);
+        console.log("DEBUG: Intent newETHAddress:", uint256(uint160(intent.newETHAddress)));
+        console.log("DEBUG: Intent newETHAddress (hex): 0x", uint256(uint160(intent.newETHAddress)));
         require(intent.timestamp != 0, "No pending change intent found for PQ fingerprint");
+        
+        // COMPREHENSIVE MAPPING LOGGING
+        address mappedETHAddress = epervierKeyToAddress[pqFingerprint];
+        address oldETHAddress = epervierKeyToAddress[pqFingerprint];
+        address newETHAddress = intent.newETHAddress;
+        
+        console.log("DEBUG: PQ fingerprint:", uint256(uint160(pqFingerprint)));
+        console.log("DEBUG: PQ fingerprint (hex): 0x", uint256(uint160(pqFingerprint)));
+        console.log("DEBUG: Mapped ETH address (old):", uint256(uint160(mappedETHAddress)));
+        console.log("DEBUG: Mapped ETH address (old) (hex): 0x", uint256(uint160(mappedETHAddress)));
+        console.log("DEBUG: New ETH address from intent:", uint256(uint160(newETHAddress)));
+        console.log("DEBUG: New ETH address from intent (hex): 0x", uint256(uint160(newETHAddress)));
+        console.log("DEBUG: Recovered ETH address:", uint256(uint160(recoveredETHAddress)));
+        console.log("DEBUG: Recovered ETH address (hex): 0x", uint256(uint160(recoveredETHAddress)));
+        console.log("DEBUG: ethAddressToChangeIntentFingerprint[recoveredETHAddress]:", uint256(uint160(ethAddressToChangeIntentFingerprint[recoveredETHAddress])));
+        console.log("DEBUG: ethAddressToChangeIntentFingerprint[recoveredETHAddress] (hex): 0x", uint256(uint160(ethAddressToChangeIntentFingerprint[recoveredETHAddress])));
+        
+        // Check all possible mappings
+        console.log("DEBUG: addressToEpervierKey[recoveredETHAddress]:", uint256(uint160(addressToEpervierKey[recoveredETHAddress])));
+        console.log("DEBUG: addressToEpervierKey[recoveredETHAddress] (hex): 0x", uint256(uint160(addressToEpervierKey[recoveredETHAddress])));
+        console.log("DEBUG: epervierKeyToAddress[recoveredETHAddress]:", uint256(uint160(epervierKeyToAddress[recoveredETHAddress])));
+        console.log("DEBUG: epervierKeyToAddress[recoveredETHAddress] (hex): 0x", uint256(uint160(epervierKeyToAddress[recoveredETHAddress])));
+        
         require(ethAddressToChangeIntentFingerprint[recoveredETHAddress] == pqFingerprint, "ETH Address not registered to PQ fingerprint");
-        require(intent.newETHAddress == recoveredETHAddress, "ETH Address not the new address in change intent");
         
         // STEP 4: Comprehensive conflict prevention check
         require(changeETHAddressIntents[pqFingerprint].timestamp != 0, "PQ fingerprint does not have pending change intent");
@@ -559,7 +586,15 @@ contract PQRegistry {
         );
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
+        // DEBUG: Print the values for comparison with Python
+        console.log("DEBUG: submitChangeETHAddressIntent - structHash:", uint256(structHash));
+        console.log("DEBUG: submitChangeETHAddressIntent - digest:", uint256(digest));
+        console.log("DEBUG: submitChangeETHAddressIntent - digest (hex): 0x", uint256(digest));
+        
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        console.log("DEBUG: submitChangeETHAddressIntent - recoveredETHAddress:", uint256(uint160(recoveredETHAddress)));
+        console.log("DEBUG: submitChangeETHAddressIntent - newEthAddress:", uint256(uint160(newEthAddress)));
+        console.log("DEBUG: submitChangeETHAddressIntent - addresses match:", recoveredETHAddress == newEthAddress);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 5: Cross-reference validation
@@ -599,6 +634,11 @@ contract PQRegistry {
         ethNonces[newEthAddress]++;
 
         emit ChangeETHAddressIntentSubmitted(recoveredFingerprint, newEthAddress, ethNonce);
+
+        // DEBUG: Log mappings after creating the intent
+        console.log("DEBUG: After intent creation - ethAddressToChangeIntentFingerprint[newEthAddress]:", uint256(uint160(ethAddressToChangeIntentFingerprint[newEthAddress])));
+        console.log("DEBUG: After intent creation - newEthAddress:", uint256(uint160(newEthAddress)));
+        console.log("DEBUG: After intent creation - recoveredFingerprint:", uint256(uint160(recoveredFingerprint)));
     }
     
     function confirmChangeETHAddress(
@@ -629,7 +669,16 @@ contract PQRegistry {
             cs1_fixed[i] = cs1[i];
             cs2_fixed[i] = cs2[i];
         }
-        bytes32 structHash = SignatureExtractor.getChangeETHAddressConfirmationStructHash(oldEthAddress, pqFingerprint, ethNonce);
+        bytes32 structHash = SignatureExtractor.getChangeETHAddressConfirmationStructHash(
+            oldEthAddress,
+            pqFingerprint,
+            basePQMessage,
+            salt,
+            cs1_fixed,
+            cs2_fixed,
+            hint,
+            ethNonce
+        );
         bytes32 digest = SignatureExtractor.getEIP712Digest(DOMAIN_SEPARATOR, structHash);
         
         // DEBUG: Print the values for comparison with Python
@@ -639,6 +688,8 @@ contract PQRegistry {
         console.logBytes32(structHash);
         console.log("DEBUG: Contract digest (bytes32):");
         console.logBytes32(digest);
+        console.log("DEBUG: Contract digest (uint256):", uint256(digest));
+        console.log("DEBUG: Contract digest (hex): 0x", uint256(digest));
         
         // DEBUG: Print the packed bytes that are being hashed
         bytes memory packed = abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash);
@@ -646,6 +697,9 @@ contract PQRegistry {
         console.logBytes(packed);
         
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        console.log("DEBUG: Contract recoveredETHAddress:", uint256(uint160(recoveredETHAddress)));
+        console.log("DEBUG: Contract newEthAddress:", uint256(uint160(newEthAddress)));
+        console.log("DEBUG: Contract addresses match:", recoveredETHAddress == newEthAddress);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 4: Verify the PQ signature and recover the fingerprint

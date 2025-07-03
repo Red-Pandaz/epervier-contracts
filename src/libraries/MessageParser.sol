@@ -728,7 +728,7 @@ library MessageParser {
             hintBytes[i] = message[2281 + i];
         }
         console.logBytes(hintBytes); // Debug: print raw hint bytes
-        uint256 hint = uint256(bytes32(hintBytes));
+        hint = uint256(bytes32(hintBytes));
         // Debug: print ethNonce
         bytes memory ethNonceBytes = new bytes(32);
         for (uint i = 0; i < 32; i++) ethNonceBytes[i] = message[2313 + i];

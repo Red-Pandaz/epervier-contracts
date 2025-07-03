@@ -22,7 +22,7 @@ library SignatureExtractor {
     bytes32 public constant REGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)");
     bytes32 public constant REMOVE_INTENT_TYPE_HASH = keccak256("RemoveIntent(address pqFingerprint,uint256 ethNonce)");
     bytes32 public constant CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH = keccak256("ChangeETHAddressIntent(address newETHAddress,address pqFingerprint,uint256 ethNonce)");
-    bytes32 public constant CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = keccak256("ChangeETHAddressConfirmation(address oldETHAddress,address pqFingerprint,uint256 ethNonce)");
+    bytes32 public constant CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH = keccak256("ChangeETHAddressConfirmation(address oldETHAddress,address pqFingerprint,bytes basePQMessage,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,uint256 ethNonce)");
     bytes32 public constant UNREGISTRATION_INTENT_TYPE_HASH = keccak256("UnregistrationIntent(address pqFingerprint,uint256 ethNonce)");
     bytes32 public constant UNREGISTRATION_CONFIRMATION_TYPE_HASH = keccak256("UnregistrationConfirmation(address pqFingerprint,bytes basePQMessage,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,uint256 ethNonce)");
     bytes32 public constant REMOVE_CHANGE_INTENT_TYPE_HASH = keccak256("RemoveChangeIntent(address pqFingerprint,uint256 ethNonce)");
@@ -449,6 +449,11 @@ library SignatureExtractor {
     function getChangeETHAddressConfirmationStructHash(
         address oldETHAddress,
         address pqFingerprint,
+        bytes memory basePQMessage,
+        bytes memory salt,
+        uint256[32] memory cs1,
+        uint256[32] memory cs2,
+        uint256 hint,
         uint256 ethNonce
     ) internal pure returns (bytes32) {
         return keccak256(
@@ -456,6 +461,11 @@ library SignatureExtractor {
                 CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH,
                 oldETHAddress,
                 pqFingerprint,
+                keccak256(basePQMessage),
+                keccak256(salt),
+                keccak256(abi.encodePacked(cs1)),
+                keccak256(abi.encodePacked(cs2)),
+                hint,
                 ethNonce
             )
         );

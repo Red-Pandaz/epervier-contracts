@@ -7,7 +7,7 @@ const typeHashes = {
     REGISTRATION_CONFIRMATION: keccak256(toUtf8Bytes("RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)")),
     REMOVE_INTENT: keccak256(toUtf8Bytes("RemoveIntent(address pqFingerprint,uint256 ethNonce)")),
     CHANGE_ETH_ADDRESS_INTENT: keccak256(toUtf8Bytes("ChangeETHAddressIntent(address newETHAddress,address pqFingerprint,uint256 ethNonce)")),
-    CHANGE_ETH_ADDRESS_CONFIRMATION: keccak256(toUtf8Bytes("ChangeETHAddressConfirmation(address oldETHAddress,address pqFingerprint,uint256 ethNonce)")),
+    CHANGE_ETH_ADDRESS_CONFIRMATION: keccak256(toUtf8Bytes("ChangeETHAddressConfirmation(address oldETHAddress,address pqFingerprint,bytes basePQMessage,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,uint256 ethNonce)")),
     UNREGISTRATION_INTENT: keccak256(toUtf8Bytes("UnregistrationIntent(address pqFingerprint,uint256 ethNonce)")),
     UNREGISTRATION_CONFIRMATION: keccak256(toUtf8Bytes("UnregistrationConfirmation(address pqFingerprint,bytes basePQMessage,bytes salt,uint256[32] cs1,uint256[32] cs2,uint256 hint,uint256 ethNonce)")),
     REMOVE_CHANGE_INTENT: keccak256(toUtf8Bytes("RemoveChangeIntent(address pqFingerprint,uint256 ethNonce)")),

@@ -27,12 +27,13 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from eth_account import Account
-from eth_utils import keccak
+from eth_utils import keccak, to_checksum_address
+from eth_abi import encode
 from tempfile import NamedTemporaryFile
 
 # Add the parent directory to the path to import eip712_config
 sys.path.append(str(Path(__file__).resolve().parents[2]))  # test/python
-from eip712_config import DOMAIN_SEPARATOR
+from eip712_config import DOMAIN_SEPARATOR, CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH, CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH, REMOVE_CHANGE_INTENT_TYPE_HASH
 
 # Project root
 project_root = Path(__file__).resolve().parents[4]
@@ -128,40 +129,76 @@ def sign_registration_confirmation_eip712(pq_fingerprint: str, eth_nonce: int, p
     sig = Account._sign_hash(digest, private_key=account.key)
     return {"v": sig.v, "r": sig.r, "s": sig.s}
 
-def sign_change_eth_address_intent_eip712(new_eth_address: str, pq_fingerprint: str, eth_nonce: int, private_key: str) -> Dict[str, Any]:
-    """Sign change ETH address intent using EIP-712 - matching basic generator format"""
-    # Create the struct hash for the message components
-    struct_hash = keccak(encode_packed(
-        keccak(b"ChangeETHAddressIntent(address newETHAddress,address pqFingerprint,uint256 ethNonce)"),
-        bytes.fromhex(new_eth_address[2:]),  # Remove '0x' prefix
-        bytes.fromhex(pq_fingerprint[2:]),  # Remove '0x' prefix
-        eth_nonce.to_bytes(32, 'big')
-    ))
-    
-    # Create EIP712 digest with domain separator
-    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
-    digest = keccak(encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
-    
-    # Sign the digest
+def sign_change_eth_address_intent_eip712(new_eth_address: str, pq_fingerprint: str, eth_nonce: int, private_key: str) -> dict:
+    """Sign change ETH address intent using EIP-712"""
+    from eth_utils import keccak, to_checksum_address
+    from eth_abi import encode
+    type_hash = bytes.fromhex(CHANGE_ETH_ADDRESS_INTENT_TYPE_HASH[2:])
+    new_eth_address_checksum = to_checksum_address(new_eth_address)
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
+    # Use abi.encode like the contract implementation
+    encoded_data = encode([
+        'bytes32', 'address', 'address', 'uint256'
+    ], [
+        type_hash,
+        new_eth_address_checksum,
+        pq_fingerprint_checksum,
+        eth_nonce
+    ])
+    struct_hash = keccak(encoded_data)
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+    digest = keccak(b"\x19\x01" + domain_separator + struct_hash)
+    print(f"DEBUG: Python new_eth_address: {new_eth_address}")
+    print(f"DEBUG: Python pq_fingerprint: {pq_fingerprint}")
+    print(f"DEBUG: Python eth_nonce: {eth_nonce}")
+    print(f"DEBUG: Python type_hash: {type_hash.hex()}")
+    print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
+    print(f"DEBUG: Python domain_separator: {domain_separator.hex()}")
+    print(f"DEBUG: Python digest: {digest.hex()}")
+    # ... existing code ...
     account = Account.from_key(private_key)
     sig = Account._sign_hash(digest, private_key=account.key)
     return {"v": sig.v, "r": sig.r, "s": sig.s}
 
-def sign_change_eth_address_confirmation_eip712(old_eth_address: str, pq_fingerprint: str, eth_nonce: int, private_key: str) -> Dict[str, Any]:
+def sign_change_eth_address_confirmation_eip712(old_eth_address: str, pq_fingerprint: str, base_pq_message: bytes, salt: bytes, cs1: list, cs2: list, hint: int, eth_nonce: int, private_key: str) -> dict:
     """Sign change ETH address confirmation using EIP-712 - matching basic generator format"""
-    # Create the struct hash for the message components
-    struct_hash = keccak(encode_packed(
-        keccak(b"ChangeETHAddressConfirmation(address oldETHAddress,address pqFingerprint,uint256 ethNonce)"),
-        bytes.fromhex(old_eth_address[2:]),  # Remove '0x' prefix
-        bytes.fromhex(pq_fingerprint[2:]),  # Remove '0x' prefix
-        eth_nonce.to_bytes(32, 'big')
-    ))
-    
-    # Create EIP712 digest with domain separator
+    from eth_utils import keccak, to_checksum_address
+    from eth_abi import encode
+    type_hash = bytes.fromhex(CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH[2:])
+    old_eth_address_checksum = to_checksum_address(old_eth_address)
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
+    # Use abi.encode like the contract implementation
+    encoded_data = encode([
+        'bytes32',
+        'address',
+        'address',
+        'bytes32',  # keccak256(basePQMessage)
+        'bytes32',  # keccak256(salt)
+        'bytes32',  # keccak256(abi.encodePacked(cs1))
+        'bytes32',  # keccak256(abi.encodePacked(cs2))
+        'uint256',
+        'uint256'
+    ], [
+        type_hash,
+        old_eth_address_checksum,
+        pq_fingerprint_checksum,
+        keccak(base_pq_message),
+        keccak(salt),
+        keccak(encode_packed(*[x.to_bytes(32, 'big') for x in cs1])),
+        keccak(encode_packed(*[x.to_bytes(32, 'big') for x in cs2])),
+        hint,
+        eth_nonce
+    ])
+    struct_hash = keccak(encoded_data)
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
-    digest = keccak(encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
-    
-    # Sign the digest
+    digest = keccak(b'\x19\x01' + domain_separator_bytes + struct_hash)
+    print(f"DEBUG: Python old_eth_address: {old_eth_address}")
+    print(f"DEBUG: Python pq_fingerprint: {pq_fingerprint}")
+    print(f"DEBUG: Python eth_nonce: {eth_nonce}")
+    print(f"DEBUG: Python type_hash: {CHANGE_ETH_ADDRESS_CONFIRMATION_TYPE_HASH}")
+    print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
+    print(f"DEBUG: Python domain_separator: {domain_separator_bytes.hex()}")
+    print(f"DEBUG: Python digest: {digest.hex()}")
     account = Account.from_key(private_key)
     sig = Account._sign_hash(digest, private_key=account.key)
     return {"v": sig.v, "r": sig.r, "s": sig.s}
@@ -201,6 +238,39 @@ def sign_unregistration_confirmation_eip712(pq_fingerprint: str, base_pq_message
     # Create EIP712 digest with domain separator
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
     digest = keccak(encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
+
+def sign_remove_change_intent_eip712(pq_fingerprint: str, eth_nonce: int, private_key: str) -> dict:
+    """Sign remove change intent using EIP-712"""
+    from eth_utils import keccak, to_checksum_address
+    from eth_abi import encode
+    type_hash = bytes.fromhex(REMOVE_CHANGE_INTENT_TYPE_HASH[2:])
+    pq_fingerprint_checksum = to_checksum_address(pq_fingerprint)
+    # Use abi.encode like the contract implementation - MUST include type_hash in struct hash
+    encoded_data = encode([
+        'bytes32', 'address', 'uint256'
+    ], [
+        type_hash,
+        pq_fingerprint_checksum,
+        eth_nonce
+    ])
+    struct_hash = keccak(encoded_data)
+    
+    # DEBUG: Print the values for comparison with Solidity
+    print(f"DEBUG: Python pq_fingerprint: {pq_fingerprint}")
+    print(f"DEBUG: Python eth_nonce: {eth_nonce}")
+    print(f"DEBUG: Python type_hash: {type_hash.hex()}")
+    print(f"DEBUG: Python struct_hash: {struct_hash.hex()}")
+    
+    # Create EIP-712 digest
+    domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+    digest = keccak(b'\x19\x01' + domain_separator + struct_hash)
+    print(f"DEBUG: Python domain_separator: {domain_separator.hex()}")
+    print(f"DEBUG: Python digest: {digest.hex()}")
     
     # Sign the digest
     account = Account.from_key(private_key)
@@ -328,22 +398,39 @@ def create_pq_change_eth_address_intent_message(old_eth_address: str, new_eth_ad
     )
 
 def create_base_pq_change_eth_address_confirm_message(old_eth_address: str, new_eth_address: str, pq_nonce: int) -> bytes:
-    """Create base PQ change ETH address confirmation message"""
+    """Create base PQ change ETH address confirmation message - complete message for parseBasePQChangeETHAddressConfirmMessage"""
     old_eth_address_bytes = bytes.fromhex(old_eth_address[2:])  # Remove 0x prefix
     new_eth_address_bytes = bytes.fromhex(new_eth_address[2:])  # Remove 0x prefix
-    return abi_encode_packed(
-        DOMAIN_SEPARATOR,
-        "Confirm changing bound ETH Address for Epervier Fingerprint from ",
-        old_eth_address_bytes,
-        " to ",
-        new_eth_address_bytes,
+    
+    # Convert DOMAIN_SEPARATOR from string to bytes
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    
+    # Create the complete message that matches the expected format for parseBasePQChangeETHAddressConfirmMessage
+    # Expected format: DOMAIN_SEPARATOR + "Confirm changing bound ETH Address for Epervier Fingerprint from " + oldEthAddress + " to " + newEthAddress + pqNonce
+    message_bytes = (
+        domain_separator_bytes +
+        b"Confirm changing bound ETH Address for Epervier Fingerprint from " +
+        old_eth_address_bytes +
+        b" to " +
+        new_eth_address_bytes +
         pq_nonce.to_bytes(32, 'big')
     )
+    
+    return message_bytes
 
 def create_eth_change_eth_address_confirmation_message(pq_fingerprint: str, base_pq_message: bytes, salt: bytes, cs1: list, cs2: list, hint: int, eth_nonce: int) -> bytes:
     """Create ETH change address confirmation message"""
     pq_fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])  # Remove 0x prefix
     pattern = b"Confirm change ETH Address for Epervier Fingerprint "
+    
+    # Ensure base_pq_message is exactly 173 bytes as expected by Solidity parser
+    if len(base_pq_message) > 173:
+        # Truncate to 173 bytes
+        base_pq_message = base_pq_message[:173]
+    elif len(base_pq_message) < 173:
+        # Pad with zeros to 173 bytes
+        base_pq_message = base_pq_message + b'\x00' * (173 - len(base_pq_message))
+    
     return (
         pattern +
         pq_fingerprint_bytes +
@@ -425,15 +512,11 @@ def create_pq_remove_registration_intent_message(eth_address: str, pq_nonce: int
         pq_nonce.to_bytes(32, 'big')
     )
 
-def create_eth_remove_change_intent_message(domain_separator, pq_fingerprint, eth_nonce):
+def create_eth_remove_change_intent_message(pq_fingerprint, eth_nonce):
     """Create ETH message for removing change ETH address intent (matches working generator)"""
+    pattern = b"Remove change intent from Epervier Fingerprint "
     pq_fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])  # Remove 0x prefix
-    return abi_encode_packed(
-        domain_separator,
-        "Remove change intent from Epervier Fingerprint ",
-        pq_fingerprint_bytes,
-        eth_nonce.to_bytes(32, 'big')
-    )
+    return pattern + pq_fingerprint_bytes + eth_nonce.to_bytes(32, 'big')
 
 def create_pq_remove_change_intent_message(domain_separator, eth_address, pq_nonce):
     """Create PQ message for removing change ETH address intent (matches working generator)"""
@@ -789,6 +872,11 @@ class AdvancedVectorGenerator:
         eth_signature = sign_change_eth_address_confirmation_eip712(
             actor_data["eth_address"],
             actor_data["pq_fingerprint"],
+            base_pq_message,
+            pq_signature["salt"],
+            pq_signature["cs1"],
+            pq_signature["cs2"],
+            pq_signature["hint"],
             eth_nonce,
             new_eth_private_key
         )
@@ -1056,17 +1144,25 @@ class AdvancedVectorGenerator:
             else:
                 target_pq_fingerprint = target_pq_fingerprint or actor_data["pq_fingerprint"]
             
-            message = create_eth_remove_change_intent_message(
-                DOMAIN_SEPARATOR,
+            # Create the message in the format expected by the contract
+            # Format: "Remove change intent from Epervier Fingerprint " + pqFingerprint + ethNonce
+            message_bytes = create_eth_remove_change_intent_message(
                 target_pq_fingerprint,
                 eth_nonce
             )
-            signature = generate_eth_signature(message, actor_data["eth_private_key"])
+            
+            # Use EIP-712 signing for the struct hash
+            signature = sign_remove_change_intent_eip712(
+                target_pq_fingerprint,
+                eth_nonce,
+                actor_data["eth_private_key"]
+            )
+            
             return {
                 "actor": actor,
                 "eth_address": actor_data["eth_address"],
                 "pq_fingerprint": target_pq_fingerprint,
-                "message": message.hex(),
+                "message": message_bytes.hex(),
                 "signature": signature,
                 "eth_nonce": eth_nonce
             }
