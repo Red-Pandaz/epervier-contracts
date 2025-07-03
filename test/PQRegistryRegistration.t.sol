@@ -112,12 +112,7 @@ contract PQRegistryRegistrationTest is Test {
         uint256[] memory testCs2 = vm.parseJsonUintArray(jsonData, ".registration_intent[0].pq_signature.cs2");
         uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].pq_signature.hint"));
         
-        // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
+        // Real Epervier verification - no mock needed
         
         // Load the real ETH intent message from test vector
         bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
@@ -180,12 +175,7 @@ contract PQRegistryRegistrationTest is Test {
             bytes32 r = vm.parseBytes32(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.r")));
             bytes32 s = vm.parseBytes32(vm.parseJsonString(jsonData, string.concat(vectorPath, ".eth_signature.s")));
             
-            // Mock the Epervier verifier to return the correct fingerprint
-            vm.mockCall(
-                address(epervierVerifier),
-                abi.encodeWithSelector(epervierVerifier.recover.selector, basePQMessage, pqSignatureSalt, pqSignatureCs1, pqSignatureCs2, pqSignatureHint),
-                abi.encode(actor.pqFingerprint)
-            );
+            // Real Epervier verification - no mock needed
             
             // Submit registration intent
             registry.submitRegistrationIntent(ethIntentMessage, v, r, s);

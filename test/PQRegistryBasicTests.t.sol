@@ -192,12 +192,7 @@ contract PQRegistryBasicTests is Test {
         uint256[] memory testCs2 = vm.parseJsonUintArray(jsonData, ".registration_intent[0].pq_signature.cs2");
         uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, ".registration_intent[0].pq_signature.hint"));
         
-        // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
+        // Real Epervier verification - no mock needed
         
         // Load the real ETH intent message from test vector (now without domain separator)
         bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_intent[0].eth_message"));
@@ -326,12 +321,7 @@ contract PQRegistryBasicTests is Test {
         uint256[] memory testCs2 = vm.parseJsonUintArray(jsonData, ".registration_confirmation[0].pq_signature.cs2");
         uint256 testHint = vm.parseUint(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_signature.hint"));
         
-        // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
+        // Real Epervier verification - no mock needed
         
         // Load the real PQ confirmation message from test vector
         bytes memory pqConfirmationMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".registration_confirmation[0].pq_message"));
