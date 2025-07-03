@@ -181,6 +181,12 @@ contract PQRegistry {
         
         // STEP 7: Nonce validation
         
+        // Debug logging for nonce comparison
+        console.log("DEBUG: PQ nonce validation - recoveredFingerprint:", uint256(uint160(recoveredFingerprint)));
+        console.log("DEBUG: PQ nonce validation - pqKeyNonces[recoveredFingerprint]:", pqKeyNonces[recoveredFingerprint]);
+        console.log("DEBUG: PQ nonce validation - pqNonce from message:", pqNonce);
+        console.log("DEBUG: PQ nonce validation - nonces match:", pqKeyNonces[recoveredFingerprint] == pqNonce);
+        
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
         
@@ -463,6 +469,7 @@ contract PQRegistry {
         console.log("DEBUG: epervierKeyToAddress[recoveredETHAddress]:", uint256(uint160(epervierKeyToAddress[recoveredETHAddress])));
         console.log("DEBUG: epervierKeyToAddress[recoveredETHAddress] (hex): 0x", uint256(uint160(epervierKeyToAddress[recoveredETHAddress])));
         
+        require(intent.newETHAddress == recoveredETHAddress, "ETH Address not the pending change address for PQ fingerprint");
         require(ethAddressToChangeIntentFingerprint[recoveredETHAddress] == pqFingerprint, "ETH Address not registered to PQ fingerprint");
         
         // STEP 4: Comprehensive conflict prevention check
@@ -505,58 +512,36 @@ contract PQRegistry {
         
         // STEP 3: Parse the PQ remove change intent message
         // Format: DOMAIN_SEPARATOR + "Remove change intent from ETH Address " + ethAddress + pqNonce
-        bytes memory domainSeparator = abi.encodePacked(keccak256("PQRegistry"));
-        bytes memory pattern = "Remove change intent from ETH Address ";
-        
-        require(pqMessage.length >= domainSeparator.length + pattern.length + 20 + 32, "Invalid message length");
-        
-        // Extract ETH address and PQ nonce
-        uint256 ethAddressStart = domainSeparator.length + pattern.length;
-        
-        // Extract ETH address (20 bytes)
-        bytes memory ethAddressBytes = new bytes(20);
-        for (uint i = 0; i < 20; i++) {
-            ethAddressBytes[i] = pqMessage[ethAddressStart + i];
-        }
-        
-        // Convert bytes to address properly
-        uint256 addr = 0;
-        for (uint i = 0; i < 20; i++) {
-            addr = (addr << 8) | uint8(ethAddressBytes[i]);
-        }
-        address ethAddress = address(uint160(addr));
-        
-        // Extract PQ nonce (last 32 bytes)
-        bytes memory nonceBytes = new bytes(32);
-        for (uint i = 0; i < 32; i++) {
-            nonceBytes[i] = pqMessage[pqMessage.length - 32 + i];
-        }
-        uint256 pqNonce = uint256(bytes32(nonceBytes));
+        (address ethAddress, uint256 pqNonce) = MessageParser.parsePQRemoveChangeIntentMessage(pqMessage);
         
         // STEP 4: State validation
         ChangeETHAddressIntent storage intent = changeETHAddressIntents[recoveredFingerprint];
-        require(intent.timestamp != 0, "No pending change intent found for PQ fingerprint");
-        require(epervierKeyToAddress[recoveredFingerprint] == ethAddress, "ETH Address not the current address for PQ fingerprint");
         
-        // DEBUG: Print addresses for debugging
+        // DEBUG: Print all relevant addresses and fingerprints
+        console.log("DEBUG: removeChangeETHAddressIntentByPQ - recoveredFingerprint:", uint256(uint160(recoveredFingerprint)));
+        console.log("DEBUG: removeChangeETHAddressIntentByPQ - ethAddress from message:", uint256(uint160(ethAddress)));
+        console.log("DEBUG: removeChangeETHAddressIntentByPQ - intent.newETHAddress:", uint256(uint160(intent.newETHAddress)));
+        console.log("DEBUG: removeChangeETHAddressIntentByPQ - intent.timestamp:", intent.timestamp);
+        console.log("DEBUG: removeChangeETHAddressIntentByPQ - addresses match:", intent.newETHAddress == ethAddress);
         
-        // STEP 5: Verify ETH address is registered to this PQ fingerprint
-        require(epervierKeyToAddress[recoveredFingerprint] == ethAddress, "ETH address not registered to PQ fingerprint");
         
-        // STEP 6: Verify there's a pending change intent
+        // STEP 5: Verify there's a pending change intent
+        console.log("New ETH Address:", intent.newETHAddress);
+        console.log("ETH Address from message:", ethAddress);
         require(intent.newETHAddress != address(0), "No pending change intent");
         require(intent.timestamp > 0, "No pending change intent");
+        require(intent.newETHAddress == ethAddress, "ETH Address not the pending change address for PQ fingerprint");
         
-        // STEP 7: Nonce validation
+        // STEP 6: Nonce validation
         // DEBUG: Print PQ nonce in message and contract
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         
-        // STEP 8: Clear the intent
+        // STEP 7: Clear the intent
         delete changeETHAddressIntents[recoveredFingerprint];
         delete ethAddressToChangeIntentFingerprint[ethAddress];
         delete ethAddressToChangeIntentFingerprint[epervierKeyToAddress[recoveredFingerprint]];
         
-        // STEP 9: Increment nonce
+        // STEP 8: Increment nonce
         pqKeyNonces[recoveredFingerprint]++;
         
         emit ChangeETHAddressIntentRemoved(recoveredFingerprint);
@@ -717,10 +702,15 @@ contract PQRegistry {
         require(epervierKeyToAddress[recoveredFingerprint] == oldEthAddress, "PQ fingerprint not registered to old ETH Address");
 
         // STEP 7: Nonce validation
+        
+        // Debug logging for nonce comparison
+        console.log("DEBUG: PQ nonce validation - recoveredFingerprint:", uint256(uint160(recoveredFingerprint)));
+        console.log("DEBUG: PQ nonce validation - pqKeyNonces[recoveredFingerprint]:", pqKeyNonces[recoveredFingerprint]);
+        console.log("DEBUG: PQ nonce validation - pqNonce from message:", pqNonce);
+        console.log("DEBUG: PQ nonce validation - nonces match:", pqKeyNonces[recoveredFingerprint] == pqNonce);
+        
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[newEthAddress] == ethNonce, "Invalid ETH nonce");
-        
-        // Debug logging for nonce validation
         
         // STEP 8: Complete the change
         epervierKeyToAddress[recoveredFingerprint] = newEthAddress;

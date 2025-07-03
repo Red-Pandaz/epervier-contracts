@@ -178,11 +178,11 @@ contract PQRegistryAdvancedTests is Test {
         
         // Step 2: PQ removes registration intent (nonce 1)
         console.log("\n--- Step 2: PQ removes registration intent ---");
-        bytes memory removalMessage = vm.parseBytes(vm.parseJsonString(removalJson, ".registration_pq_removal[0].pq_message"));
-        bytes memory removalSalt = vm.parseBytes(vm.parseJsonString(removalJson, ".registration_pq_removal[0].pq_signature.salt"));
-        uint256[] memory removalCs1 = vm.parseJsonUintArray(removalJson, ".registration_pq_removal[0].pq_signature.cs1");
-        uint256[] memory removalCs2 = vm.parseJsonUintArray(removalJson, ".registration_pq_removal[0].pq_signature.cs2");
-        uint256 removalHint = vm.parseUint(vm.parseJsonString(removalJson, ".registration_pq_removal[0].pq_signature.hint"));
+        bytes memory removalMessage = vm.parseBytes(vm.parseJsonString(removalJson, ".removal_registration_pq[0].pq_message"));
+        bytes memory removalSalt = vm.parseBytes(vm.parseJsonString(removalJson, ".removal_registration_pq[0].pq_signature.salt"));
+        uint256[] memory removalCs1 = vm.parseJsonUintArray(removalJson, ".removal_registration_pq[0].pq_signature.cs1");
+        uint256[] memory removalCs2 = vm.parseJsonUintArray(removalJson, ".removal_registration_pq[0].pq_signature.cs2");
+        uint256 removalHint = vm.parseUint(vm.parseJsonString(removalJson, ".removal_registration_pq[0].pq_signature.hint"));
         
         registry.removeRegistrationIntentByPQ(removalMessage, removalSalt, removalCs1, removalCs2, removalHint);
         
@@ -226,6 +226,11 @@ contract PQRegistryAdvancedTests is Test {
         uint256[] memory confirmCs1 = vm.parseJsonUintArray(advancedJson, ".registration_confirmation_nonce3[0].pq_signature.cs1");
         uint256[] memory confirmCs2 = vm.parseJsonUintArray(advancedJson, ".registration_confirmation_nonce3[0].pq_signature.cs2");
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(advancedJson, ".registration_confirmation_nonce3[0].pq_signature.hint"));
+        
+        // Log the ETH address from the PQ message
+        (address ethAddressFromPQMessage,,,,,) = MessageParser.parsePQRegistrationConfirmationMessage(confirmMessage);
+        console.log("ETH address from PQ message:", ethAddressFromPQMessage);
+        console.log("Expected ETH address:", alice.ethAddress);
         
         registry.confirmRegistration(confirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
         
@@ -698,11 +703,11 @@ contract PQRegistryAdvancedTests is Test {
         // Step 4: AlicePQ cancels (AlicePQ nonce 2, BobETH nonce 0)
         console.log("\n--- Step 4: AlicePQ cancels ---");
         string memory pqRemovalJson = vm.readFile("test/test_vectors/advanced/test6_multiple_registration_attempts_alice_pq_switches_targets_removal_registration_pq_vectors.json");
-        bytes memory pqRemovalMessage = vm.parseBytes(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].message"));
-        bytes memory salt3 = vm.parseBytes(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].signature.salt"));
-        uint256[] memory cs1_3 = vm.parseJsonUintArray(pqRemovalJson, ".removal_registration_pq[0].signature.cs1");
-        uint256[] memory cs2_3 = vm.parseJsonUintArray(pqRemovalJson, ".removal_registration_pq[0].signature.cs2");
-        uint256 hint3 = vm.parseUint(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].signature.hint"));
+        bytes memory pqRemovalMessage = vm.parseBytes(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].pq_message"));
+        bytes memory salt3 = vm.parseBytes(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].pq_signature.salt"));
+        uint256[] memory cs1_3 = vm.parseJsonUintArray(pqRemovalJson, ".removal_registration_pq[0].pq_signature.cs1");
+        uint256[] memory cs2_3 = vm.parseJsonUintArray(pqRemovalJson, ".removal_registration_pq[0].pq_signature.cs2");
+        uint256 hint3 = vm.parseUint(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].pq_signature.hint"));
         registry.removeRegistrationIntentByPQ(pqRemovalMessage, salt3, cs1_3, cs2_3, hint3);
         console.log("Step 4 completed - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
         
@@ -870,13 +875,6 @@ contract PQRegistryAdvancedTests is Test {
         console.log("Alice ETH Address:", alice.ethAddress);
         console.log("Alice PQ Fingerprint:", alice.pqFingerprint);
 
-        // Mock the Epervier verifier to return Alice's fingerprint
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
-
         // Step 1: Register Alice (intent + confirm)
         console.log("\n--- Step 1: Register Alice ---");
         string memory regIntentJson = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
@@ -996,12 +994,7 @@ contract PQRegistryAdvancedTests is Test {
         console.log("Bob ETH Address:", bob.ethAddress);
         console.log("Bob PQ Fingerprint:", bob.pqFingerprint);
         
-        // Mock the Epervier verifier to return expected fingerprints
-        vm.mockCall(
-            address(epervierVerifier),
-            abi.encodeWithSelector(epervierVerifier.recover.selector),
-            abi.encode(alice.pqFingerprint)
-        );
+        // Use real Epervier verifier - no mocks
         
         // Step 1: AlicePQ registers with AliceETH
         console.log("\n--- Step 1: AlicePQ registers with AliceETH ---");
@@ -1018,6 +1011,7 @@ contract PQRegistryAdvancedTests is Test {
         
         registry.submitRegistrationIntent(intentMessage, v, r, s);
         console.log("Registration intent submitted - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        console.log(string.concat("[LOG] After Step 1: AliceETH ethNonce = ", vm.toString(registry.ethNonces(alice.ethAddress)), ", AlicePQ pqNonce = ", vm.toString(registry.pqKeyNonces(alice.pqFingerprint)), ", BobETH ethNonce = ", vm.toString(registry.ethNonces(bob.ethAddress)), ", BobPQ pqNonce = ", vm.toString(registry.pqKeyNonces(bob.pqFingerprint))));
         
         // Confirm registration (AlicePQ + AliceETH)
         bytes memory confirmMessage = vm.parseBytes(vm.parseJsonString(regConfirmJson, ".registration_confirmation.pq_message"));
@@ -1028,6 +1022,7 @@ contract PQRegistryAdvancedTests is Test {
         
         registry.confirmRegistration(confirmMessage, salt, cs1, cs2, hint);
         console.log("Registration confirmed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        console.log(string.concat("[LOG] After Step 1 CONFIRM: AliceETH ethNonce = ", vm.toString(registry.ethNonces(alice.ethAddress)), ", AlicePQ pqNonce = ", vm.toString(registry.pqKeyNonces(alice.pqFingerprint)), ", BobETH ethNonce = ", vm.toString(registry.ethNonces(bob.ethAddress)), ", BobPQ pqNonce = ", vm.toString(registry.pqKeyNonces(bob.pqFingerprint))));
         
         // Verify registration
         assertEq(registry.addressToEpervierKey(alice.ethAddress), alice.pqFingerprint, "AliceETH should be registered to AlicePQ");
@@ -1047,6 +1042,7 @@ contract PQRegistryAdvancedTests is Test {
         
         registry.submitChangeETHAddressIntent(changeIntentMessage, changeIntentSalt, changeIntentCs1, changeIntentCs2, changeIntentHint);
         console.log("Change ETH address intent submitted - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        console.log(string.concat("[LOG] After Step 2: AliceETH ethNonce = ", vm.toString(registry.ethNonces(alice.ethAddress)), ", AlicePQ pqNonce = ", vm.toString(registry.pqKeyNonces(alice.pqFingerprint)), ", BobETH ethNonce = ", vm.toString(registry.ethNonces(bob.ethAddress)), ", BobPQ pqNonce = ", vm.toString(registry.pqKeyNonces(bob.pqFingerprint))));
         
         // Confirm change ETH address (AlicePQ + BobETH)
         bytes memory changeConfirmMessage = vm.parseBytes(vm.parseJsonString(changeConfirmJson, ".change_eth_address_confirmation[0].eth_message"));
@@ -1058,6 +1054,7 @@ contract PQRegistryAdvancedTests is Test {
         
         registry.confirmChangeETHAddress(changeConfirmMessage, v2, r2, s2);
         console.log("Change ETH address confirmed - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        console.log(string.concat("[LOG] After Step 2 CONFIRM: AliceETH ethNonce = ", vm.toString(registry.ethNonces(alice.ethAddress)), ", AlicePQ pqNonce = ", vm.toString(registry.pqKeyNonces(alice.pqFingerprint)), ", BobETH ethNonce = ", vm.toString(registry.ethNonces(bob.ethAddress)), ", BobPQ pqNonce = ", vm.toString(registry.pqKeyNonces(bob.pqFingerprint))));
         
         // Verify change
         assertEq(registry.addressToEpervierKey(bob.ethAddress), alice.pqFingerprint, "BobETH should be registered to AlicePQ");
@@ -1078,6 +1075,7 @@ contract PQRegistryAdvancedTests is Test {
         
         registry.submitUnregistrationIntent(unregIntentMessage, unregIntentSalt, unregIntentCs1, unregIntentCs2, unregIntentHint, [uint256(0), uint256(0)]);
         console.log("Unregistration intent submitted - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        console.log(string.concat("[LOG] After Step 3: AliceETH ethNonce = ", vm.toString(registry.ethNonces(alice.ethAddress)), ", AlicePQ pqNonce = ", vm.toString(registry.pqKeyNonces(alice.pqFingerprint)), ", BobETH ethNonce = ", vm.toString(registry.ethNonces(bob.ethAddress)), ", BobPQ pqNonce = ", vm.toString(registry.pqKeyNonces(bob.pqFingerprint))));
         
         // Confirm unregistration (AlicePQ + BobETH)
         bytes memory unregConfirmMessage = vm.parseBytes(vm.parseJsonString(unregConfirmJson, ".unregistration_confirmation[0].eth_message"));
@@ -1089,6 +1087,7 @@ contract PQRegistryAdvancedTests is Test {
         
         registry.confirmUnregistration(unregConfirmMessage, v3, r3, s3);
         console.log("Unregistration confirmed - ETH nonce:", registry.ethNonces(bob.ethAddress), "PQ nonce:", registry.pqKeyNonces(alice.pqFingerprint));
+        console.log(string.concat("[LOG] After Step 3 CONFIRM: AliceETH ethNonce = ", vm.toString(registry.ethNonces(alice.ethAddress)), ", AlicePQ pqNonce = ", vm.toString(registry.pqKeyNonces(alice.pqFingerprint)), ", BobETH ethNonce = ", vm.toString(registry.ethNonces(bob.ethAddress)), ", BobPQ pqNonce = ", vm.toString(registry.pqKeyNonces(bob.pqFingerprint))));
         
         // Verify unregistration
         assertEq(registry.addressToEpervierKey(bob.ethAddress), address(0), "BobETH should no longer be registered");
@@ -1096,14 +1095,6 @@ contract PQRegistryAdvancedTests is Test {
         
         // Step 4: AliceETH registers with BobPQ
         console.log("\n--- Step 4: AliceETH registers with BobPQ ---");
-        
-        // Mock the Epervier verifier to return Bob's fingerprint for the final registration
-        // vm.mockCall(
-        //     address(epervierVerifier),
-        //     abi.encodeWithSelector(epervierVerifier.recover.selector),
-        //     abi.encode(bob.pqFingerprint)
-        // );
-        
         string memory finalRegIntentJson = vm.readFile("test/test_vectors/advanced/test9_full_lifecycle_final_registration_intent_vectors.json");
         string memory finalRegConfirmJson = vm.readFile("test/test_vectors/advanced/test9_full_lifecycle_final_registration_confirmation_vectors.json");
         
@@ -1116,6 +1107,7 @@ contract PQRegistryAdvancedTests is Test {
         bytes32 s4 = bytes32(s4Decimal);
         registry.submitRegistrationIntent(finalIntentMessage, v4, r4, s4);
         console.log("Final registration intent submitted - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(bob.pqFingerprint));
+        console.log(string.concat("[LOG] After Step 4: AliceETH ethNonce = ", vm.toString(registry.ethNonces(alice.ethAddress)), ", AlicePQ pqNonce = ", vm.toString(registry.pqKeyNonces(alice.pqFingerprint)), ", BobETH ethNonce = ", vm.toString(registry.ethNonces(bob.ethAddress)), ", BobPQ pqNonce = ", vm.toString(registry.pqKeyNonces(bob.pqFingerprint))));
         
         // Confirm final registration (BobPQ + AliceETH)
         bytes memory finalConfirmMessage = vm.parseBytes(vm.parseJsonString(finalRegConfirmJson, ".final_registration_confirmation[0].pq_message"));
@@ -1126,6 +1118,7 @@ contract PQRegistryAdvancedTests is Test {
         
         registry.confirmRegistration(finalConfirmMessage, finalConfirmSalt, finalConfirmCs1, finalConfirmCs2, finalConfirmHint);
         console.log("Final registration confirmed - ETH nonce:", registry.ethNonces(alice.ethAddress), "PQ nonce:", registry.pqKeyNonces(bob.pqFingerprint));
+        console.log(string.concat("[LOG] After Step 4 CONFIRM: AliceETH ethNonce = ", vm.toString(registry.ethNonces(alice.ethAddress)), ", AlicePQ pqNonce = ", vm.toString(registry.pqKeyNonces(alice.pqFingerprint)), ", BobETH ethNonce = ", vm.toString(registry.ethNonces(bob.ethAddress)), ", BobPQ pqNonce = ", vm.toString(registry.pqKeyNonces(bob.pqFingerprint))));
         
         // Verify final registration
         assertEq(registry.addressToEpervierKey(alice.ethAddress), bob.pqFingerprint, "AliceETH should be registered to BobPQ");

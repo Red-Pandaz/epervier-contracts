@@ -97,16 +97,21 @@ def generate_cancel_change_eth_address_intent_vectors():
     """Generate test vectors for canceling change ETH address intents for all 10 actors"""
     cancel_vectors = []
     actors = get_actor_config()
-    actor_names = list(actors.keys())
-    num_actors = len(actor_names)
-
-    for i in range(num_actors):
-        current_actor_name = actor_names[i]
+    
+    # Define the cycling pattern: alice -> bob -> charlie -> danielle -> eve -> frank -> grace -> henry -> iris -> jack
+    actor_cycle = ["alice", "bob", "charlie", "danielle", "eve", "frank", "grace", "henry", "iris", "jack"]
+    
+    for i in range(len(actor_cycle)):
+        current_actor_name = actor_cycle[i]
+        next_actor_name = actor_cycle[(i + 1) % len(actor_cycle)]  # Wrap around to alice for the last one
+        
         current_actor = actors[current_actor_name]
+        next_actor = actors[next_actor_name]
 
-        print(f"Generating cancel change ETH address intent vector for {current_actor_name}...")
+        print(f"Generating cancel change ETH address intent vector for {current_actor_name} -> {next_actor_name}...")
 
-        current_eth_address = current_actor["eth_address"]
+        # Use the pending change address (next actor's address) instead of current actor's address
+        pending_change_address = next_actor["eth_address"]  # This is the address the PQ fingerprint intended to change to
         pq_fingerprint = current_actor["pq_fingerprint"]
 
         # Nonces for cancel operation
@@ -114,7 +119,8 @@ def generate_cancel_change_eth_address_intent_vectors():
         eth_nonce = 1  # ETH nonce for cancel operation
 
         # Create the PQ cancel message and sign it with PQ key
-        pq_message = create_cancel_change_eth_address_message(DOMAIN_SEPARATOR, current_eth_address, pq_nonce)
+        # Use pending_change_address instead of current_eth_address
+        pq_message = create_cancel_change_eth_address_message(DOMAIN_SEPARATOR, pending_change_address, pq_nonce)
         pq_signature = sign_pq_message(pq_message, current_actor["pq_private_key_file"])
         
         if pq_signature is None:
@@ -123,7 +129,8 @@ def generate_cancel_change_eth_address_intent_vectors():
 
         cancel_vector = {
             "current_actor": current_actor_name,
-            "current_eth_address": current_eth_address,
+            "current_eth_address": current_actor["eth_address"],  # Keep for reference
+            "pending_change_address": pending_change_address,  # Add for clarity
             "pq_fingerprint": pq_fingerprint,
             "pq_message": pq_message.hex(),
             "pq_signature": pq_signature,
@@ -156,6 +163,7 @@ def main():
             vector = vectors[0]
             print(f"Current Actor: {vector['current_actor']}")
             print(f"Current ETH Address: {vector['current_eth_address']}")
+            print(f"Pending Change Address: {vector['pending_change_address']}")
             print(f"PQ Fingerprint: {vector['pq_fingerprint']}")
             print(f"PQ Nonce: {vector['pq_nonce']}")
             print(f"ETH Nonce: {vector['eth_nonce']}")
