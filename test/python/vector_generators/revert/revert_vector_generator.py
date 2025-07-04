@@ -57,48 +57,55 @@ def build_base_pq_message(domain_separator, eth_address, pq_nonce):
     return msg
 
 def sign_with_pq_key(base_pq_message, pq_private_key_file):
-    # Use sign_cli.py to sign the base PQ message
-    from tempfile import NamedTemporaryFile
+    """Sign a message with PQ private key using sign_cli.py"""
     import os
     import subprocess
     
-    # Write message to temp file
-    with NamedTemporaryFile(delete=False) as tmp:
-        tmp.write(base_pq_message)
-        tmp.flush()
-        tmp_path = tmp.name
-    
-    sign_cli = PROJECT_ROOT / "ETHFALCON/python-ref/sign_cli.py"
-    privkey_path = PROJECT_ROOT / "test/test_keys" / pq_private_key_file
-    venv_python = PROJECT_ROOT / "ETHFALCON/python-ref/myenv/bin/python3"
-
-    cmd = [
-        str(venv_python), str(sign_cli), "sign",
-        f"--privkey={privkey_path}",
-        f"--data={base_pq_message.hex()}",
-        "--version=epervier"
-    ]
-    
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    os.unlink(tmp_path)
-    
-    # Parse output for salt, hint, cs1, cs2
-    lines = result.stdout.splitlines()
-    out = {}
-    for line in lines:
-        if line.startswith("salt:"):
-            out["salt"] = bytes.fromhex(line.split()[1])
-        elif line.startswith("hint:"):
-            out["hint"] = int(line.split()[1])
-        elif line.startswith("cs1:"):
-            out["cs1"] = [int(x, 16) for x in line.split()[1:]]
-        elif line.startswith("cs2:"):
-            out["cs2"] = [int(x, 16) for x in line.split()[1:]]
-    
-    if not all(k in out for k in ["salt", "hint", "cs1", "cs2"]):
-        print("Failed to parse PQ signature components!")
+    try:
+        # Sign with PQ key using sign_cli.py
+        sign_cli = str(PROJECT_ROOT / "ETHFALCON" / "python-ref" / "sign_cli.py")
+        privkey_path = str(PROJECT_ROOT / "test" / "test_keys" / pq_private_key_file)
+        venv_python = str(PROJECT_ROOT / "ETHFALCON" / "python-ref" / "myenv" / "bin" / "python3")
+        
+        cmd = [
+            venv_python, sign_cli, "sign",
+            f"--privkey={privkey_path}",
+            f"--data={base_pq_message.hex()}",
+            "--version=epervier"
+        ]
+        
+        print(f"Running command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT / "ETHFALCON" / "python-ref")
+        
+        if result.returncode != 0:
+            print(f"Error signing message: {result.stderr}")
+            return None
+        
+        print(f"PQ sign_cli output:")
+        print(result.stdout)
+        
+        # Parse the signature components from stdout
+        lines = result.stdout.splitlines()
+        signature_data = {}
+        for line in lines:
+            if line.startswith("salt:"):
+                signature_data["salt"] = bytes.fromhex(line.split()[1])
+            elif line.startswith("hint:"):
+                signature_data["hint"] = int(line.split()[1])
+            elif line.startswith("cs1:"):
+                signature_data["cs1"] = [int(x, 16) for x in line.split()[1:]]
+            elif line.startswith("cs2:"):
+                signature_data["cs2"] = [int(x, 16) for x in line.split()[1:]]
+        
+        if not all(key in signature_data for key in ["salt", "hint", "cs1", "cs2"]):
+            print(f"Failed to parse signature components")
+            return None
+        
+        return signature_data
+        
+    except Exception as e:
+        print(f"Exception during PQ signing: {e}")
         return None
-    return out
 
 def build_eth_intent_message(domain_separator, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
     pattern = b"Intent to pair Epervier Key"
@@ -576,8 +583,8 @@ class RevertVectorGenerator:
         
         print("Generating confirmRegistration revert vectors...")
         alice = self.actors["alice"]
-        eth_nonce = 0
-        pq_nonce = 0
+        eth_nonce = 1  # After registration intent submission, Alice's ETH nonce is 1
+        pq_nonce = 1   # After registration intent submission, Alice's PQ nonce is 1
         
         # Test 1: No pending intent
         print("Test 1: No pending intent")
@@ -654,13 +661,406 @@ class RevertVectorGenerator:
         
         return vectors
 
+    def generate_remove_registration_intent_eth_revert_vectors(self) -> Dict[str, Any]:
+        """Generate revert test vectors for removeRegistrationIntentByETH()"""
+        
+        vectors = {
+            "remove_registration_intent_eth_reverts": []
+        }
+        
+        print("Generating removeRegistrationIntentByETH revert vectors...")
+        alice = self.actors["alice"]
+        eth_nonce = 1  # After registration intent submission, Alice's ETH nonce is 1
+        current_actor = "alice"
+        
+        # Test 1: No pending intent - Create valid message but no intent exists
+        print("Test 1: No pending intent")
+        pattern = b"Remove registration intent from Epervier Fingerprint "
+        eth_message = pattern + bytes.fromhex(alice["pq_fingerprint"][2:]) + int_to_bytes32(eth_nonce)
+        assert len(eth_message) == 105, f"ETH remove message wrong length: {len(eth_message)}"
+        struct_hash = self.create_remove_intent_struct_hash(alice["pq_fingerprint"], eth_nonce)
+        digest = self.create_eip712_digest(struct_hash)
+        v, r, s, signature = self.sign_message(digest, alice["eth_private_key"])
+        vectors["remove_registration_intent_eth_reverts"].append({
+            "test_name": "no_pending_intent",
+            "description": "Test revert when no pending intent exists",
+            "current_actor": current_actor,
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_nonce": eth_nonce,
+            "eth_message": eth_message.hex(),
+            "eth_signature": {
+                "v": v,
+                "r": r,
+                "s": s,
+                "signature": signature
+            }
+        })
+        
+        # Test 2: Wrong domain separator - Create message with wrong domain but valid format
+        print("Test 2: Wrong domain separator")
+        # For this test, we need to create a message that passes parsing but fails domain validation
+        # The contract checks domain separator in the signature verification, not in message parsing
+        wrong_domain = bytes.fromhex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+        struct_hash = self.create_remove_intent_struct_hash(alice["pq_fingerprint"], eth_nonce, wrong_domain)
+        digest = self.create_eip712_digest(struct_hash, wrong_domain)
+        v, r, s, signature = self.sign_message(digest, alice["eth_private_key"])
+        
+        vectors["remove_registration_intent_eth_reverts"].append({
+            "test_name": "wrong_domain_separator",
+            "description": "Test revert when domain separator is wrong",
+            "current_actor": current_actor,
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_nonce": eth_nonce,
+            "eth_message": eth_message.hex(),
+            "eth_signature": {
+                "v": v,
+                "r": r,
+                "s": s,
+                "signature": signature
+            }
+        })
+        
+        # Test 3: Wrong nonce - Create message with wrong nonce but valid format
+        print("Test 3: Wrong nonce")
+        wrong_nonce = eth_nonce + 1
+        wrong_message = pattern + bytes.fromhex(alice["pq_fingerprint"][2:]) + int_to_bytes32(wrong_nonce)
+        assert len(wrong_message) == 105, f"ETH remove message wrong length: {len(wrong_message)}"
+        struct_hash = self.create_remove_intent_struct_hash(alice["pq_fingerprint"], wrong_nonce)
+        digest = self.create_eip712_digest(struct_hash)
+        v, r, s, signature = self.sign_message(digest, alice["eth_private_key"])
+        
+        vectors["remove_registration_intent_eth_reverts"].append({
+            "test_name": "wrong_nonce",
+            "description": "Test revert when nonce is wrong",
+            "current_actor": current_actor,
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_nonce": wrong_nonce,
+            "eth_message": wrong_message.hex(),
+            "eth_signature": {
+                "v": v,
+                "r": r,
+                "s": s,
+                "signature": signature
+            }
+        })
+        
+        # Test 4: Wrong signer - Create valid message but signed by wrong key
+        print("Test 4: Wrong signer")
+        bob = self.actors["bob"]
+        struct_hash = self.create_remove_intent_struct_hash(alice["pq_fingerprint"], eth_nonce)
+        digest = self.create_eip712_digest(struct_hash)
+        v, r, s, signature = self.sign_message(digest, bob["eth_private_key"])  # Sign with wrong key
+        
+        vectors["remove_registration_intent_eth_reverts"].append({
+            "test_name": "wrong_signer",
+            "description": "Test revert when signature is from wrong address",
+            "current_actor": current_actor,
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_nonce": eth_nonce,
+            "eth_message": eth_message.hex(),
+            "eth_signature": {
+                "v": v,
+                "r": r,
+                "s": s,
+                "signature": signature
+            }
+        })
+        
+        # Test 5: Malformed message - Create message that's too short for parsing
+        print("Test 5: Malformed message")
+        # Create message with correct pattern but missing fingerprint and nonce
+        # Pattern: "Remove registration intent from Epervier Fingerprint " (53 bytes)
+        # Missing: pqFingerprint (20 bytes) + ethNonce (32 bytes) = 52 bytes
+        # Total: 53 bytes (should be 105 bytes)
+        malformed_message = b"Remove registration intent from Epervier Fingerprint "  # Only 53 bytes, missing 52 bytes
+        v, r, s, signature = self.sign_message(keccak(malformed_message), alice["eth_private_key"])
+        
+        vectors["remove_registration_intent_eth_reverts"].append({
+            "test_name": "malformed_message",
+            "description": "Test revert when message format is wrong",
+            "current_actor": current_actor,
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_nonce": eth_nonce,
+            "eth_message": malformed_message.hex(),
+            "eth_signature": {
+                "v": v,
+                "r": r,
+                "s": s,
+                "signature": signature
+            }
+        })
+        
+        # Test 6: Invalid signature - Create valid message but invalid signature
+        print("Test 6: Invalid signature")
+        vectors["remove_registration_intent_eth_reverts"].append({
+            "test_name": "invalid_signature",
+            "description": "Test revert when signature is invalid",
+            "current_actor": current_actor,
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_nonce": eth_nonce,
+            "eth_message": eth_message.hex(),
+            "eth_signature": {
+                "v": 27,
+                "r": 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef,
+                "s": 0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890,
+                "signature": "0x" + "00" * 64
+            }
+        })
+        
+        # Test 7: Wrong PQ fingerprint - Create message with wrong fingerprint but valid format
+        print("Test 7: Wrong PQ fingerprint")
+        bob = self.actors["bob"]
+        wrong_message = pattern + bytes.fromhex(bob["pq_fingerprint"][2:]) + int_to_bytes32(eth_nonce)
+        assert len(wrong_message) == 105, f"ETH remove message wrong length: {len(wrong_message)}"
+        
+        struct_hash = self.create_remove_intent_struct_hash(bob["pq_fingerprint"], eth_nonce)
+        digest = self.create_eip712_digest(struct_hash)
+        v, r, s, signature = self.sign_message(digest, alice["eth_private_key"])
+        
+        vectors["remove_registration_intent_eth_reverts"].append({
+            "test_name": "wrong_pq_fingerprint",
+            "description": "Test revert when PQ fingerprint doesn't match",
+            "current_actor": current_actor,
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": bob["pq_fingerprint"],  # Wrong fingerprint
+            "eth_nonce": eth_nonce,
+            "eth_message": wrong_message.hex(),
+            "eth_signature": {
+                "v": v,
+                "r": r,
+                "s": s,
+                "signature": signature
+            }
+        })
+        
+        return vectors
+
+    def generate_remove_registration_intent_pq_revert_vectors(self) -> Dict[str, Any]:
+        """Generate revert test vectors for removeRegistrationIntentByPQ()"""
+        
+        vectors = {
+            "remove_registration_intent_pq_reverts": []
+        }
+        
+        print("Generating removeRegistrationIntentByPQ revert vectors...")
+        alice = self.actors["alice"]
+        pq_nonce = 1  # After registration intent submission, Alice's PQ nonce is 1
+        
+        # Test 1: No pending intent - Create valid message but no intent exists
+        print("Test 1: No pending intent")
+        # PQRemoveRegistrationIntentMessage: DOMAIN_SEPARATOR(32) + pattern(44) + ethAddress(20) + pqNonce(32) = 128 bytes
+        pattern = b"Remove registration intent from ETH Address "
+        pq_message = bytes.fromhex(DOMAIN_SEPARATOR[2:]) + pattern + bytes.fromhex(alice["eth_address"][2:]) + int_to_bytes32(pq_nonce)
+        assert len(pq_message) == 128, f"PQ remove message wrong length: {len(pq_message)}"
+        
+        # Create valid PQ signature for the message
+        salt, cs1, cs2, hint = self.create_pq_signature(pq_message, alice["pq_private_key_file"])
+        
+        vectors["remove_registration_intent_pq_reverts"].append({
+            "test_name": "no_pending_intent",
+            "description": "Test revert when no pending intent exists",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "pq_nonce": pq_nonce,
+            "pq_message": pq_message.hex(),
+            "pq_signature": {
+                "salt": salt,
+                "cs1": cs1,
+                "cs2": cs2,
+                "hint": hint
+            }
+        })
+        
+        # Test 2: Wrong domain separator - Create message with wrong domain but valid format
+        print("Test 2: Wrong domain separator")
+        wrong_domain = bytes.fromhex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+        wrong_message = wrong_domain + pattern + bytes.fromhex(alice["eth_address"][2:]) + int_to_bytes32(pq_nonce)
+        assert len(wrong_message) == 128, f"PQ remove message wrong length: {len(wrong_message)}"
+        salt, cs1, cs2, hint = self.create_pq_signature(wrong_message, alice["pq_private_key_file"])
+        
+        vectors["remove_registration_intent_pq_reverts"].append({
+            "test_name": "wrong_domain_separator",
+            "description": "Test revert when domain separator is wrong",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "pq_nonce": pq_nonce,
+            "pq_message": wrong_message.hex(),
+            "pq_signature": {
+                "salt": salt,
+                "cs1": cs1,
+                "cs2": cs2,
+                "hint": hint
+            }
+        })
+        
+        # Test 3: Wrong nonce - Create message with wrong nonce but valid format
+        print("Test 3: Wrong nonce")
+        wrong_nonce = pq_nonce + 1
+        wrong_message = bytes.fromhex(DOMAIN_SEPARATOR[2:]) + pattern + bytes.fromhex(alice["eth_address"][2:]) + int_to_bytes32(wrong_nonce)
+        assert len(wrong_message) == 128, f"PQ remove message wrong length: {len(wrong_message)}"
+        salt, cs1, cs2, hint = self.create_pq_signature(wrong_message, alice["pq_private_key_file"])
+        
+        vectors["remove_registration_intent_pq_reverts"].append({
+            "test_name": "wrong_nonce",
+            "description": "Test revert when nonce is wrong",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "pq_nonce": wrong_nonce,
+            "pq_message": wrong_message.hex(),
+            "pq_signature": {
+                "salt": salt,
+                "cs1": cs1,
+                "cs2": cs2,
+                "hint": hint
+            }
+        })
+        
+        # Test 4: Wrong signer - Create valid message but signed by wrong key
+        print("Test 4: Wrong signer")
+        bob = self.actors["bob"]
+        salt, cs1, cs2, hint = self.create_pq_signature(pq_message, bob["pq_private_key_file"])  # Sign with wrong key
+        
+        vectors["remove_registration_intent_pq_reverts"].append({
+            "test_name": "wrong_signer",
+            "description": "Test revert when signature is from wrong address",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "pq_nonce": pq_nonce,
+            "pq_message": pq_message.hex(),
+            "pq_signature": {
+                "salt": salt,
+                "cs1": cs1,
+                "cs2": cs2,
+                "hint": hint
+            }
+        })
+        
+        # Test 5: Malformed message - Create message that's too short for parsing
+        print("Test 5: Malformed message")
+        malformed_message = b"Remove registration intent"  # Too short - missing domain, address and nonce (only 26 bytes)
+        salt, cs1, cs2, hint = self.create_pq_signature(malformed_message, alice["pq_private_key_file"])
+        
+        vectors["remove_registration_intent_pq_reverts"].append({
+            "test_name": "malformed_message",
+            "description": "Test revert when message format is wrong",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "pq_nonce": pq_nonce,
+            "pq_message": malformed_message.hex(),
+            "pq_signature": {
+                "salt": salt,
+                "cs1": cs1,
+                "cs2": cs2,
+                "hint": hint
+            }
+        })
+        
+        # Test 6: Invalid signature - Create valid message but invalid signature
+        print("Test 6: Invalid signature")
+        vectors["remove_registration_intent_pq_reverts"].append({
+            "test_name": "invalid_signature",
+            "description": "Test revert when signature is invalid",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "pq_nonce": pq_nonce,
+            "pq_message": pq_message.hex(),
+            "pq_signature": {
+                "salt": "0x" + "00" * 40,
+                "cs1": ["0x" + "00" * 64] * 32,
+                "cs2": ["0x" + "00" * 64] * 32,
+                "hint": 0
+            }
+        })
+        
+        # Test 7: Wrong message format - Create message with wrong pattern but correct length
+        print("Test 7: Wrong message format")
+        # Create a message with wrong pattern but correct length (128 bytes)
+        # DOMAIN_SEPARATOR(32) + wrong_pattern(44) + ethAddress(20) + pqNonce(32) = 128 bytes
+        wrong_pattern = b"Wrong message format for removal intent from"
+        wrong_format_message = bytes.fromhex(DOMAIN_SEPARATOR[2:]) + wrong_pattern + bytes.fromhex(alice["eth_address"][2:]) + int_to_bytes32(pq_nonce)
+        assert len(wrong_format_message) == 128, f"PQ remove message wrong length: {len(wrong_format_message)}"
+        salt, cs1, cs2, hint = self.create_pq_signature(wrong_format_message, alice["pq_private_key_file"])
+        
+        vectors["remove_registration_intent_pq_reverts"].append({
+            "test_name": "wrong_message_format",
+            "description": "Test revert when message format is incorrect",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "pq_nonce": pq_nonce,
+            "pq_message": wrong_format_message.hex(),
+            "pq_signature": {
+                "salt": salt,
+                "cs1": cs1,
+                "cs2": cs2,
+                "hint": hint
+            }
+        })
+        
+        return vectors
+
+    def create_remove_intent_struct_hash(self, pq_fingerprint: str, eth_nonce: int, domain_separator: bytes = None) -> bytes:
+        """Create the struct hash for RemoveIntent using proper EIP-712 encoding"""
+        if domain_separator is None:
+            domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+        
+        type_hash = keccak(b"RemoveIntent(address pqFingerprint,uint256 ethNonce)")
+        # Use abi.encode instead of encode_packed for proper EIP-712 encoding
+        from eth_abi import encode
+        struct_hash = keccak(encode([
+            'bytes32',
+            'address', 
+            'uint256'
+        ], [
+            type_hash,
+            pq_fingerprint,  # address (20 bytes)
+            eth_nonce        # uint256
+        ]))
+        return struct_hash
+    
+    def create_eip712_digest(self, struct_hash: bytes, domain_separator: bytes = None) -> bytes:
+        """Create the EIP712 digest"""
+        if domain_separator is None:
+            domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+        
+        digest = keccak(encode_packed(b'\x19\x01', domain_separator, struct_hash))
+        return digest
+    
+    def sign_message(self, digest: bytes, private_key: str) -> tuple:
+        """Sign a message with ETH private key and return v, r, s, signature"""
+        account = Account.from_key(private_key)
+        sig = Account._sign_hash(digest, private_key=account.key)
+        return sig.v, sig.r, sig.s, sig.signature.hex()
+    
+    def create_pq_signature(self, message: bytes, private_key_file: str) -> tuple:
+        """Create a PQ signature for a message"""
+        # Use the existing sign_with_pq_key function
+        pq_sig = sign_with_pq_key(message, private_key_file)
+        if pq_sig is None:
+            print(f"Failed to generate PQ signature for {private_key_file}")
+            print(f"Message: {message.hex()}")
+            # Don't fallback to invalid signature - this should never happen
+            raise Exception(f"Failed to generate PQ signature for {private_key_file}")
+        
+        return (
+            pq_sig["salt"].hex(),
+            [hex(x) for x in pq_sig["cs1"]],
+            [hex(x) for x in pq_sig["cs2"]],
+            pq_sig["hint"]
+        )
+
 def main():
     """Generate all revert test vectors"""
     
     generator = RevertVectorGenerator()
     
-    # Create output directory
-    output_dir = Path("test/test_vectors/revert")
+    # Create output directory using absolute path from project root
+    output_dir = PROJECT_ROOT / "test" / "test_vectors" / "revert"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Generate submit registration intent revert vectors
@@ -672,6 +1072,24 @@ def main():
     confirm_reverts = generator.generate_confirm_registration_revert_vectors()
     with open(output_dir / "confirm_registration_revert_vectors.json", "w") as f:
         json.dump(confirm_reverts, f, indent=2)
+    
+    # Generate remove registration intent by ETH revert vectors
+    print("Writing remove intent ETH vectors...")
+    remove_intent_eth_reverts = generator.generate_remove_registration_intent_eth_revert_vectors()
+    eth_file_path = output_dir / "remove_registration_intent_eth_revert_vectors.json"
+    print(f"Writing to: {eth_file_path}")
+    with open(eth_file_path, "w") as f:
+        json.dump(remove_intent_eth_reverts, f, indent=2)
+    print(f"ETH vectors written successfully")
+    
+    # Generate remove registration intent by PQ revert vectors
+    print("Writing remove intent PQ vectors...")
+    remove_intent_pq_reverts = generator.generate_remove_registration_intent_pq_revert_vectors()
+    pq_file_path = output_dir / "remove_registration_intent_pq_revert_vectors.json"
+    print(f"Writing to: {pq_file_path}")
+    with open(pq_file_path, "w") as f:
+        json.dump(remove_intent_pq_reverts, f, indent=2)
+    print(f"PQ vectors written successfully")
     
     print("Revert test vectors generated successfully!")
     print(f"Output directory: {output_dir}")

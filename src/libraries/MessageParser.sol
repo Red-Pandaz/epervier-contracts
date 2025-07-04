@@ -167,7 +167,7 @@ library MessageParser {
      * @dev Parse a PQRegistrationConfirmationMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
      */
-    function parsePQRegistrationConfirmationMessage(bytes memory message) public pure returns (
+    function parsePQRegistrationConfirmationMessage(bytes memory message, bytes32 domainSeparator) public pure returns (
         address ethAddress,
         bytes memory baseETHMessage,
         uint8 v,
@@ -175,6 +175,13 @@ library MessageParser {
         bytes32 s,
         uint256 pqNonce
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         // According to schema:
         // DOMAIN_SEPARATOR (32) + pattern (31) + ethAddress (20) + baseETHMessage (92) + v (1) + r (32) + s (32) + pqNonce (32)
         bytes memory pattern = "Confirm bonding to ETH Address ";
@@ -239,10 +246,17 @@ library MessageParser {
      * @dev Parse a BasePQUnregistrationConfirmMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Confirm unregistration from ETH Address " + ethAddress + pqNonce
      */
-    function parseBasePQUnregistrationConfirmMessage(bytes memory message) internal pure returns (
+    function parseBasePQUnregistrationConfirmMessage(bytes memory message, bytes32 domainSeparator) internal pure returns (
         address ethAddress,
         uint256 pqNonce
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         bytes memory pattern = "Confirm unregistration from ETH Address ";
         
         uint256 manualPatternIndex = type(uint256).max;
@@ -383,7 +397,7 @@ library MessageParser {
      * @dev Parse a PQChangeETHAddressIntentMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Intent to change bound ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
      */
-    function parsePQChangeETHAddressIntentMessage(bytes memory message) internal pure returns (
+    function parsePQChangeETHAddressIntentMessage(bytes memory message, bytes32 domainSeparator) internal pure returns (
         address oldEthAddress,
         address newEthAddress,
         uint256 pqNonce,
@@ -392,6 +406,13 @@ library MessageParser {
         bytes32 r,
         bytes32 s
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         bytes memory pattern = "Intent to change bound ETH Address from ";
         uint256[] memory fieldOffsets = new uint256[](7);
         uint256[] memory fieldLengths = new uint256[](7);
@@ -464,11 +485,18 @@ library MessageParser {
      * @dev Parse a BasePQChangeETHAddressConfirmMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Confirm changing bound ETH Address for Epervier Fingerprint from " + oldEthAddress + " to " + newEthAddress + pqNonce
      */
-    function parseBasePQChangeETHAddressConfirmMessage(bytes memory message) internal pure returns (
+    function parseBasePQChangeETHAddressConfirmMessage(bytes memory message, bytes32 domainSeparator) internal pure returns (
         address oldEthAddress,
         address newEthAddress,
         uint256 pqNonce
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         bytes memory pattern = "Confirm changing bound ETH Address for Epervier Fingerprint from ";
         uint256[] memory fieldOffsets = new uint256[](4);
         uint256[] memory fieldLengths = new uint256[](4);
@@ -549,7 +577,7 @@ library MessageParser {
      * @dev Parse a PQUnregistrationIntentMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Intent to unregister from Epervier Fingerprint from address " + currentEthAddress + baseETHMessage + v + r + s + pqNonce
      */
-    function parsePQUnregistrationIntentMessage(bytes memory message) internal pure returns (
+    function parsePQUnregistrationIntentMessage(bytes memory message, bytes32 domainSeparator) internal pure returns (
         address currentEthAddress,
         uint256 pqNonce,
         bytes memory baseETHMessage,
@@ -557,6 +585,13 @@ library MessageParser {
         bytes32 r,
         bytes32 s
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         // Schema-based offsets (from pqregistry_message_schema.json)
         // DOMAIN_SEPARATOR: 32 bytes
         // pattern: 60 bytes ("Intent to unregister from Epervier Fingerprint from address ")
@@ -1096,10 +1131,17 @@ library MessageParser {
      * @dev Parse a PQRemoveRegistrationIntentMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Remove registration intent from ETH Address " + ethAddress + pqNonce
      */
-    function parsePQRemoveRegistrationIntentMessage(bytes memory message) internal pure returns (
+    function parsePQRemoveRegistrationIntentMessage(bytes memory message, bytes32 domainSeparator) internal pure returns (
         address ethAddress,
         uint256 pqNonce
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         bytes memory pattern = "Remove registration intent from ETH Address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
@@ -1125,10 +1167,17 @@ library MessageParser {
      * @dev Parse a PQRemoveChangeIntentMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Remove change intent from ETH Address " + ethAddress + pqNonce
      */
-    function parsePQRemoveChangeIntentMessage(bytes memory message) internal pure returns (
+    function parsePQRemoveChangeIntentMessage(bytes memory message, bytes32 domainSeparator) internal pure returns (
         address ethAddress,
         uint256 pqNonce
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         bytes memory pattern = "Remove change intent from ETH Address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
@@ -1159,10 +1208,17 @@ library MessageParser {
      * @dev Parse a PQRemoveUnregistrationIntentMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Remove unregistration intent from ETH Address " + ethAddress + pqNonce
      */
-    function parsePQRemoveUnregistrationIntentMessage(bytes memory message) internal pure returns (
+    function parsePQRemoveUnregistrationIntentMessage(bytes memory message, bytes32 domainSeparator) internal pure returns (
         address ethAddress,
         uint256 pqNonce
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         bytes memory pattern = "Remove unregistration intent from ETH Address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
@@ -1354,6 +1410,23 @@ library MessageParser {
     function validatePQRemoveIntentMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Remove registration intent from ETH Address ";
         return findPattern(message, pattern, true) != type(uint).max;
+    }
+
+    /**
+     * @dev Validate that PQ message contains the correct domain separator
+     * @param message The PQ message to validate
+     * @param expectedDomainSeparator The expected domain separator
+     */
+    function validateDomainSeparator(bytes memory message, bytes32 expectedDomainSeparator) internal pure returns (bool) {
+        require(message.length >= 32, "Message too short for domain separator");
+        
+        // Extract the first 32 bytes as the domain separator
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        
+        return messageDomainSeparator == expectedDomainSeparator;
     }
 
     /**

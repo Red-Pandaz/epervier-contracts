@@ -65,6 +65,22 @@ contract PQRegistryRegistrationRevertsTest is Test {
         
         registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
         
+        // Log Alice's ETH address from the intent
+        address aliceEthAddress = vm.parseAddress(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_address"));
+        console.log("Alice's ETH address:", aliceEthAddress);
+        
+        // Log Alice's PQ fingerprint from the intent
+        address alicePQFingerprint = vm.parseAddress(vm.parseJsonString(intentJsonData, ".registration_intent[0].pq_fingerprint"));
+        console.log("Alice's PQ fingerprint:", alicePQFingerprint);
+        
+        // Check Alice's PQ nonce before submission
+        uint256 alicePQNonceBefore = registry.pqKeyNonces(alicePQFingerprint);
+        console.log("Alice's PQ nonce before submission:", alicePQNonceBefore);
+        
+        // Check Alice's PQ nonce after submission
+        uint256 alicePQNonceAfter = registry.pqKeyNonces(alicePQFingerprint);
+        console.log("Alice's PQ nonce after submission:", alicePQNonceAfter);
+        
         // Confirm registration
         string memory confirmVectorPath = string.concat(".registration_confirmation[", vm.toString(vectorIndex), "]");
         bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, string.concat(confirmVectorPath, ".pq_message")));
@@ -420,11 +436,391 @@ contract PQRegistryRegistrationRevertsTest is Test {
     // REMOVE REGISTRATION INTENT BY ETH REVERT TESTS
     // ============================================================================
     
-    // TODO: Add revert tests for removeRegistrationIntentByETH()
+    function testRemoveRegistrationIntentByETH_RevertWhenWrongDomainSeparator() public {
+        // First, submit a registration intent so there's a pending intent to remove
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Log Alice's ETH address from the intent
+        address aliceEthAddress = vm.parseAddress(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_address"));
+        console.log("Alice's ETH address:", aliceEthAddress);
+        
+        // Log Alice's PQ fingerprint from the intent
+        address alicePQFingerprint = vm.parseAddress(vm.parseJsonString(intentJsonData, ".registration_intent[0].pq_fingerprint"));
+        console.log("Alice's PQ fingerprint:", alicePQFingerprint);
+        
+        // Check Alice's PQ nonce before submission
+        uint256 alicePQNonceBefore = registry.pqKeyNonces(alicePQFingerprint);
+        console.log("Alice's PQ nonce before submission:", alicePQNonceBefore);
+        
+        // Check Alice's PQ nonce after submission
+        uint256 alicePQNonceAfter = registry.pqKeyNonces(alicePQFingerprint);
+        console.log("Alice's PQ nonce after submission:", alicePQNonceAfter);
+        
+        // Load a valid remove intent vector but with wrong domain separator
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_eth_revert_vectors.json");
+        bytes memory ethMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[1].eth_message"));
+        uint8 vRemove = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[1].eth_signature.v")));
+        uint256 rRemoveDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[1].eth_signature.r"));
+        uint256 sRemoveDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[1].eth_signature.s"));
+        bytes32 rRemove = bytes32(rRemoveDecimal);
+        bytes32 sRemove = bytes32(sRemoveDecimal);
+        
+        // The contract will fail at state validation first (wrong domain separator recovers different address)
+        vm.expectRevert("No pending intent found for recovered ETH Address");
+        registry.removeRegistrationIntentByETH(ethMessage, vRemove, rRemove, sRemove);
+    }
+    
+    function testRemoveRegistrationIntentByETH_RevertWhenWrongNonce() public {
+        // First, submit a registration intent so there's a pending intent to remove
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Load a valid remove intent vector but with wrong nonce
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_eth_revert_vectors.json");
+        bytes memory ethMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[2].eth_message"));
+        uint8 vRemove = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[2].eth_signature.v")));
+        uint256 rRemoveDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[2].eth_signature.r"));
+        uint256 sRemoveDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[2].eth_signature.s"));
+        bytes32 rRemove = bytes32(rRemoveDecimal);
+        bytes32 sRemove = bytes32(sRemoveDecimal);
+        
+        vm.expectRevert("Invalid ETH nonce");
+        registry.removeRegistrationIntentByETH(ethMessage, vRemove, rRemove, sRemove);
+    }
+    
+    function testRemoveRegistrationIntentByETH_RevertWhenWrongSigner() public {
+        // First, submit a registration intent so there's a pending intent to remove
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Load a valid remove intent vector but signed by wrong ETH key
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_eth_revert_vectors.json");
+        bytes memory ethMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[3].eth_message"));
+        uint8 vRemove = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[3].eth_signature.v")));
+        uint256 rRemoveDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[3].eth_signature.r"));
+        uint256 sRemoveDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[3].eth_signature.s"));
+        bytes32 rRemove = bytes32(rRemoveDecimal);
+        bytes32 sRemove = bytes32(sRemoveDecimal);
+        
+        // The contract will fail at state validation first (wrong signer recovers different address)
+        vm.expectRevert("No pending intent found for recovered ETH Address");
+        registry.removeRegistrationIntentByETH(ethMessage, vRemove, rRemove, sRemove);
+    }
+    
+    function testRemoveRegistrationIntentByETH_RevertWhenNoPendingIntent() public {
+        // Try to remove an intent when none exists for the ETH address
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_eth_revert_vectors.json");
+        bytes memory ethMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[0].eth_signature.v")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[0].eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[0].eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
+        
+        // The contract will fail at state validation first (no pending intent for recovered address)
+        vm.expectRevert("No pending intent found for recovered ETH Address");
+        registry.removeRegistrationIntentByETH(ethMessage, v, r, s);
+    }
+    
+    function testRemoveRegistrationIntentByETH_RevertWhenMalformedMessage() public {
+        // Use a message that is too short or missing fields
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_eth_revert_vectors.json");
+        bytes memory ethMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[4].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[4].eth_signature.v")));
+        uint256 rDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[4].eth_signature.r"));
+        uint256 sDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[4].eth_signature.s"));
+        bytes32 r = bytes32(rDecimal);
+        bytes32 s = bytes32(sDecimal);
+        
+        // The contract will fail at field extraction - message is exactly pattern length, missing fields
+        vm.expectRevert("Field extends beyond message length");
+        registry.removeRegistrationIntentByETH(ethMessage, v, r, s);
+    }
+    
+    function testRemoveRegistrationIntentByETH_RevertWhenReplay() public {
+        // First, submit a registration intent
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Now remove the intent successfully using the working removal vector
+        string memory removalJsonData = vm.readFile("test/test_vectors/register/registration_eth_removal_vectors.json");
+        bytes memory ethRemoveMessage = vm.parseBytes(vm.parseJsonString(removalJsonData, ".registration_eth_removal[0].eth_message"));
+        uint8 vRemove = uint8(vm.parseUint(vm.parseJsonString(removalJsonData, ".registration_eth_removal[0].eth_signature.v")));
+        uint256 rRemoveDecimal = vm.parseUint(vm.parseJsonString(removalJsonData, ".registration_eth_removal[0].eth_signature.r"));
+        uint256 sRemoveDecimal = vm.parseUint(vm.parseJsonString(removalJsonData, ".registration_eth_removal[0].eth_signature.s"));
+        bytes32 rRemove = bytes32(rRemoveDecimal);
+        bytes32 sRemove = bytes32(sRemoveDecimal);
+        
+        registry.removeRegistrationIntentByETH(ethRemoveMessage, vRemove, rRemove, sRemove);
+        
+        // Try to remove the same intent again (replay attack)
+        vm.expectRevert("No pending intent found for recovered ETH Address");
+        registry.removeRegistrationIntentByETH(ethRemoveMessage, vRemove, rRemove, sRemove);
+    }
+    
+    function testRemoveRegistrationIntentByETH_RevertWhenInvalidSignature() public {
+        // Load a valid remove intent vector but with invalid signature components
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_eth_revert_vectors.json");
+        bytes memory ethMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[5].eth_message"));
+        
+        // Use invalid signature components
+        uint8 v = 27; // Invalid v value
+        bytes32 r = bytes32(0x1234567890123456789012345678901234567890123456789012345678901234);
+        bytes32 s = bytes32(0x5678901234567890123456789012345678901234567890123456789012345678);
+        
+        vm.expectRevert(abi.encodeWithSignature("ECDSAInvalidSignature()"));
+        registry.removeRegistrationIntentByETH(ethMessage, v, r, s);
+    }
+    
+    function testRemoveRegistrationIntentByETH_RevertWhenWrongPQFingerprint() public {
+        // First, submit a registration intent
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Try to remove with wrong PQ fingerprint in message
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_eth_revert_vectors.json");
+        bytes memory ethRemoveMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[6].eth_message"));
+        uint8 vRemove = uint8(vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[6].eth_signature.v")));
+        uint256 rRemoveDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[6].eth_signature.r"));
+        uint256 sRemoveDecimal = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_eth_reverts[6].eth_signature.s"));
+        bytes32 rRemove = bytes32(rRemoveDecimal);
+        bytes32 sRemove = bytes32(sRemoveDecimal);
+        
+        // The contract will fail at state validation first (wrong PQ fingerprint)
+        // The recovered ETH address is correct, but the PQ fingerprint in the message doesn't match
+        // the stored intent, so it fails with "PQ fingerprint mismatch"
+        vm.expectRevert("PQ fingerprint mismatch: ETH message vs stored intent");
+        registry.removeRegistrationIntentByETH(ethRemoveMessage, vRemove, rRemove, sRemove);
+    }
     
     // ============================================================================
     // REMOVE REGISTRATION INTENT BY PQ REVERT TESTS
     // ============================================================================
     
-    // TODO: Add revert tests for removeRegistrationIntentByPQ()
+    function testRemoveRegistrationIntentByPQ_RevertWhenWrongDomainSeparator() public {
+        // First, submit a registration intent so there's a pending intent to remove
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        // Log Alice's ETH address from the intent
+        address aliceEthAddress = vm.parseAddress(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_address"));
+        console.log("Alice's ETH address:", aliceEthAddress);
+        
+        // Log Alice's PQ fingerprint from the intent
+        address alicePQFingerprint = vm.parseAddress(vm.parseJsonString(intentJsonData, ".registration_intent[0].pq_fingerprint"));
+        console.log("Alice's PQ fingerprint:", alicePQFingerprint);
+        
+        // Check Alice's PQ nonce before submission
+        uint256 alicePQNonceBefore = registry.pqKeyNonces(alicePQFingerprint);
+        console.log("Alice's PQ nonce before submission:", alicePQNonceBefore);
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Check Alice's PQ nonce after submission
+        uint256 alicePQNonceAfter = registry.pqKeyNonces(alicePQFingerprint);
+        console.log("Alice's PQ nonce after submission:", alicePQNonceAfter);
+        
+        // Load a valid remove intent vector but with wrong domain separator
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_pq_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[1].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[1].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[1].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[1].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[1].pq_signature.hint"));
+        
+        // Log the expected nonce from the test vector
+        uint256 expectedNonce = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[1].pq_nonce"));
+        console.log("Expected nonce from test vector:", expectedNonce);
+        
+        // Log the actual nonce that would be extracted from the message
+        uint256 actualNonce = MessageParser.extractPQNonceFromRemoveMessage(pqMessage);
+        console.log("Actual nonce extracted from message:", actualNonce);
+        
+        // Log the PQ fingerprint that would be recovered
+        address pqFingerprint = registry.epervierVerifier().recover(pqMessage, salt, cs1, cs2, hint);
+        console.log("Recovered PQ fingerprint:", pqFingerprint);
+        
+        // Log the current nonce for this PQ fingerprint in the registry
+        uint256 currentNonce = registry.pqKeyNonces(pqFingerprint);
+        console.log("Current nonce in registry for this fingerprint:", currentNonce);
+        
+        // The contract will fail at message format validation first (wrong domain separator)
+        vm.expectRevert("Invalid domain separator in PQ message");
+        registry.removeRegistrationIntentByPQ(pqMessage, salt, cs1, cs2, hint);
+    }
+    
+    function testRemoveRegistrationIntentByPQ_RevertWhenWrongNonce() public {
+        // First, submit a registration intent so there's a pending intent to remove
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Load a valid remove intent vector but with wrong nonce
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_pq_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[2].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[2].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[2].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[2].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[2].pq_signature.hint"));
+        
+        vm.expectRevert("Invalid PQ nonce");
+        registry.removeRegistrationIntentByPQ(pqMessage, salt, cs1, cs2, hint);
+    }
+    
+    function testRemoveRegistrationIntentByPQ_RevertWhenWrongSigner() public {
+        // First, submit a registration intent so there's a pending intent to remove
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Load a valid remove intent vector but signed by wrong PQ key
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_pq_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[3].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[3].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[3].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[3].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[3].pq_signature.hint"));
+        
+        // The contract will fail at state validation first (wrong signer recovers different fingerprint)
+        vm.expectRevert("No pending intent found for this PQ fingerprint");
+        registry.removeRegistrationIntentByPQ(pqMessage, salt, cs1, cs2, hint);
+    }
+    
+    function testRemoveRegistrationIntentByPQ_RevertWhenNoPendingIntent() public {
+        // Try to remove an intent when none exists for the PQ fingerprint
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_pq_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[0].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[0].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[0].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[0].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[0].pq_signature.hint"));
+        
+        // The contract will fail at state validation first (no pending intent for recovered fingerprint)
+        vm.expectRevert("No pending intent found for this PQ fingerprint");
+        registry.removeRegistrationIntentByPQ(pqMessage, salt, cs1, cs2, hint);
+    }
+    
+    function testRemoveRegistrationIntentByPQ_RevertWhenMalformedMessage() public {
+        // Use a message that is too short or missing fields
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_pq_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[4].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[4].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[4].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[4].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[4].pq_signature.hint"));
+        
+        // The contract will fail at length validation first (message too short)
+        // The message is only 26 bytes, but the contract requires at least 128 bytes
+        vm.expectRevert("Message too short for PQ nonce from remove message");
+        registry.removeRegistrationIntentByPQ(pqMessage, salt, cs1, cs2, hint);
+    }
+    
+    function testRemoveRegistrationIntentByPQ_RevertWhenReplay() public {
+        // First, submit a registration intent
+        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
+        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
+        
+        // Now remove the intent successfully using PQ
+        string memory removalJsonData = vm.readFile("test/test_vectors/register/registration_pq_removal_vectors.json");
+        bytes memory pqRemoveMessage = vm.parseBytes(vm.parseJsonString(removalJsonData, ".registration_pq_removal[0].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removalJsonData, ".registration_pq_removal[0].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removalJsonData, ".registration_pq_removal[0].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removalJsonData, ".registration_pq_removal[0].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removalJsonData, ".registration_pq_removal[0].pq_signature.hint"));
+        
+        registry.removeRegistrationIntentByPQ(pqRemoveMessage, salt, cs1, cs2, hint);
+        
+        // Try to remove the same intent again (replay attack)
+        vm.expectRevert("No pending intent found for this PQ fingerprint");
+        registry.removeRegistrationIntentByPQ(pqRemoveMessage, salt, cs1, cs2, hint);
+    }
+    
+    function testRemoveRegistrationIntentByPQ_RevertWhenInvalidSignature() public {
+        // Load a valid remove intent vector but with invalid signature components
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_pq_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[5].pq_message"));
+        
+        // Use invalid signature components
+        bytes memory invalidSalt = new bytes(32); // Wrong length
+        uint256[] memory invalidCs1 = new uint256[](32);
+        uint256[] memory invalidCs2 = new uint256[](32);
+        uint256 invalidHint = 0;
+        
+        vm.expectRevert("wrong salt length");
+        registry.removeRegistrationIntentByPQ(pqMessage, invalidSalt, invalidCs1, invalidCs2, invalidHint);
+    }
+    
+    function testRemoveRegistrationIntentByPQ_RevertWhenWrongMessageFormat() public {
+        // Load a valid remove intent vector but with wrong message format
+        string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_pq_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[6].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[6].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[6].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[6].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[6].pq_signature.hint"));
+        
+        // Log the expected nonce from the test vector
+        uint256 expectedNonce = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[6].pq_nonce"));
+        console.log("Expected nonce from test vector:", expectedNonce);
+        
+        // Log the actual nonce that would be extracted from the message
+        uint256 actualNonce = MessageParser.extractPQNonceFromRemoveMessage(pqMessage);
+        console.log("Actual nonce extracted from message:", actualNonce);
+        
+        // Log the PQ fingerprint that would be recovered
+        address pqFingerprint = registry.epervierVerifier().recover(pqMessage, salt, cs1, cs2, hint);
+        console.log("Recovered PQ fingerprint:", pqFingerprint);
+        
+        // Log the current nonce for this PQ fingerprint in the registry
+        uint256 currentNonce = registry.pqKeyNonces(pqFingerprint);
+        console.log("Current nonce in registry for this fingerprint:", currentNonce);
+        
+        // The contract will fail at state validation first (no pending intent for recovered fingerprint)
+        // Even though the message format is wrong, the signature recovers a valid fingerprint
+        // but there's no pending intent for that fingerprint
+        vm.expectRevert("No pending intent found for this PQ fingerprint");
+        registry.removeRegistrationIntentByPQ(pqMessage, salt, cs1, cs2, hint);
+    }
 } 

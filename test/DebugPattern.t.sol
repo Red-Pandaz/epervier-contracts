@@ -6,11 +6,12 @@ import "../src/PQRegistry.sol";
 import "../src/libraries/MessageParser.sol";
 
 contract DebugPatternTest is Test {
+
     function testDebugPattern() public {
         // Load the test vector
         string memory vectorsJson = vm.readFile("test/test_vectors/advanced/test4_pq_cancels_change_eth_vectors.json");
         bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(vectorsJson, ".change_eth_address_intent[1].pq_message"));
-        
+       
         // Check the first 100 bytes as hex
         console.log("Message length:", pqMessage.length);
         console.log("First 32 bytes (DOMAIN_SEPARATOR):");
@@ -51,7 +52,7 @@ contract DebugPatternTest is Test {
             uint8 v,
             bytes32 r,
             bytes32 s
-        ) = MessageParser.parsePQChangeETHAddressIntentMessage(pqMessage);
+        ) = MessageParser.parsePQChangeETHAddressIntentMessage(pqMessage, 0x07668882b5c3598c149b213b1c16ab1dd94b45bc4837b468e006b97caef5df92);
         
         console.log("Parse successful");
         console.log("Old ETH Address:", oldEthAddress);

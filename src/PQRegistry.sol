@@ -234,7 +234,7 @@ contract PQRegistry {
             bytes32 r,
             bytes32 s,
             uint256 pqNonce
-        ) = MessageParser.parsePQRegistrationConfirmationMessage(pqMessage);
+        ) = MessageParser.parsePQRegistrationConfirmationMessage(pqMessage, DOMAIN_SEPARATOR);
         
         // STEP 4: Parse the base ETH message to get pqFingerprint and ethNonce
         (address pqFingerprint, uint256 ethNonce) = MessageParser.parseBaseETHRegistrationConfirmationMessage(baseETHMessage);
@@ -285,6 +285,7 @@ contract PQRegistry {
         // STEP 11: Clear the pending intent and bidirectional mapping
         delete pendingIntents[ethAddress];
         delete pqFingerprintToPendingIntentAddress[recoveredFingerprint];
+        
         
         // STEP 12: Increment nonces
         pqKeyNonces[recoveredFingerprint]++;
@@ -373,6 +374,7 @@ contract PQRegistry {
         // STEP 3: State validation
         address intentAddress = pqFingerprintToPendingIntentAddress[recoveredFingerprint];
         require(intentAddress != address(0), "No pending intent found for this PQ fingerprint");
+        console.log("DEBUG: intentAddress:", intentAddress);
         
         Intent storage intent = pendingIntents[intentAddress];
         require(intent.timestamp != 0, "No pending intent found for referenced ETH Address");
@@ -386,14 +388,17 @@ contract PQRegistry {
         // STEP 5: Nonce validation
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         
-        // STEP 6: Verify the PQ message contains the correct removal text
+        // STEP 6: Validate domain separator in PQ message
+        require(MessageParser.validateDomainSeparator(pqMessage, DOMAIN_SEPARATOR), "Invalid domain separator in PQ message");
+        
+        // STEP 7: Verify the PQ message contains the correct removal text
         require(MessageParser.validatePQRemoveIntentMessage(pqMessage), "Invalid PQ removal message");
         
-        // STEP 7: Clear both mappings
+        // STEP 8: Clear both mappings
         delete pendingIntents[intentAddress];
         delete pqFingerprintToPendingIntentAddress[recoveredFingerprint];
         
-        // STEP 8: Increment nonce
+        // STEP 9: Increment nonce
         pqKeyNonces[recoveredFingerprint]++;
         
         emit RegistrationIntentRemoved(intentAddress);
@@ -516,7 +521,7 @@ contract PQRegistry {
         
         // STEP 3: Parse the PQ remove change intent message
         // Format: DOMAIN_SEPARATOR + "Remove change intent from ETH Address " + ethAddress + pqNonce
-        (address ethAddress, uint256 pqNonce) = MessageParser.parsePQRemoveChangeIntentMessage(pqMessage);
+        (address ethAddress, uint256 pqNonce) = MessageParser.parsePQRemoveChangeIntentMessage(pqMessage, DOMAIN_SEPARATOR);
         
         // STEP 4: State validation
         ChangeETHAddressIntent storage intent = changeETHAddressIntents[recoveredFingerprint];
@@ -562,7 +567,7 @@ contract PQRegistry {
         address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
         
         // STEP 2: Parse the PQ change address intent message
-        (address oldEthAddress, address newEthAddress, uint256 pqNonce, bytes memory baseETHMessage, uint8 v, bytes32 r, bytes32 s) = MessageParser.parsePQChangeETHAddressIntentMessage(pqMessage);
+        (address oldEthAddress, address newEthAddress, uint256 pqNonce, bytes memory baseETHMessage, uint8 v, bytes32 r, bytes32 s) = MessageParser.parsePQChangeETHAddressIntentMessage(pqMessage, DOMAIN_SEPARATOR);
         
         // STEP 3: Parse the base ETH message
         (address ethMessagePqFingerprint, address ethMessageNewEthAddress, uint256 ethNonce) = MessageParser.parseBaseETHChangeETHAddressIntentMessage(baseETHMessage);
@@ -648,7 +653,7 @@ contract PQRegistry {
         ) = MessageParser.parseETHChangeETHAddressConfirmationMessage(ethMessage);
         
         // STEP 2: Parse the base PQ change address confirmation message
-        (address oldEthAddress, address newEthAddress, uint256 pqNonce) = MessageParser.parseBasePQChangeETHAddressConfirmMessage(basePQMessage);
+        (address oldEthAddress, address newEthAddress, uint256 pqNonce) = MessageParser.parseBasePQChangeETHAddressConfirmMessage(basePQMessage, DOMAIN_SEPARATOR);
         
         // STEP 3: Verify the ETH signature using EIP712 (use old ETH address from PQ message)
         // Convert cs1 and cs2 to fixed-size arrays for EIP-712 struct hash
@@ -762,7 +767,7 @@ contract PQRegistry {
             uint8 v,
             bytes32 r,
             bytes32 s
-        ) = MessageParser.parsePQUnregistrationIntentMessage(pqMessage);
+        ) = MessageParser.parsePQUnregistrationIntentMessage(pqMessage, DOMAIN_SEPARATOR);
         
         // STEP 3: Parse the base ETH message to get PQ fingerprint and ETH nonce
         (address ethMessagePqFingerprint, uint256 ethNonce) = MessageParser.parseBaseETHUnregistrationIntentMessage(baseETHMessage);
@@ -914,7 +919,7 @@ contract PQRegistry {
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 5: Parse the base PQ message
-        (address basePQEthAddress, ) = MessageParser.parseBasePQUnregistrationConfirmMessage(basePQMessage);
+        (address basePQEthAddress, ) = MessageParser.parseBasePQUnregistrationConfirmMessage(basePQMessage, DOMAIN_SEPARATOR);
         console.log("DEBUG: Contract basePQEthAddress:", uint256(uint160(basePQEthAddress)));
         
         // STEP 6: Cross-reference validationETH Address mismatch: PQ message vs stored registration
@@ -980,7 +985,7 @@ contract PQRegistry {
         uint256 pqNonce = MessageParser.extractPQNonceFromRemoveMessage(pqMessage);
         
         // STEP 3: Parse the ETH Address from the PQ message
-        (address intentAddress, ) = MessageParser.parsePQRemoveUnregistrationIntentMessage(pqMessage);
+        (address intentAddress, ) = MessageParser.parsePQRemoveUnregistrationIntentMessage(pqMessage, DOMAIN_SEPARATOR);
         require(intentAddress != address(0), "Invalid intent address");
         
         // STEP 4: State validation

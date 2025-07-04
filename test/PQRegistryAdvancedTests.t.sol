@@ -17,6 +17,8 @@ contract PQRegistryAdvancedTests is Test {
     using ECDSA for bytes32;
     using Strings for string;
     
+
+    
     PQRegistry public registry;
     ZKNOX_epervier public epervierVerifier;
     MockConsole public mockConsole;
@@ -228,7 +230,7 @@ contract PQRegistryAdvancedTests is Test {
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(advancedJson, ".registration_confirmation_nonce3[0].pq_signature.hint"));
         
         // Log the ETH address from the PQ message
-        (address ethAddressFromPQMessage,,,,,) = MessageParser.parsePQRegistrationConfirmationMessage(confirmMessage);
+        (address ethAddressFromPQMessage,,,,,) = MessageParser.parsePQRegistrationConfirmationMessage(confirmMessage, registry.DOMAIN_SEPARATOR());
         console.log("ETH address from PQ message:", ethAddressFromPQMessage);
         console.log("Expected ETH address:", alice.ethAddress);
         
@@ -732,7 +734,7 @@ contract PQRegistryAdvancedTests is Test {
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_signature.hint"));
         
         // Debug: Parse the PQ message to extract ETH address using MessageParser
-        (address ethAddressInPQMessage, , , , , ) = MessageParser.parsePQRegistrationConfirmationMessage(confirmMessage);
+        (address ethAddressInPQMessage, , , , , ) = MessageParser.parsePQRegistrationConfirmationMessage(confirmMessage, registry.DOMAIN_SEPARATOR());
         console.log("DEBUG: ETH address in PQ message:", ethAddressInPQMessage);
         console.log("DEBUG: Expected ETH address (Charlie):", charlie.ethAddress);
         console.log("DEBUG: ETH addresses match:", ethAddressInPQMessage == charlie.ethAddress);
