@@ -43,7 +43,7 @@
         // The signature will be validated during confirmation by comparing fingerprints
         
         // FOURTH: Parse the base PQ message using our standardized schema
-        (address intentAddress, uint256 pqNonce) = MessageParser.parseBasePQRegistrationIntentMessage(basePQMessage);
+        (address intentAddress, uint256 pqNonce) = MessageParser.parseBasePQRegistrationIntentMessage(basePQMessage, DOMAIN_SEPARATOR);
         emit DebugParseStep("recovered_eth_address", uint256(uint160(recoveredETHAddress)));
         emit DebugParseStep("parsed_intent_address", uint256(uint160(intentAddress)));
         emit DebugParseStep("current_eth_nonce", ethNonces[intentAddress]);
@@ -122,7 +122,7 @@
             bytes32 r,
             bytes32 s,
             uint256 pqNonce
-        ) = MessageParser.parsePQRegistrationConfirmationMessage(pqMessage);
+        ) = MessageParser.parsePQRegistrationConfirmationMessage(pqMessage, DOMAIN_SEPARATOR);
         
         // Add debug logging to see the PQ message structure
         emit DebugParseStep("pq_message_total_length", pqMessage.length);

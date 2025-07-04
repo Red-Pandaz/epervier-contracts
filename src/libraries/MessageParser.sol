@@ -13,10 +13,18 @@ library MessageParser {
      * @dev Parse a BasePQRegistrationIntentMessage according to our schema
      * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + ethAddress + pqNonce
      */
-    function parseBasePQRegistrationIntentMessage(bytes memory message) public pure returns (
+    function parseBasePQRegistrationIntentMessage(bytes memory message, bytes32 domainSeparator) public pure returns (
         address ethAddress,
         uint256 pqNonce
     ) {
+        // Extract domain separator (first 32 bytes) and validate it
+        require(message.length >= 32, "Message too short for domain separator");
+        bytes32 messageDomainSeparator;
+        assembly {
+            messageDomainSeparator := mload(add(message, 32))
+        }
+        require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
+        
         bytes memory pattern = "Intent to pair ETH Address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
@@ -594,6 +602,7 @@ library MessageParser {
             sBytes[i] = message[244 + i];
         }
         s = bytes32(sBytes);
+        
         
         // Extract pqNonce (offset 276, length 32)
         bytes memory nonceBytes = new bytes(32);

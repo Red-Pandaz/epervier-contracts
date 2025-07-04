@@ -154,7 +154,7 @@ contract PQRegistry {
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
         
         // STEP 3: Parse the base PQ message
-        (address intentAddress, uint256 pqNonce) = MessageParser.parseBasePQRegistrationIntentMessage(basePQMessage);
+        (address intentAddress, uint256 pqNonce) = MessageParser.parseBasePQRegistrationIntentMessage(basePQMessage, DOMAIN_SEPARATOR);
         
         // Debug logging for address comparison
         emit DebugParseStep("recovered_eth_address", uint256(uint160(recoveredETHAddress)));
@@ -171,7 +171,11 @@ contract PQRegistry {
         // STEP 5: Cross-reference validation
         require(intentAddress == recoveredETHAddress, "ETH signature must be from intent address");
         
-        // STEP 6: State validation
+        // STEP 6: State validation - Check for already registered addresses
+        require(epervierKeyToAddress[recoveredFingerprint] == address(0), "PQ fingerprint already registered");
+        require(addressToEpervierKey[recoveredETHAddress] == address(0), "ETH address already registered");
+        
+        // STEP 7: State validation - Check for pending intents
         require(pendingIntents[recoveredETHAddress].timestamp == 0, "ETH Address has pending registration intent");
         require(ethAddressToChangeIntentFingerprint[recoveredETHAddress] == address(0), "ETH Address has pending change intent");
         require(unregistrationIntents[recoveredETHAddress].timestamp == 0 && ethAddressToUnregistrationFingerprint[recoveredETHAddress] == address(0), "ETH Address has pending unregistration intent");
@@ -190,17 +194,17 @@ contract PQRegistry {
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[intentAddress] == ethNonce, "Invalid ETH nonce");
         
-        // STEP 8: Store the intent
+        // STEP 9: Store the intent
         pendingIntents[intentAddress] = Intent({
             pqFingerprint: recoveredFingerprint,
             intentMessage: basePQMessage,
             timestamp: block.timestamp
         });
         
-        // STEP 9: Store the bidirectional mapping
+        // STEP 10: Store the bidirectional mapping
         pqFingerprintToPendingIntentAddress[recoveredFingerprint] = intentAddress;
         
-        // STEP 10: Increment nonces
+        // STEP 11: Increment nonces
         ethNonces[intentAddress]++;
         pqKeyNonces[recoveredFingerprint]++;
         
