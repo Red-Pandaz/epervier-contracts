@@ -13,5 +13,4 @@ docs/
 # Dotenv file
 .env
 
-test/test_vectors/*
 test/python/vector_generators/sig 

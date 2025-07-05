@@ -12,9 +12,13 @@ from eth_hash.auto import keccak
 # Add the project root to the path
 project_root = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(project_root / "ETHFALCON" / "python-ref"))
+sys.path.append(str(project_root / "test" / "python"))
 
-# Domain separator (same as in the contract)
-DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
+# Import the correct domain separator
+from eip712_config import DOMAIN_SEPARATOR
+
+# Convert the domain separator from hex string to bytes
+DOMAIN_SEPARATOR_BYTES = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
 
 def get_actor_config():
     """Load actor configuration from JSON file"""
@@ -120,7 +124,7 @@ def generate_cancel_change_eth_address_intent_vectors():
 
         # Create the PQ cancel message and sign it with PQ key
         # Use pending_change_address instead of current_eth_address
-        pq_message = create_cancel_change_eth_address_message(DOMAIN_SEPARATOR, pending_change_address, pq_nonce)
+        pq_message = create_cancel_change_eth_address_message(DOMAIN_SEPARATOR_BYTES, pending_change_address, pq_nonce)
         pq_signature = sign_pq_message(pq_message, current_actor["pq_private_key_file"])
         
         if pq_signature is None:

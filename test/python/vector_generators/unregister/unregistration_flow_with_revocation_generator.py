@@ -15,8 +15,13 @@ import traceback
 # Add the project root to the path
 project_root = Path(__file__).resolve().parents[4]  # epervier-registry
 sys.path.append(str(project_root))
+sys.path.append(str(project_root / "test" / "python"))
 
-DOMAIN_SEPARATOR = bytes.fromhex("5f5d847b41fe04c02ecf9746150300028bfc195e7981ae8fe39fe8b7a745650f")
+# Import the correct domain separator
+from eip712_config import DOMAIN_SEPARATOR
+
+# Convert the domain separator from hex string to bytes
+DOMAIN_SEPARATOR_BYTES = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
 
 def get_actor_config():
     config_file = project_root / "test" / "test_keys" / "actors_config.json"
@@ -149,9 +154,9 @@ def generate_unregistration_flow_with_revocation_vectors():
         # Step 1: PQ initiates unregistration intent (PQ nonce 0, ETH nonce 0)
         pq_nonce_0 = 0
         eth_nonce_0 = 0
-        base_pq_message_0 = create_base_pq_unregistration_intent_message(DOMAIN_SEPARATOR, eth_address, pq_nonce_0)
+        base_pq_message_0 = create_base_pq_unregistration_intent_message(DOMAIN_SEPARATOR_BYTES, eth_address, pq_nonce_0)
         pq_message_0 = create_pq_unregistration_intent_message(
-            DOMAIN_SEPARATOR, eth_address, base_pq_message_0, 0, 0, 0, pq_nonce_0
+            DOMAIN_SEPARATOR_BYTES, eth_address, base_pq_message_0, 0, 0, 0, pq_nonce_0
         )
         pq_signature_0 = sign_pq_message(pq_message_0, pq_private_key_file)
         if pq_signature_0 is None:
@@ -159,7 +164,7 @@ def generate_unregistration_flow_with_revocation_vectors():
             continue
         # Step 2: PQ revokes unregistration intent (PQ nonce 3, after registration and unregistration intent)
         pq_nonce_1 = 3
-        pq_remove_message = create_pq_remove_unregistration_intent_message(DOMAIN_SEPARATOR, eth_address, pq_nonce_1)
+        pq_remove_message = create_pq_remove_unregistration_intent_message(DOMAIN_SEPARATOR_BYTES, eth_address, pq_nonce_1)
         pq_remove_signature = sign_pq_message(pq_remove_message, pq_private_key_file)
         if pq_remove_signature is None:
             print(f"Failed to generate PQ remove signature for {actor_name}")
@@ -167,9 +172,9 @@ def generate_unregistration_flow_with_revocation_vectors():
         # Step 3: PQ retries unregistration intent (PQ nonce 2, ETH nonce 1)
         pq_nonce_2 = 2
         eth_nonce_1 = 1
-        base_pq_message_1 = create_base_pq_unregistration_intent_message(DOMAIN_SEPARATOR, eth_address, pq_nonce_2)
+        base_pq_message_1 = create_base_pq_unregistration_intent_message(DOMAIN_SEPARATOR_BYTES, eth_address, pq_nonce_2)
         pq_message_1 = create_pq_unregistration_intent_message(
-            DOMAIN_SEPARATOR, eth_address, base_pq_message_1, 0, 0, 0, pq_nonce_2
+            DOMAIN_SEPARATOR_BYTES, eth_address, base_pq_message_1, 0, 0, 0, pq_nonce_2
         )
         pq_signature_1 = sign_pq_message(pq_message_1, pq_private_key_file)
         if pq_signature_1 is None:
@@ -178,10 +183,10 @@ def generate_unregistration_flow_with_revocation_vectors():
         # Step 4: ETH confirms unregistration (ETH nonce 2, PQ nonce 3)
         eth_nonce_2 = 2
         pq_nonce_3 = 3
-        base_eth_confirm_message = create_base_eth_unregistration_confirmation_message(DOMAIN_SEPARATOR, pq_fingerprint, eth_nonce_2)
+        base_eth_confirm_message = create_base_eth_unregistration_confirmation_message(DOMAIN_SEPARATOR_BYTES, pq_fingerprint, eth_nonce_2)
         eth_confirm_signature = sign_eth_message(base_eth_confirm_message, eth_private_key)
         pq_confirm_message = create_pq_unregistration_confirmation_message(
-            DOMAIN_SEPARATOR, eth_address, base_eth_confirm_message,
+            DOMAIN_SEPARATOR_BYTES, eth_address, base_eth_confirm_message,
             eth_confirm_signature["v"], eth_confirm_signature["r"], eth_confirm_signature["s"], pq_nonce_3
         )
         pq_confirm_signature = sign_pq_message(pq_confirm_message, pq_private_key_file)

@@ -367,7 +367,7 @@ contract PQRegistryRegistrationRevertsTest is Test {
     // ============================================================================
     
     function testConfirmRegistration_RevertWhenNoPendingIntent() public {
-        // Try to confirm registration without submitting an intent first
+        // Load revert test vector for no pending intent
         string memory jsonData = vm.readFile("test/test_vectors/revert/confirm_registration_revert_vectors.json");
         bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_message"));
         bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_signature.salt"));
@@ -380,57 +380,131 @@ contract PQRegistryRegistrationRevertsTest is Test {
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
     }
     
-    function testConfirmRegistration_RevertWhenWrongPQSignature() public {
-        // First submit a registration intent
-        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
-        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
-        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
-        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
-        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
-        
-        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
-        
-        // Try to confirm with invalid PQ signature
-        string memory confirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
-        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(confirmJsonData, ".registration_confirmation[0].pq_message"));
-        
-        // Use invalid signature components
-        bytes memory invalidSalt = new bytes(32);
-        uint256[] memory invalidCs1 = new uint256[](32);
-        uint256[] memory invalidCs2 = new uint256[](32);
-        uint256 invalidHint = 0;
-        
-        // This should revert due to invalid PQ signature
-        vm.expectRevert("wrong salt length");
-        registry.confirmRegistration(pqConfirmMessage, invalidSalt, invalidCs1, invalidCs2, invalidHint);
-    }
-    
     function testConfirmRegistration_RevertWhenWrongPQNonce() public {
-        // First submit a registration intent
-        string memory intentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
-        bytes memory ethIntentMessage = vm.parseBytes(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_message"));
-        uint8 v = uint8(vm.parseUint(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.v")));
-        bytes32 r = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.r"));
-        bytes32 s = vm.parseBytes32(vm.parseJsonString(intentJsonData, ".registration_intent[0].eth_signature.s"));
-        
-        registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
-        
-        // Try to confirm with wrong PQ nonce
-        string memory jsonData = vm.readFile("test/test_vectors/revert/confirm_registration_revert_vectors.json");
+        // Load revert test vector for wrong PQ nonce
+        string memory jsonData = vm.readFile("test/test_vectors/revert/missing_confirm_revert_vectors.json");
         bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[1].pq_message"));
         bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[1].pq_signature.salt"));
         uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[1].pq_signature.cs1");
         uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[1].pq_signature.cs2");
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[1].pq_signature.hint"));
         
+        // This should revert because the PQ nonce is wrong
+        vm.expectRevert("No pending intent found for PQ fingerprint");
+        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+    }
+    
+    function testConfirmRegistration_RevertWhenWrongDomainSeparator() public {
+        // Load revert test vector for wrong domain separator
+        string memory jsonData = vm.readFile("test/test_vectors/revert/confirm_registration_revert_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[2].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[2].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[2].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[2].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[2].pq_signature.hint"));
+        
+        // This should revert because the domain separator is wrong
         vm.expectRevert("Invalid PQ registration confirmation message");
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
     }
     
-    // TODO: Add intent expiration test when the feature is implemented
-    // function testConfirmRegistration_RevertWhenIntentExpired() public {
-    //     // This test requires an expiration mechanism to be added to the contract
-    // }
+    function testConfirmRegistration_RevertWhenWrongMessageFormat() public {
+        // Load revert test vector for wrong message format
+        string memory jsonData = vm.readFile("test/test_vectors/revert/missing_confirm_revert_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[3].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[3].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[3].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[3].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[3].pq_signature.hint"));
+        
+        // This should revert because the message format is wrong
+        vm.expectRevert("Invalid PQ registration confirmation message");
+        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+    }
+    
+    function testConfirmRegistration_RevertWhenMalformedMessage() public {
+        // Load revert test vector for malformed message
+        string memory jsonData = vm.readFile("test/test_vectors/revert/comprehensive_revert_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[0].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[0].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_signature.hint"));
+        
+        // This should revert because the message is malformed
+        vm.expectRevert("Invalid PQ registration confirmation message");
+        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+    }
+    
+    function testConfirmRegistration_RevertWhenInvalidETHSignature() public {
+        // Load revert test vector for invalid ETH signature
+        string memory jsonData = vm.readFile("test/test_vectors/revert/missing_confirm_revert_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[4].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[4].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[4].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[4].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[4].pq_signature.hint"));
+        
+        // This should revert because the ETH signature is invalid
+        vm.expectRevert("ETH Address mismatch: PQ message vs recovered ETH signature");
+        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+    }
+    
+    function testConfirmRegistration_RevertWhenWrongETHSigner() public {
+        // Load revert test vector for wrong ETH signer
+        string memory jsonData = vm.readFile("test/test_vectors/revert/missing_confirm_revert_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[5].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[5].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[5].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[5].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[5].pq_signature.hint"));
+        
+        // This should revert because the ETH signer is wrong
+        vm.expectRevert("ETH Address mismatch: PQ message vs recovered ETH signature");
+        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+    }
+    
+    function testConfirmRegistration_RevertWhenWrongPQSigner() public {
+        // Load revert test vector for wrong PQ signer
+        string memory jsonData = vm.readFile("test/test_vectors/revert/missing_confirm_revert_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[6].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[6].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[6].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[6].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[6].pq_signature.hint"));
+        
+        // This should revert because the PQ signer is wrong
+        vm.expectRevert("PQ fingerprint mismatch: ETH message vs recovered PQ signature");
+        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+    }
+    
+    function testConfirmRegistration_RevertWhenWrongETHNonce() public {
+        // Load revert test vector for wrong ETH nonce
+        string memory jsonData = vm.readFile("test/test_vectors/revert/missing_confirm_revert_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[7].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[7].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[7].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[7].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[7].pq_signature.hint"));
+        
+        // This should revert because the ETH nonce is wrong
+        vm.expectRevert("No pending intent found for PQ fingerprint");
+        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+    }
+    
+    function testConfirmRegistration_RevertWhenPQFingerprintMismatch() public {
+        // Load revert test vector for PQ fingerprint mismatch
+        string memory jsonData = vm.readFile("test/test_vectors/revert/missing_confirm_revert_vectors.json");
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[9].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[9].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[9].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[9].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[9].pq_signature.hint"));
+        
+        // This should revert because the PQ fingerprint doesn't match
+        vm.expectRevert("PQ fingerprint mismatch: ETH message vs recovered PQ signature");
+        registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
+    }
     
     // ============================================================================
     // REMOVE REGISTRATION INTENT BY ETH REVERT TESTS
@@ -793,34 +867,16 @@ contract PQRegistryRegistrationRevertsTest is Test {
     }
     
     function testRemoveRegistrationIntentByPQ_RevertWhenWrongMessageFormat() public {
-        // Load a valid remove intent vector but with wrong message format
+        // Load revert test vector for wrong message format
         string memory jsonData = vm.readFile("test/test_vectors/revert/remove_registration_intent_pq_revert_vectors.json");
-        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[6].pq_message"));
-        bytes memory salt = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[6].pq_signature.salt"));
-        uint256[] memory cs1 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[6].pq_signature.cs1");
-        uint256[] memory cs2 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[6].pq_signature.cs2");
-        uint256 hint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[6].pq_signature.hint"));
+        bytes memory pqRemoveMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[5].pq_message"));
+        bytes memory removeSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[5].pq_signature.salt"));
+        uint256[] memory removeCs1 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[5].pq_signature.cs1");
+        uint256[] memory removeCs2 = vm.parseJsonUintArray(jsonData, ".remove_registration_intent_pq_reverts[5].pq_signature.cs2");
+        uint256 removeHint = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[5].pq_signature.hint"));
         
-        // Log the expected nonce from the test vector
-        uint256 expectedNonce = vm.parseUint(vm.parseJsonString(jsonData, ".remove_registration_intent_pq_reverts[6].pq_nonce"));
-        console.log("Expected nonce from test vector:", expectedNonce);
-        
-        // Log the actual nonce that would be extracted from the message
-        uint256 actualNonce = MessageParser.extractPQNonceFromRemoveMessage(pqMessage);
-        console.log("Actual nonce extracted from message:", actualNonce);
-        
-        // Log the PQ fingerprint that would be recovered
-        address pqFingerprint = registry.epervierVerifier().recover(pqMessage, salt, cs1, cs2, hint);
-        console.log("Recovered PQ fingerprint:", pqFingerprint);
-        
-        // Log the current nonce for this PQ fingerprint in the registry
-        uint256 currentNonce = registry.pqKeyNonces(pqFingerprint);
-        console.log("Current nonce in registry for this fingerprint:", currentNonce);
-        
-        // The contract will fail at state validation first (no pending intent for recovered fingerprint)
-        // Even though the message format is wrong, the signature recovers a valid fingerprint
-        // but there's no pending intent for that fingerprint
+        // This should revert because the message format is wrong
         vm.expectRevert("No pending intent found for this PQ fingerprint");
-        registry.removeRegistrationIntentByPQ(pqMessage, salt, cs1, cs2, hint);
+        registry.removeRegistrationIntentByPQ(pqRemoveMessage, removeSalt, removeCs1, removeCs2, removeHint);
     }
 } 

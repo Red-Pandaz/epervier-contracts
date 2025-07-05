@@ -29,79 +29,67 @@ TEST_VECTORS_DIR = PROJECT_ROOT / "test/test_vectors"
 # Use the virtual environment Python for running generators
 VENV_PYTHON = PROJECT_ROOT / "ETHFALCON/python-ref/myenv/bin/python3"
 
-# Define all vector generators in dependency order
+# Vector generators for main test vectors
 VECTOR_GENERATORS = [
     {
-        "name": "Registration Intent",
+        "name": "Registration Intent Vectors",
         "script": "register/registration_intent_generator.py",
         "output": "register/registration_intent_vectors.json",
-        "description": "ETH-controlled registration intent messages"
+        "description": "Test vectors for submitRegistrationIntent function"
     },
     {
-        "name": "Registration Confirmation", 
+        "name": "Registration Confirmation Vectors",
         "script": "register/registration_confirmation_generator.py",
         "output": "register/registration_confirmation_vectors.json",
-        "description": "PQ-controlled registration confirmation messages"
+        "description": "Test vectors for confirmRegistration function"
     },
     {
-        "name": "Registration ETH Removal",
-        "script": "register/registration_intent_eth_removal_generator.py", 
-        "output": "register/registration_eth_removal_vectors.json",
-        "description": "ETH-controlled registration intent removal"
+        "name": "Registration Removal Vectors",
+        "script": "register/registration_intent_eth_removal_generator.py",
+        "output": "register/registration_removal_vectors.json",
+        "description": "Test vectors for removeRegistrationIntentByETH function"
     },
     {
-        "name": "Registration PQ Removal",
-        "script": "register/registration_intent_pq_removal_generator.py",
-        "output": "register/registration_pq_removal_vectors.json", 
-        "description": "PQ-controlled registration intent removal"
-    },
-    {
-        "name": "Change ETH Address Intent",
+        "name": "Change ETH Address Intent Vectors",
         "script": "change_eth/change_eth_address_intent_generator.py",
         "output": "change_eth/change_eth_address_intent_vectors.json",
-        "description": "PQ-controlled change ETH address intent messages"
+        "description": "Test vectors for submitChangeETHAddressIntent function"
     },
     {
-"name": "Change ETH Address Confirmation",
+        "name": "Change ETH Address Confirmation Vectors",
         "script": "change_eth/change_eth_address_confirmation_generator.py",
         "output": "change_eth/change_eth_address_confirmation_vectors.json",
-        "description": "ETH-controlled change ETH address confirmation messages"
+        "description": "Test vectors for confirmChangeETHAddress function"
     },
     {
-        "name": "Change ETH Address ETH Removal",
+        "name": "Change ETH Address Removal Vectors",
         "script": "change_eth/change_eth_address_intent_eth_removal_generator.py",
-        "output": "change_eth/change_eth_address_cancel_eth_vectors.json",
-        "description": "ETH-controlled change ETH address intent removal"
+        "output": "change_eth/change_eth_address_removal_vectors.json",
+        "description": "Test vectors for removeChangeETHAddressIntentByETH function"
     },
     {
-        "name": "Change ETH Address PQ Removal", 
-        "script": "change_eth/change_eth_address_intent_pq_removal_generator.py",
-        "output": "change_eth/change_eth_address_cancel_pq_vectors.json",
-        "description": "PQ-controlled change ETH address intent removal"
-    },
-    {
-        "name": "Unregistration Intent",
+        "name": "Unregistration Intent Vectors",
         "script": "unregister/unregistration_intent_generator.py",
         "output": "unregister/unregistration_intent_vectors.json",
-        "description": "PQ-controlled unregistration intent messages"
+        "description": "Test vectors for submitUnregistrationIntent function"
     },
     {
-        "name": "Unregistration Confirmation",
-        "script": "unregister/unregistration_confirmation_generator.py", 
+        "name": "Unregistration Confirmation Vectors",
+        "script": "unregister/unregistration_confirmation_generator.py",
         "output": "unregister/unregistration_confirmation_vectors.json",
-        "description": "ETH-controlled unregistration confirmation messages"
+        "description": "Test vectors for confirmUnregistration function"
     },
     {
-        "name": "Unregistration Removal",
+        "name": "Unregistration Removal Vectors",
         "script": "unregister/unregistration_flow_with_revocation_generator.py",
         "output": "unregister/unregistration_removal_vectors.json",
-        "description": "PQ-controlled unregistration intent removal"
+        "description": "Test vectors for removeUnregistrationIntentByETH function"
     },
     {
-        "name": "Advanced Testing",
+        "name": "Advanced Testing Vectors",
         "script": "advanced/consolidated_advanced_vector_generator.py",
-        "output": "advanced",
-        "description": "Advanced test scenario vectors for complex flows"
+        "output": "advanced/advanced_testing_vectors.json",
+        "description": "Advanced test vectors for complex scenarios"
     }
 ]
 

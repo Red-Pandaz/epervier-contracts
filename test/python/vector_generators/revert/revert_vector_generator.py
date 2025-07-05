@@ -659,6 +659,68 @@ class RevertVectorGenerator:
         })
         print("  [OK] Vector: wrong_domain_separator_pq_confirm")
         
+        # Test 4: PQ fingerprint mismatch (should fail at fingerprint check, not nonce)
+        print("Test 4: PQ fingerprint mismatch")
+        bob = self.actors["bob"]
+        alice = self.actors["alice"]
+        eth_nonce = 1  # After intent submission, Alice's ETH nonce is 1
+        pq_nonce = 0   # Bob's PQ nonce is 0 (not Alice's)
+        
+        # Create PQ confirmation message with Bob's key (wrong fingerprint)
+        pq_confirm_message_mismatch = create_pq_confirmation_message(alice["eth_address"], pq_nonce)
+        pq_confirm_signature_mismatch = sign_with_pq_key(pq_confirm_message_mismatch, bob["pq_private_key_file"])
+        
+        # Build baseETHMessage (92 bytes)
+        base_pattern = b"Confirm bonding to Epervier Fingerprint "
+        pq_fingerprint_bytes = bytes.fromhex(bob["pq_fingerprint"][2:])  # Bob's fingerprint (wrong)
+        eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
+        base_eth_message = base_pattern + pq_fingerprint_bytes + eth_nonce_bytes
+        
+        # Sign baseETHMessage with Alice's ETH key (correct signer, but wrong fingerprint in message)
+        eth_sig = sign_with_eth_key(base_eth_message, alice["eth_private_key"], 
+                                   pq_confirm_signature_mismatch["salt"], 
+                                   pq_confirm_signature_mismatch["cs1"], 
+                                   pq_confirm_signature_mismatch["cs2"], 
+                                   pq_confirm_signature_mismatch["hint"], 
+                                   eth_nonce, 
+                                   pq_confirm_message_mismatch)
+        
+        # Construct the complete PQRegistrationConfirmationMessage (272 bytes)
+        DOMAIN_SEPARATOR_BYTES = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+        pattern = b"Confirm bonding to ETH Address "
+        eth_address_bytes = bytes.fromhex(alice["eth_address"][2:])
+        
+        # Build the complete message: DOMAIN_SEPARATOR(32) + pattern(31) + ethAddress(20) + baseETHMessage(92) + v(1) + r(32) + s(32) + pqNonce(32) = 272 bytes
+        pq_registration_confirmation_message = (
+            DOMAIN_SEPARATOR_BYTES +  # 32 bytes
+            pattern +                  # 31 bytes
+            eth_address_bytes +        # 20 bytes
+            base_eth_message +         # 92 bytes
+            eth_sig["v"].to_bytes(1, 'big') +  # 1 byte
+            eth_sig["r"] +            # 32 bytes
+            eth_sig["s"] +            # 32 bytes
+            pq_nonce.to_bytes(32, 'big')  # 32 bytes
+        )
+        
+        # Verify the message is exactly 272 bytes
+        assert len(pq_registration_confirmation_message) == 272, f"Message length is {len(pq_registration_confirmation_message)}, expected 272"
+        
+        # Serialize fields for JSON output (match working generators)
+        vectors["confirm_registration_reverts"].append({
+            "test_name": "pq_fingerprint_mismatch",
+            "description": "Test revert when PQ fingerprint does not match intent (wrong PQ key, correct message format)",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": bob["pq_fingerprint"],
+            "pq_nonce": pq_nonce,
+            "pq_message": pq_registration_confirmation_message.hex(),
+            "pq_signature": {
+                "salt": pq_confirm_signature_mismatch["salt"].hex(),
+                "cs1": [cs.hex() for cs in pq_confirm_signature_mismatch["cs1"]],
+                "cs2": [cs.hex() for cs in pq_confirm_signature_mismatch["cs2"]],
+                "hint": pq_confirm_signature_mismatch["hint"]
+            }
+        })
+        
         return vectors
 
     def generate_remove_registration_intent_eth_revert_vectors(self) -> Dict[str, Any]:
@@ -961,32 +1023,20 @@ class RevertVectorGenerator:
             }
         })
         
-        # Test 6: Invalid signature - Create valid message but invalid signature
-        print("Test 6: Invalid signature")
-        vectors["remove_registration_intent_pq_reverts"].append({
-            "test_name": "invalid_signature",
-            "description": "Test revert when signature is invalid",
-            "eth_address": alice["eth_address"],
-            "pq_fingerprint": alice["pq_fingerprint"],
-            "pq_nonce": pq_nonce,
-            "pq_message": pq_message.hex(),
-            "pq_signature": {
-                "salt": "0x" + "00" * 40,
-                "cs1": ["0x" + "00" * 64] * 32,
-                "cs2": ["0x" + "00" * 64] * 32,
-                "hint": 0
-            }
-        })
-        
-        # Test 7: Wrong message format - Create message with wrong pattern but correct length
+        # Test 7: Wrong message format - Create message with wrong pattern but correct length (nonce must be 1)
         print("Test 7: Wrong message format")
-        # Create a message with wrong pattern but correct length (128 bytes)
-        # DOMAIN_SEPARATOR(32) + wrong_pattern(44) + ethAddress(20) + pqNonce(32) = 128 bytes
-        wrong_pattern = b"Wrong message format for removal intent from"
+        pq_nonce = 1  # Ensure PQ nonce is 1
+        # The correct pattern is 44 bytes: b"Remove registration intent from ETH Address "
+        # Let's use a wrong pattern of exactly 44 bytes
+        wrong_pattern = b"Wrong message format for removal intent!"  # 41 bytes
+        if len(wrong_pattern) < 44:
+            wrong_pattern = wrong_pattern + b"_" * (44 - len(wrong_pattern))
+        elif len(wrong_pattern) > 44:
+            wrong_pattern = wrong_pattern[:44]
+        assert len(wrong_pattern) == 44, f"Wrong pattern is not 44 bytes: {len(wrong_pattern)}"
         wrong_format_message = bytes.fromhex(DOMAIN_SEPARATOR[2:]) + wrong_pattern + bytes.fromhex(alice["eth_address"][2:]) + int_to_bytes32(pq_nonce)
         assert len(wrong_format_message) == 128, f"PQ remove message wrong length: {len(wrong_format_message)}"
         salt, cs1, cs2, hint = self.create_pq_signature(wrong_format_message, alice["pq_private_key_file"])
-        
         vectors["remove_registration_intent_pq_reverts"].append({
             "test_name": "wrong_message_format",
             "description": "Test revert when message format is incorrect",
@@ -1063,19 +1113,34 @@ def main():
     output_dir = PROJECT_ROOT / "test" / "test_vectors" / "revert"
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Generate submit registration intent revert vectors
+    # Generate all revert vectors
     submit_intent_reverts = generator.generate_submit_registration_intent_revert_vectors()
+    confirm_reverts = generator.generate_confirm_registration_revert_vectors()
+    remove_intent_eth_reverts = generator.generate_remove_registration_intent_eth_revert_vectors()
+    remove_intent_pq_reverts = generator.generate_remove_registration_intent_pq_revert_vectors()
+    
+    # Create comprehensive revert vectors file
+    comprehensive_reverts = {
+        "submit_registration_intent_reverts": submit_intent_reverts["submit_registration_intent_reverts"],
+        "confirm_registration_reverts": confirm_reverts["confirm_registration_reverts"],
+        "remove_registration_intent_eth_reverts": remove_intent_eth_reverts["remove_registration_intent_eth_reverts"],
+        "remove_registration_intent_pq_reverts": remove_intent_pq_reverts["remove_registration_intent_pq_reverts"]
+    }
+    
+    # Write comprehensive file
+    comprehensive_file = output_dir / "comprehensive_revert_vectors.json"
+    with open(comprehensive_file, "w") as f:
+        json.dump(comprehensive_reverts, f, indent=2)
+    
+    # Also write individual files for backward compatibility
     with open(output_dir / "submit_registration_intent_revert_vectors.json", "w") as f:
         json.dump(submit_intent_reverts, f, indent=2)
     
-    # Generate confirm registration revert vectors
-    confirm_reverts = generator.generate_confirm_registration_revert_vectors()
     with open(output_dir / "confirm_registration_revert_vectors.json", "w") as f:
         json.dump(confirm_reverts, f, indent=2)
     
     # Generate remove registration intent by ETH revert vectors
     print("Writing remove intent ETH vectors...")
-    remove_intent_eth_reverts = generator.generate_remove_registration_intent_eth_revert_vectors()
     eth_file_path = output_dir / "remove_registration_intent_eth_revert_vectors.json"
     print(f"Writing to: {eth_file_path}")
     with open(eth_file_path, "w") as f:
@@ -1084,7 +1149,6 @@ def main():
     
     # Generate remove registration intent by PQ revert vectors
     print("Writing remove intent PQ vectors...")
-    remove_intent_pq_reverts = generator.generate_remove_registration_intent_pq_revert_vectors()
     pq_file_path = output_dir / "remove_registration_intent_pq_revert_vectors.json"
     print(f"Writing to: {pq_file_path}")
     with open(pq_file_path, "w") as f:
