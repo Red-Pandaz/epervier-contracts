@@ -19,6 +19,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))  # test/python
 from eip712_config import DOMAIN_SEPARATOR
 from eip712_helpers import (
     get_registration_intent_struct_hash,
+    get_change_eth_address_intent_struct_hash,
     get_eip712_digest,
     sign_eip712_message,
 )
@@ -1286,6 +1287,180 @@ class RevertVectorGenerator:
         
         return test_vectors
 
+    def create_base_eth_message(self, pq_fingerprint, new_eth_address, eth_nonce):
+        """
+        Create base ETH message for change ETH Address intent
+        Format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+        This is signed by Charlie (new ETH Address) (no domain separator in content)
+        """
+        pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
+        message = (
+            pattern +
+            bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
+            b" to " +
+            bytes.fromhex(new_eth_address[2:]) +  # Remove "0x" prefix
+            eth_nonce.to_bytes(32, 'big')
+        )
+        return message
+
+    def create_base_pq_message(self, old_eth_address, new_eth_address, base_eth_message, v, r, s, pq_nonce):
+        """
+        Create base PQ message for change ETH Address intent
+        Format: DOMAIN_SEPARATOR + "Intent to change bound ETH Address from " + oldEthAddress + " to " + newEthAddress + baseETHMessage + v + r + s + pqNonce
+        This matches the contract's parsePQChangeETHAddressIntentMessage function exactly
+        """
+        domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix, 32 bytes
+        pattern = b"Intent to change bound ETH Address from "
+        old_addr_bytes = bytes.fromhex(old_eth_address[2:])  # Remove "0x" prefix, 20 bytes
+        to_pattern = b" to "
+        new_addr_bytes = bytes.fromhex(new_eth_address[2:])  # Remove "0x" prefix, 20 bytes
+        
+        # Convert base_eth_message from hex string to bytes
+        if isinstance(base_eth_message, bytes):
+            base_eth_message_str = base_eth_message.hex()
+        else:
+            base_eth_message_str = base_eth_message
+
+        base_eth_message_bytes = bytes.fromhex(base_eth_message_str[2:] if base_eth_message_str.startswith('0x') else base_eth_message_str)
+        
+        # Pad or truncate base_eth_message_bytes to exactly 140 bytes
+        if len(base_eth_message_bytes) < 140:
+            base_eth_message_bytes = base_eth_message_bytes + b'\x00' * (140 - len(base_eth_message_bytes))
+        elif len(base_eth_message_bytes) > 140:
+            base_eth_message_bytes = base_eth_message_bytes[:140]
+        
+        # Convert signature components to bytes
+        v_bytes = v.to_bytes(1, 'big')  # 1 byte
+        r_bytes = r.to_bytes(32, 'big')  # 32 bytes
+        s_bytes = s.to_bytes(32, 'big')  # 32 bytes
+        pq_nonce_bytes = pq_nonce.to_bytes(32, 'big')  # 32 bytes
+        
+        # Concatenate all components with DOMAIN_SEPARATOR at the start
+        message = domain_separator_bytes + pattern + old_addr_bytes + to_pattern + new_addr_bytes + base_eth_message_bytes + v_bytes + r_bytes + s_bytes + pq_nonce_bytes
+        
+        return message
+
+    def sign_eth_message(self, new_eth_address, pq_fingerprint, eth_nonce, private_key):
+        """Sign the change ETH address intent message using EIP712"""
+        # Get the struct hash using the same pattern as the working generator
+        struct_hash = get_change_eth_address_intent_struct_hash(new_eth_address, pq_fingerprint, eth_nonce)
+        
+        # Create EIP712 digest with domain separator
+        domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+        digest = get_eip712_digest(domain_separator_bytes, struct_hash)
+        
+        # Sign the digest using the same pattern as the working generator
+        signature = sign_eip712_message(digest, private_key)
+        
+        return signature
+
+    def generate_charlie_change_eth_vectors(self) -> Dict[str, Any]:
+        """Generate change ETH intent vectors for Charlie ETH address conflict test"""
+        
+        print("Starting Charlie change ETH vector generation...")
+        
+        alice = self.actors["alice"]
+        bob = self.actors["bob"]
+        charlie = self.actors["charlie"]
+        
+        vectors = []
+        
+        # Vector 1: AlicePQ → CharlieETH change intent (CharlieETH nonce 0)
+        print("Generating change ETH intent vector 1: AlicePQ → CharlieETH (CharlieETH nonce 0)")
+        
+        alice_pq_nonce = 2  # AlicePQ used nonce 0 for registration, 1 for confirmation
+        charlie_eth_nonce = 0  # CharlieETH first time being used in change intent
+        
+        # Step 1: Charlie signs the base ETH message
+        base_eth_message = self.create_base_eth_message(alice["pq_fingerprint"], charlie["eth_address"], charlie_eth_nonce)
+        eth_signature = self.sign_eth_message(charlie["eth_address"], alice["pq_fingerprint"], charlie_eth_nonce, charlie["eth_private_key"])
+        
+        # Step 2: Alice's PQ key signs the complete message containing Charlie's signature
+        base_pq_message = self.create_base_pq_message(
+            alice["eth_address"], charlie["eth_address"], base_eth_message,
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], alice_pq_nonce)
+        pq_signature = sign_with_pq_key(base_pq_message, alice["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print("Failed to generate PQ signature for vector 1!")
+            return None
+        
+        vector1 = {
+            "current_actor": "alice",
+            "new_actor": "charlie", 
+            "old_eth_address": alice["eth_address"],
+            "new_eth_address": charlie["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),  # For change intent, eth_message is the same as pq_message
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": {
+                "salt": pq_signature["salt"].hex(),
+                "hint": pq_signature["hint"],
+                "cs1": [hex(x) for x in pq_signature["cs1"]],
+                "cs2": [hex(x) for x in pq_signature["cs2"]]
+            },
+            "eth_nonce": charlie_eth_nonce,
+            "pq_nonce": alice_pq_nonce
+        }
+        
+        vectors.append(vector1)
+        
+        # Vector 2: BobPQ → CharlieETH change intent (CharlieETH nonce 1)
+        print("Generating change ETH intent vector 2: BobPQ → CharlieETH (CharlieETH nonce 1)")
+        
+        bob_pq_nonce = 2  # BobPQ used nonce 0 for registration, 1 for confirmation
+        charlie_eth_nonce = 1  # CharlieETH used nonce 0 in Alice's change intent, so this is 1
+        
+        # Step 1: Charlie signs the base ETH message
+        base_eth_message = self.create_base_eth_message(bob["pq_fingerprint"], charlie["eth_address"], charlie_eth_nonce)
+        eth_signature = self.sign_eth_message(charlie["eth_address"], bob["pq_fingerprint"], charlie_eth_nonce, charlie["eth_private_key"])
+        
+        # Step 2: Bob's PQ key signs the complete message containing Charlie's signature
+        base_pq_message = self.create_base_pq_message(
+            bob["eth_address"], charlie["eth_address"], base_eth_message,
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], bob_pq_nonce)
+        pq_signature = sign_with_pq_key(base_pq_message, bob["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print("Failed to generate PQ signature for vector 2!")
+            return None
+        
+        vector2 = {
+            "current_actor": "bob",
+            "new_actor": "charlie",
+            "old_eth_address": bob["eth_address"],
+            "new_eth_address": charlie["eth_address"],
+            "pq_fingerprint": bob["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),  # For change intent, eth_message is the same as pq_message
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": {
+                "salt": pq_signature["salt"].hex(),
+                "hint": pq_signature["hint"],
+                "cs1": [hex(x) for x in pq_signature["cs1"]],
+                "cs2": [hex(x) for x in pq_signature["cs2"]]
+            },
+            "eth_nonce": charlie_eth_nonce,
+            "pq_nonce": bob_pq_nonce
+        }
+        
+        vectors.append(vector2)
+        
+        return {
+            "change_eth_address_intent": vectors
+        }
+
 def main():
     """Generate all revert test vectors"""
     
@@ -1301,6 +1476,7 @@ def main():
     remove_intent_eth_reverts = generator.generate_remove_registration_intent_eth_revert_vectors()
     remove_intent_pq_reverts = generator.generate_remove_registration_intent_pq_revert_vectors()
     change_intent_blocking_registration = generator.generate_change_intent_blocking_registration_vectors()
+    charlie_change_eth_vectors = generator.generate_charlie_change_eth_vectors()
     
     # Create comprehensive revert vectors file
     comprehensive_reverts = {
@@ -1320,6 +1496,12 @@ def main():
     with open(change_intent_file, "w") as f:
         json.dump(change_intent_blocking_registration, f, indent=2)
     print(f"Generated change intent blocking registration vectors: {change_intent_file}")
+    
+    # Write Charlie change ETH vectors
+    charlie_change_eth_file = output_dir / "charlie_change_eth_vectors.json"
+    with open(charlie_change_eth_file, "w") as f:
+        json.dump(charlie_change_eth_vectors, f, indent=2)
+    print(f"Generated Charlie change ETH vectors: {charlie_change_eth_file}")
     
     # Also write individual files for backward compatibility
     with open(output_dir / "submit_registration_intent_revert_vectors.json", "w") as f:
