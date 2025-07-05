@@ -21,6 +21,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))  # test/python
 from eip712_config import DOMAIN_SEPARATOR
 from eip712_helpers import (
     get_change_eth_address_intent_struct_hash,
+    get_remove_change_intent_struct_hash,
     get_eip712_digest,
     sign_eip712_message,
 )
@@ -200,6 +201,22 @@ class ChangeETHRevertGenerator:
         # Get the struct hash using the same pattern as the working generator
         struct_hash = get_change_eth_address_intent_struct_hash(
             new_eth_address, pq_fingerprint, eth_nonce
+        )
+        
+        # Get the EIP712 digest
+        domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+        digest = get_eip712_digest(domain_separator_bytes, struct_hash)
+        
+        # Sign the digest
+        signature = sign_eip712_message(digest, private_key)
+        
+        return signature
+
+    def sign_remove_change_eth_message(self, pq_fingerprint, eth_nonce, private_key):
+        """Sign the remove change ETH address intent message using EIP712"""
+        # Get the struct hash for remove change intent
+        struct_hash = get_remove_change_intent_struct_hash(
+            pq_fingerprint, eth_nonce
         )
         
         # Get the EIP712 digest
@@ -1088,6 +1105,382 @@ class ChangeETHRevertGenerator:
             "change_eth_address_intent": vectors
         }
 
+    def create_remove_change_eth_eth_message(self, pq_fingerprint, eth_nonce):
+        """Create ETH message for removing change ETH address intent by ETH"""
+        # Format: "Remove change intent from Epervier Fingerprint " + pqFingerprint + ethNonce
+        pattern = b"Remove change intent from Epervier Fingerprint "
+        message = (
+            pattern +
+            bytes.fromhex(pq_fingerprint[2:]) +  # Remove '0x' prefix
+            eth_nonce.to_bytes(32, "big")
+        )
+        assert len(message) == 99, f"ETH removal message must be 99 bytes, got {len(message)}"
+        return message
+
+    def create_remove_change_eth_pq_message(self, eth_address, pq_nonce):
+        """Create PQ message for removing change ETH address intent by PQ"""
+        # Format: DOMAIN_SEPARATOR + "Remove change intent from ETH Address " + ethAddress + pqNonce
+        domain_separator = bytes.fromhex("07668882b5c3598c149b213b1c16ab1dd94b45bc4837b468e006b97caef5df92")
+        pattern = b"Remove change intent from ETH Address "
+        message = (
+            domain_separator +
+            pattern +
+            bytes.fromhex(eth_address[2:]) +  # Remove '0x' prefix
+            pq_nonce.to_bytes(32, "big")
+        )
+        assert len(message) == 122, f"PQ removal message must be 122 bytes, got {len(message)}"
+        return message
+
+    def generate_remove_change_eth_revert_vectors(self) -> Dict[str, Any]:
+        """Generate all remove change ETH revert test vectors"""
+        
+        print("Starting remove change ETH revert vector generation...")
+        
+        alice = self.actors["alice"]
+        bob = self.actors["bob"]
+        charlie = self.actors["charlie"]
+        
+        vectors = []
+        
+        # ============================================================================
+        # TEST 1: No pending change intent (ETH removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 1: No pending change intent (ETH removal)")
+        
+        # Create a valid ETH removal message but there's no pending intent
+        eth_nonce = 1  # Alice used nonce 0 for registration, 1 for confirmation, so next is 1
+        eth_message = self.create_remove_change_eth_eth_message(alice["pq_fingerprint"], eth_nonce)
+        eth_signature = self.sign_remove_change_eth_message(alice["pq_fingerprint"], eth_nonce, alice["eth_private_key"])
+        
+        vector1 = {
+            "test_name": "no_pending_change_intent_eth",
+            "description": "Try to remove change ETH intent by ETH when none exists",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": alice["eth_address"],
+            "eth_message": eth_message.hex(),
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "eth_nonce": eth_nonce
+        }
+        
+        vectors.append(vector1)
+        
+        # ============================================================================
+        # TEST 2: Wrong domain separator (ETH removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 2: Wrong domain separator (ETH removal)")
+        
+        # Create ETH removal message with wrong domain separator
+        # ETH removal message format: pattern (47 bytes) + pq_fingerprint (20 bytes) + eth_nonce (32 bytes) = 99 bytes
+        # Sign it with wrong domain separator so signature recovery fails
+        pattern = b"Remove change intent from Epervier Fingerprint "  # 47 bytes
+        pq_fingerprint_bytes = bytes.fromhex(alice['pq_fingerprint'][2:])  # 20 bytes
+        eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')  # 32 bytes
+        wrong_eth_message = pattern + pq_fingerprint_bytes + eth_nonce_bytes  # 99 bytes total
+        
+        # Sign with wrong domain separator so signature recovery fails
+        wrong_domain_separator = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        struct_hash = get_remove_change_intent_struct_hash(alice["pq_fingerprint"], eth_nonce)
+        wrong_domain_separator_bytes = bytes.fromhex(wrong_domain_separator[2:])
+        wrong_digest = get_eip712_digest(wrong_domain_separator_bytes, struct_hash)
+        wrong_eth_signature = sign_eip712_message(wrong_digest, alice["eth_private_key"])
+        
+        vector2 = {
+            "test_name": "wrong_domain_separator_eth_removal",
+            "description": "Try to remove change ETH intent by ETH with wrong domain separator",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": alice["eth_address"],
+            "eth_message": wrong_eth_message.hex(),
+            "eth_signature": {
+                "v": wrong_eth_signature["v"],
+                "r": wrong_eth_signature["r"],
+                "s": wrong_eth_signature["s"]
+            },
+            "eth_nonce": eth_nonce
+        }
+        
+        vectors.append(vector2)
+        
+        # ============================================================================
+        # TEST 3: Wrong ETH nonce (ETH removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 3: Wrong ETH nonce (ETH removal)")
+        
+        # Create ETH removal message with wrong nonce
+        # The change intent is: Alice's PQ fingerprint -> Bob's ETH address
+        # So Bob should sign to remove the change intent
+        wrong_eth_nonce = 999
+        eth_message_wrong_nonce = self.create_remove_change_eth_eth_message(alice["pq_fingerprint"], wrong_eth_nonce)
+        eth_signature_wrong_nonce = self.sign_remove_change_eth_message(alice["pq_fingerprint"], wrong_eth_nonce, bob["eth_private_key"])
+        
+        vector3 = {
+            "test_name": "wrong_eth_nonce_eth_removal",
+            "description": "Try to remove change ETH intent by ETH with wrong ETH nonce",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": bob["eth_address"],  # Bob's address because he's the new ETH address in the change intent
+            "eth_message": eth_message_wrong_nonce.hex(),
+            "eth_signature": {
+                "v": eth_signature_wrong_nonce["v"],
+                "r": eth_signature_wrong_nonce["r"],
+                "s": eth_signature_wrong_nonce["s"]
+            },
+            "eth_nonce": wrong_eth_nonce
+        }
+        
+        vectors.append(vector3)
+        
+        # ============================================================================
+        # TEST 4: Wrong signer (ETH removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 4: Wrong signer (ETH removal)")
+        
+        # Create ETH removal message signed by wrong ETH key
+        # The change intent is: Alice's PQ fingerprint -> Bob's ETH address
+        # So Bob should sign, but we'll use Charlie's key instead
+        eth_message_wrong_signer = self.create_remove_change_eth_eth_message(alice["pq_fingerprint"], eth_nonce)
+        eth_signature_wrong_signer = self.sign_remove_change_eth_message(alice["pq_fingerprint"], eth_nonce, charlie["eth_private_key"])
+        
+        vector4 = {
+            "test_name": "wrong_signer_eth_removal",
+            "description": "Try to remove change ETH intent by ETH with wrong signer",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": bob["eth_address"],  # Bob's address because he's the new ETH address in the change intent
+            "eth_message": eth_message_wrong_signer.hex(),
+            "eth_signature": {
+                "v": eth_signature_wrong_signer["v"],
+                "r": eth_signature_wrong_signer["r"],
+                "s": eth_signature_wrong_signer["s"]
+            },
+            "eth_nonce": eth_nonce
+        }
+        
+        vectors.append(vector4)
+        
+        # ============================================================================
+        # TEST 5: No pending change intent (PQ removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 5: No pending change intent (PQ removal)")
+        
+        # Create a valid PQ removal message but there's no pending intent
+        # The change intent is: Alice's PQ fingerprint -> Bob's ETH address
+        # So Alice's PQ key should sign to remove the change intent for Bob's ETH address
+        pq_nonce = 0
+        pq_message = self.create_remove_change_eth_pq_message(bob["eth_address"], pq_nonce)
+        pq_signature = sign_with_pq_key(pq_message, alice["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print("Failed to generate PQ signature for vector 5!")
+            return None
+        
+        vector5 = {
+            "test_name": "no_pending_change_intent_pq",
+            "description": "Try to remove change ETH intent by PQ when none exists",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": bob["eth_address"],  # Bob's address because he's the new ETH address in the change intent
+            "pq_message": pq_message.hex(),
+            "pq_signature": pq_signature,
+            "pq_nonce": pq_nonce
+        }
+        
+        vectors.append(vector5)
+        
+        # ============================================================================
+        # TEST 6: Wrong domain separator (PQ removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 6: Wrong domain separator (PQ removal)")
+        # The change intent is: Alice's PQ fingerprint -> Bob's ETH address
+        # Use correct pattern, address, and nonce, but wrong domain separator
+        wrong_domain_separator = bytes.fromhex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+        # Use exact pattern from schema: "Remove change intent from ETH Address " (38 bytes)
+        pattern = b"Remove change intent from ETH Address "
+        eth_addr_bytes = bytes.fromhex(bob['eth_address'][2:])  # 20 bytes
+        pq_nonce_bytes = pq_nonce.to_bytes(32, "big")  # 32 bytes
+        # Build the message exactly according to schema: DOMAIN_SEPARATOR + pattern + ethAddress + pqNonce
+        wrong_pq_message = wrong_domain_separator + pattern + eth_addr_bytes + pq_nonce_bytes
+        # Verify exact length: 32 + 38 + 20 + 32 = 122 bytes
+        assert len(wrong_pq_message) == 122, f"PQ removal message must be 122 bytes, got {len(wrong_pq_message)}"
+        assert len(pattern) == 38, f"Pattern must be 38 bytes, got {len(pattern)}"
+        # Sign with Alice's PQ key
+        wrong_pq_signature = sign_with_pq_key(wrong_pq_message, alice["pq_private_key_file"])
+        if wrong_pq_signature is None:
+            print("Failed to generate PQ signature for vector 6!")
+            return None
+        vector6 = {
+            "test_name": "wrong_domain_separator_pq_removal",
+            "description": "Try to remove change ETH intent by PQ with wrong domain separator",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": bob["eth_address"],
+            "pq_message": wrong_pq_message.hex(),
+            "pq_signature": wrong_pq_signature,
+            "pq_nonce": pq_nonce
+        }
+        vectors.append(vector6)
+        
+        # ============================================================================
+        # TEST 7: Wrong PQ nonce (PQ removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 7: Wrong PQ nonce (PQ removal)")
+        
+        # Create PQ removal message with wrong nonce
+        # The change intent is: Alice's PQ fingerprint -> Bob's ETH address
+        wrong_pq_nonce = 999
+        pq_message_wrong_nonce = self.create_remove_change_eth_pq_message(bob["eth_address"], wrong_pq_nonce)
+        pq_signature_wrong_nonce = sign_with_pq_key(pq_message_wrong_nonce, alice["pq_private_key_file"])
+        
+        if pq_signature_wrong_nonce is None:
+            print("Failed to generate PQ signature for vector 7!")
+            return None
+        
+        vector7 = {
+            "test_name": "wrong_pq_nonce_pq_removal",
+            "description": "Try to remove change ETH intent by PQ with wrong PQ nonce",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": bob["eth_address"],  # Bob's address because he's the new ETH address in the change intent
+            "pq_message": pq_message_wrong_nonce.hex(),
+            "pq_signature": pq_signature_wrong_nonce,
+            "pq_nonce": wrong_pq_nonce
+        }
+        
+        vectors.append(vector7)
+        
+        # ============================================================================
+        # TEST 8: Wrong signer (PQ removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 8: Wrong signer (PQ removal)")
+        
+        # Create PQ removal message signed by wrong PQ key
+        # The change intent is: Alice's PQ fingerprint -> Bob's ETH address
+        # So Alice's PQ key should sign, but we'll use Bob's PQ key instead
+        pq_message_wrong_signer = self.create_remove_change_eth_pq_message(bob["eth_address"], pq_nonce)
+        pq_signature_wrong_signer = sign_with_pq_key(pq_message_wrong_signer, bob["pq_private_key_file"])
+        
+        if pq_signature_wrong_signer is None:
+            print("Failed to generate PQ signature for vector 8!")
+            return None
+        
+        vector8 = {
+            "test_name": "wrong_signer_pq_removal",
+            "description": "Try to remove change ETH intent by PQ with wrong signer",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": bob["eth_address"],  # Bob's address because he's the new ETH address in the change intent
+            "pq_message": pq_message_wrong_signer.hex(),
+            "pq_signature": pq_signature_wrong_signer,
+            "pq_nonce": pq_nonce
+        }
+        
+        vectors.append(vector8)
+        
+        # ============================================================================
+        # TEST 9: Invalid PQ signature (PQ removal)
+        # ============================================================================
+        print("Generating remove change ETH vector 9: Invalid PQ signature (PQ removal)")
+        
+        # Create PQ removal message with invalid signature components
+        # The change intent is: Alice's PQ fingerprint -> Bob's ETH address
+        pq_message_invalid = self.create_remove_change_eth_pq_message(bob["eth_address"], pq_nonce)
+        
+        vector9 = {
+            "test_name": "invalid_pq_signature_pq_removal",
+            "description": "Try to remove change ETH intent by PQ with invalid PQ signature",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": bob["eth_address"],  # Bob's address because he's the new ETH address in the change intent
+            "pq_message": pq_message_invalid.hex(),
+            "pq_nonce": pq_nonce
+        }
+        
+        vectors.append(vector9)
+        
+        # ============================================================================
+        # TEST 10: Wrong address in message (ETH removal) - Alice's ETH key tries to cancel Alice's intent
+        # ============================================================================
+        print("Generating remove change ETH vector 10: Wrong address in message (ETH removal) - Alice's ETH key")
+        
+        # Scenario: Alice has a change intent (Alice's PQ fingerprint -> Bob's ETH address)
+        # Alice's ETH key tries to cancel Alice's intent (simulating compromised ETH keys)
+        # Alice's ETH key should NOT be able to cancel Alice's PQ-controlled change intent
+        # The message contains Alice's PQ fingerprint but is signed by Alice's ETH key
+        eth_message_alice_eth = self.create_remove_change_eth_eth_message(alice["pq_fingerprint"], eth_nonce)
+        eth_signature_alice_eth = self.sign_remove_change_eth_message(alice["pq_fingerprint"], eth_nonce, alice["eth_private_key"])
+        
+        vector10 = {
+            "test_name": "wrong_address_in_message_eth_removal_alice_eth",
+            "description": "Alice's ETH key tries to cancel Alice's change intent (simulating compromised keys)",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": alice["eth_address"],  # Alice's address (the signer)
+            "eth_message": eth_message_alice_eth.hex(),
+            "eth_signature": {
+                "v": eth_signature_alice_eth["v"],
+                "r": eth_signature_alice_eth["r"],
+                "s": eth_signature_alice_eth["s"]
+            },
+            "eth_nonce": eth_nonce
+        }
+        
+        vectors.append(vector10)
+        
+        # ============================================================================
+        # TEST 10b: Wrong address in message (ETH removal) - Charlie's ETH key tries to cancel Alice's intent
+        # ============================================================================
+        print("Generating remove change ETH vector 10b: Wrong address in message (ETH removal) - Charlie's ETH key")
+        
+        # Scenario: Alice has a change intent (Alice's PQ fingerprint -> Bob's ETH address)
+        # Charlie's ETH key tries to cancel Alice's intent (unauthorized third party)
+        # Charlie's ETH key should NOT be able to cancel Alice's change intent
+        # The message contains Alice's PQ fingerprint but is signed by Charlie's ETH key
+        eth_message_charlie_eth = self.create_remove_change_eth_eth_message(alice["pq_fingerprint"], eth_nonce)
+        eth_signature_charlie_eth = self.sign_remove_change_eth_message(alice["pq_fingerprint"], eth_nonce, charlie["eth_private_key"])
+        
+        vector10b = {
+            "test_name": "wrong_address_in_message_eth_removal_charlie_eth",
+            "description": "Charlie's ETH key tries to cancel Alice's change intent (unauthorized third party)",
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "eth_address": charlie["eth_address"],  # Charlie's address (the signer)
+            "eth_message": eth_message_charlie_eth.hex(),
+            "eth_signature": {
+                "v": eth_signature_charlie_eth["v"],
+                "r": eth_signature_charlie_eth["r"],
+                "s": eth_signature_charlie_eth["s"]
+            },
+            "eth_nonce": eth_nonce
+        }
+        
+        vectors.append(vector10b)
+        
+        # ============================================================================
+        # TEST 11: Wrong fingerprint in message (PQ removal) - Charlie's PQ key tries to cancel Alice's intent
+        # ============================================================================
+        print("Generating remove change ETH vector 11: Wrong fingerprint in message (PQ removal)")
+        
+        # Scenario: Alice has a change intent (Alice's PQ fingerprint -> Bob's ETH address)
+        # Charlie tries to cancel Alice's intent by creating a message that says "cancel Alice's intent"
+        # but is signed by Charlie's PQ key (who is not authorized to cancel Alice's intent)
+        # The message contains Bob's ETH address but is signed by Charlie's PQ key instead of Alice's
+        pq_message_wrong_fingerprint = self.create_remove_change_eth_pq_message(bob["eth_address"], pq_nonce)
+        pq_signature_wrong_fingerprint = sign_with_pq_key(pq_message_wrong_fingerprint, charlie["pq_private_key_file"])
+        
+        if pq_signature_wrong_fingerprint is None:
+            print("Failed to generate PQ signature for vector 11!")
+            return None
+        
+        vector11 = {
+            "test_name": "wrong_fingerprint_in_message_pq_removal",
+            "description": "Charlie's PQ key tries to cancel Alice's change intent (unauthorized third party)",
+            "pq_fingerprint": charlie["pq_fingerprint"],  # Charlie's fingerprint (the signer)
+            "eth_address": bob["eth_address"],  # Bob's address in the message
+            "pq_message": pq_message_wrong_fingerprint.hex(),
+            "pq_signature": pq_signature_wrong_fingerprint,
+            "pq_nonce": pq_nonce
+        }
+        
+        vectors.append(vector11)
+        
+        return {
+            "remove_change_eth_address_intent": vectors
+        }
+
 def main():
     """Generate change ETH revert test vectors"""
     
@@ -1100,10 +1493,19 @@ def main():
     # Generate change ETH revert vectors
     change_eth_reverts = generator.generate_change_eth_revert_vectors()
     
+    # Generate remove change ETH revert vectors
+    remove_change_eth_reverts = generator.generate_remove_change_eth_revert_vectors()
+    
+    # Combine both sets of vectors
+    all_vectors = {
+        **change_eth_reverts,
+        **remove_change_eth_reverts
+    }
+    
     # Write to file
     output_file = output_dir / "change_eth_revert_vectors.json"
     with open(output_file, "w") as f:
-        json.dump(change_eth_reverts, f, indent=2)
+        json.dump(all_vectors, f, indent=2)
     
     print(f"Generated change ETH revert vectors: {output_file}")
     print("Change ETH revert test vectors generated successfully!")

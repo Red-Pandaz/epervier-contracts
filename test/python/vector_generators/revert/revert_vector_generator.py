@@ -903,6 +903,33 @@ class RevertVectorGenerator:
             }
         })
         
+        # Test 8: Bob's ETH key tries to cancel Alice's registration intent
+        print("Test 8: Bob's ETH key tries to cancel Alice's registration intent")
+        bob = self.actors["bob"]
+        # Bob creates a message to cancel Alice's intent (Alice's PQ fingerprint)
+        bob_message = pattern + bytes.fromhex(alice["pq_fingerprint"][2:]) + int_to_bytes32(eth_nonce)
+        assert len(bob_message) == 105, f"ETH remove message wrong length: {len(bob_message)}"
+        
+        struct_hash = self.create_remove_intent_struct_hash(alice["pq_fingerprint"], eth_nonce)
+        digest = self.create_eip712_digest(struct_hash)
+        v, r, s, signature = self.sign_message(digest, bob["eth_private_key"])  # Sign with Bob's key
+        
+        vectors["remove_registration_intent_eth_reverts"].append({
+            "test_name": "bob_eth_tries_to_cancel_alice_intent",
+            "description": "Bob's ETH key tries to cancel Alice's registration intent (unauthorized third party)",
+            "current_actor": "bob",
+            "eth_address": bob["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],  # Alice's fingerprint
+            "eth_nonce": eth_nonce,
+            "eth_message": bob_message.hex(),
+            "eth_signature": {
+                "v": v,
+                "r": r,
+                "s": s,
+                "signature": signature
+            }
+        })
+        
         return vectors
 
     def generate_remove_registration_intent_pq_revert_vectors(self) -> Dict[str, Any]:
@@ -1054,6 +1081,31 @@ class RevertVectorGenerator:
             }
         })
         
+        # Test 8: Bob's PQ key tries to cancel Alice's registration intent
+        print("Test 8: Bob's PQ key tries to cancel Alice's registration intent")
+        bob = self.actors["bob"]
+        # Bob creates a message to cancel Alice's intent (Alice's ETH address)
+        bob_message = bytes.fromhex(DOMAIN_SEPARATOR[2:]) + pattern + bytes.fromhex(alice["eth_address"][2:]) + int_to_bytes32(pq_nonce)
+        assert len(bob_message) == 128, f"PQ remove message wrong length: {len(bob_message)}"
+        
+        # Sign with Bob's PQ key
+        salt, cs1, cs2, hint = self.create_pq_signature(bob_message, bob["pq_private_key_file"])
+        
+        vectors["remove_registration_intent_pq_reverts"].append({
+            "test_name": "bob_pq_tries_to_cancel_alice_intent",
+            "description": "Bob's PQ key tries to cancel Alice's registration intent (unauthorized third party)",
+            "eth_address": alice["eth_address"],  # Alice's address
+            "pq_fingerprint": bob["pq_fingerprint"],  # Bob's fingerprint
+            "pq_nonce": pq_nonce,
+            "pq_message": bob_message.hex(),
+            "pq_signature": {
+                "salt": salt,
+                "cs1": cs1,
+                "cs2": cs2,
+                "hint": hint
+            }
+        })
+        
         return vectors
 
     def create_remove_intent_struct_hash(self, pq_fingerprint: str, eth_nonce: int, domain_separator: bytes = None) -> bytes:
@@ -1185,6 +1237,7 @@ class RevertVectorGenerator:
         
         # Build ETH intent message (contains nested PQ signature and base PQ message)
         bob_eth_message = build_eth_intent_message(
+            DOMAIN_SEPARATOR,
             bob_base_pq_message,
             bob_pq_sig["salt"],
             bob_pq_sig["cs1"],
