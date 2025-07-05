@@ -297,4 +297,264 @@ contract PQRegistryChangeETHRevertsTest is Test {
         vm.expectRevert("Invalid PQ nonce");
         registry.submitChangeETHAddressIntent(pqMessage, pqSalt, pqCs1, pqCs2, pqHint);
     }
+
+    // ============================================================================
+    // COMPREHENSIVE CHANGE ETH ADDRESS REVERT TESTS
+    // ============================================================================
+    
+    function testSubmitChangeETHAddressIntent_RevertWhenWrongSignerInETHSignature() public {
+        // Step 1: AliceETH and AlicePQ submit and confirm registration
+        string memory aliceIntentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory aliceConfirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
+        
+        // Submit Alice's registration intent (index 0)
+        bytes memory aliceEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_message"));
+        uint8 aliceV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 aliceR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 aliceS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(aliceEthIntentMessage, aliceV, aliceR, aliceS);
+        
+        // Confirm Alice's registration (index 0)
+        bytes memory alicePqMessage = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory alicePqSalt = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory alicePqCs1 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory alicePqCs2 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 alicePqHint = vm.parseUint(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
+        
+        registry.confirmRegistration(alicePqMessage, alicePqSalt, alicePqCs1, alicePqCs2, alicePqHint);
+        
+        // Step 2: Use change ETH intent vector with wrong signer in ETH signature
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/revert/change_eth_revert_vectors.json");
+        
+        // Use the wrong signer ETH signature vector (index 8)
+        bytes memory changePqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[8].pq_message"));
+        bytes memory changePqSalt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[8].pq_signature.salt"));
+        uint256[] memory changePqCs1 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[8].pq_signature.cs1");
+        uint256[] memory changePqCs2 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[8].pq_signature.cs2");
+        uint256 changePqHint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[8].pq_signature.hint"));
+        
+        vm.expectRevert("ETH signature must be from new ETH Address");
+        registry.submitChangeETHAddressIntent(changePqMessage, changePqSalt, changePqCs1, changePqCs2, changePqHint);
+    }
+    
+    function testSubmitChangeETHAddressIntent_RevertWhenInvalidETHSignature() public {
+        // Step 1: AliceETH and AlicePQ submit and confirm registration
+        string memory aliceIntentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory aliceConfirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
+        
+        // Submit Alice's registration intent (index 0)
+        bytes memory aliceEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_message"));
+        uint8 aliceV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 aliceR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 aliceS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(aliceEthIntentMessage, aliceV, aliceR, aliceS);
+        
+        // Confirm Alice's registration (index 0)
+        bytes memory alicePqMessage = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory alicePqSalt = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory alicePqCs1 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory alicePqCs2 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 alicePqHint = vm.parseUint(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
+        
+        registry.confirmRegistration(alicePqMessage, alicePqSalt, alicePqCs1, alicePqCs2, alicePqHint);
+        
+        // Step 2: Use change ETH intent vector with invalid ETH signature
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/revert/change_eth_revert_vectors.json");
+        
+        // Use the invalid ETH signature vector (index 9)
+        bytes memory changePqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[9].pq_message"));
+        bytes memory changePqSalt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[9].pq_signature.salt"));
+        uint256[] memory changePqCs1 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[9].pq_signature.cs1");
+        uint256[] memory changePqCs2 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[9].pq_signature.cs2");
+        uint256 changePqHint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[9].pq_signature.hint"));
+        
+        vm.expectRevert(abi.encodeWithSignature("ECDSAInvalidSignature()"));
+        registry.submitChangeETHAddressIntent(changePqMessage, changePqSalt, changePqCs1, changePqCs2, changePqHint);
+    }
+    
+    function testSubmitChangeETHAddressIntent_RevertWhenWrongSignerInPQSignature() public {
+        // Step 1: AliceETH and AlicePQ submit and confirm registration
+        string memory aliceIntentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory aliceConfirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
+        
+        // Submit Alice's registration intent (index 0)
+        bytes memory aliceEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_message"));
+        uint8 aliceV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 aliceR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 aliceS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(aliceEthIntentMessage, aliceV, aliceR, aliceS);
+        
+        // Confirm Alice's registration (index 0)
+        bytes memory alicePqMessage = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory alicePqSalt = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory alicePqCs1 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory alicePqCs2 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 alicePqHint = vm.parseUint(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
+        
+        registry.confirmRegistration(alicePqMessage, alicePqSalt, alicePqCs1, alicePqCs2, alicePqHint);
+        
+        // Step 2: Use change ETH intent vector with wrong signer in PQ signature
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/revert/change_eth_revert_vectors.json");
+        
+        // Use the wrong signer PQ signature vector (index 13)
+        bytes memory changePqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[13].pq_message"));
+        bytes memory changePqSalt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[13].pq_signature.salt"));
+        uint256[] memory changePqCs1 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[13].pq_signature.cs1");
+        uint256[] memory changePqCs2 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[13].pq_signature.cs2");
+        uint256 changePqHint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[13].pq_signature.hint"));
+        
+        // The contract fails at cross-reference validation when PQ fingerprint doesn't match ETH message
+        vm.expectRevert("ETH message PQ fingerprint mismatch");
+        registry.submitChangeETHAddressIntent(changePqMessage, changePqSalt, changePqCs1, changePqCs2, changePqHint);
+    }
+    
+    function testSubmitChangeETHAddressIntent_RevertWhenInvalidPQSignature() public {
+        // Step 1: AliceETH and AlicePQ submit and confirm registration
+        string memory aliceIntentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory aliceConfirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
+        
+        // Submit Alice's registration intent (index 0)
+        bytes memory aliceEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_message"));
+        uint8 aliceV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 aliceR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 aliceS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(aliceEthIntentMessage, aliceV, aliceR, aliceS);
+        
+        // Confirm Alice's registration (index 0)
+        bytes memory alicePqMessage = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory alicePqSalt = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory alicePqCs1 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory alicePqCs2 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 alicePqHint = vm.parseUint(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
+        
+        registry.confirmRegistration(alicePqMessage, alicePqSalt, alicePqCs1, alicePqCs2, alicePqHint);
+        
+        // Step 2: Use change ETH intent vector with invalid PQ signature
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/revert/change_eth_revert_vectors.json");
+        
+        // Use the invalid PQ signature vector (index 14)
+        bytes memory changePqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[14].pq_message"));
+        bytes memory changePqSalt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[14].pq_signature.salt"));
+        uint256[] memory changePqCs1 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[14].pq_signature.cs1");
+        uint256[] memory changePqCs2 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[14].pq_signature.cs2");
+        uint256 changePqHint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[14].pq_signature.hint"));
+        
+        // The invalid PQ signature causes the PQ verifier to return an incorrect fingerprint
+        // which then fails at state validation when checking if the fingerprint is registered
+        vm.expectRevert("wrong hint");
+        registry.submitChangeETHAddressIntent(changePqMessage, changePqSalt, changePqCs1, changePqCs2, changePqHint);
+    }
+    
+    function testSubmitChangeETHAddressIntent_RevertWhenOldETHAddressMismatch() public {
+        // Step 1: AliceETH and AlicePQ submit and confirm registration
+        string memory aliceIntentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory aliceConfirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
+        
+        // Submit Alice's registration intent (index 0)
+        bytes memory aliceEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_message"));
+        uint8 aliceV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 aliceR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 aliceS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(aliceEthIntentMessage, aliceV, aliceR, aliceS);
+        
+        // Confirm Alice's registration (index 0)
+        bytes memory alicePqMessage = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory alicePqSalt = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory alicePqCs1 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory alicePqCs2 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 alicePqHint = vm.parseUint(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
+        
+        registry.confirmRegistration(alicePqMessage, alicePqSalt, alicePqCs1, alicePqCs2, alicePqHint);
+        
+        // Step 2: Use change ETH intent vector with wrong old ETH address in PQ message
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/revert/change_eth_revert_vectors.json");
+        
+        // Use the old ETH address mismatch vector (index 10)
+        bytes memory changePqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[10].pq_message"));
+        bytes memory changePqSalt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[10].pq_signature.salt"));
+        uint256[] memory changePqCs1 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[10].pq_signature.cs1");
+        uint256[] memory changePqCs2 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[10].pq_signature.cs2");
+        uint256 changePqHint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[10].pq_signature.hint"));
+        
+        vm.expectRevert("Old ETH Address mismatch: PQ message vs current registration");
+        registry.submitChangeETHAddressIntent(changePqMessage, changePqSalt, changePqCs1, changePqCs2, changePqHint);
+    }
+    
+    function testSubmitChangeETHAddressIntent_RevertWhenETHMessagePQFingerprintMismatch() public {
+        // Step 1: AliceETH and AlicePQ submit and confirm registration
+        string memory aliceIntentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory aliceConfirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
+        
+        // Submit Alice's registration intent (index 0)
+        bytes memory aliceEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_message"));
+        uint8 aliceV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 aliceR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 aliceS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(aliceEthIntentMessage, aliceV, aliceR, aliceS);
+        
+        // Confirm Alice's registration (index 0)
+        bytes memory alicePqMessage = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory alicePqSalt = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory alicePqCs1 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory alicePqCs2 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 alicePqHint = vm.parseUint(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
+        
+        registry.confirmRegistration(alicePqMessage, alicePqSalt, alicePqCs1, alicePqCs2, alicePqHint);
+        
+        // Step 2: Use change ETH intent vector with wrong PQ fingerprint in ETH message
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/revert/change_eth_revert_vectors.json");
+        
+        // Use the ETH message PQ fingerprint mismatch vector (index 11)
+        bytes memory changePqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[11].pq_message"));
+        bytes memory changePqSalt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[11].pq_signature.salt"));
+        uint256[] memory changePqCs1 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[11].pq_signature.cs1");
+        uint256[] memory changePqCs2 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[11].pq_signature.cs2");
+        uint256 changePqHint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[11].pq_signature.hint"));
+        
+        vm.expectRevert("ETH message PQ fingerprint mismatch");
+        registry.submitChangeETHAddressIntent(changePqMessage, changePqSalt, changePqCs1, changePqCs2, changePqHint);
+    }
+    
+    function testSubmitChangeETHAddressIntent_RevertWhenETHMessageNewETHAddressMismatch() public {
+        // Step 1: AliceETH and AlicePQ submit and confirm registration
+        string memory aliceIntentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory aliceConfirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
+        
+        // Submit Alice's registration intent (index 0)
+        bytes memory aliceEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_message"));
+        uint8 aliceV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 aliceR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 aliceS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(aliceEthIntentMessage, aliceV, aliceR, aliceS);
+        
+        // Confirm Alice's registration (index 0)
+        bytes memory alicePqMessage = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory aliceSalt = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory aliceCs1 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory aliceCs2 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 aliceHint = vm.parseUint(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
+        
+        registry.confirmRegistration(alicePqMessage, aliceSalt, aliceCs1, aliceCs2, aliceHint);
+        
+        // Step 2: Submit change ETH address intent with ETH message new ETH address mismatch (vector 8)
+        string memory changeEthJsonData = vm.readFile("test/test_vectors/revert/change_eth_revert_vectors.json");
+
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(changeEthJsonData, ".change_eth_address_intent[8].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(changeEthJsonData, ".change_eth_address_intent[8].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(changeEthJsonData, ".change_eth_address_intent[8].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(changeEthJsonData, ".change_eth_address_intent[8].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(changeEthJsonData, ".change_eth_address_intent[8].pq_signature.hint"));
+        
+        // The contract fails at ETH signature validation before reaching message content validation
+        vm.expectRevert("ETH signature must be from new ETH Address");
+        registry.submitChangeETHAddressIntent(pqMessage, salt, cs1, cs2, hint);
+    }
+    
 } 

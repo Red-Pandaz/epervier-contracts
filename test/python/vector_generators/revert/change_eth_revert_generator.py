@@ -424,6 +424,332 @@ class ChangeETHRevertGenerator:
             "pq_nonce": wrong_pq_nonce
         }
 
+    def generate_wrong_signer_eth_signature(self, current_actor, new_actor, test_name, description):
+        """Generate a change ETH intent vector with ETH signature signed by wrong address"""
+        current = self.actors[current_actor]
+        new = self.actors[new_actor]
+        
+        # Use correct nonces
+        current_pq_nonce = 2  # Current actor used nonce 0 for registration, 1 for confirmation
+        new_eth_nonce = 0     # New actor first time being used
+        
+        # Step 1: New actor signs the base ETH message
+        base_eth_message = self.create_base_eth_message(current["pq_fingerprint"], new["eth_address"], new_eth_nonce)
+        
+        # Step 2: But sign with Charlie's private key instead of new actor's key (wrong signer)
+        charlie = self.actors["charlie"]
+        eth_signature = self.sign_eth_message(new["eth_address"], current["pq_fingerprint"], new_eth_nonce, charlie["eth_private_key"])
+        
+        # Step 3: Current actor's PQ key signs the complete message
+        base_pq_message = self.create_base_pq_message(
+            current["eth_address"], new["eth_address"], base_eth_message,
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], current_pq_nonce)
+        pq_signature = sign_with_pq_key(base_pq_message, current["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print(f"Failed to generate PQ signature for {test_name}!")
+            return None
+        
+        return {
+            "test_name": test_name,
+            "description": description,
+            "current_actor": current_actor,
+            "new_actor": new_actor,
+            "old_eth_address": current["eth_address"],
+            "new_eth_address": new["eth_address"],
+            "pq_fingerprint": current["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": pq_signature,
+            "eth_nonce": new_eth_nonce,
+            "pq_nonce": current_pq_nonce
+        }
+
+    def generate_invalid_eth_signature(self, current_actor, new_actor, test_name, description):
+        """Generate a change ETH intent vector with invalid ETH signature components"""
+        current = self.actors[current_actor]
+        new = self.actors[new_actor]
+        
+        # Use correct nonces
+        current_pq_nonce = 2  # Current actor used nonce 0 for registration, 1 for confirmation
+        new_eth_nonce = 0     # New actor first time being used
+        
+        # Step 1: New actor signs the base ETH message
+        base_eth_message = self.create_base_eth_message(current["pq_fingerprint"], new["eth_address"], new_eth_nonce)
+        
+        # Step 2: Use invalid signature components
+        eth_signature = {
+            "v": 27,  # Invalid v value
+            "r": 0x1234567890123456789012345678901234567890123456789012345678901234,
+            "s": 0x5678901234567890123456789012345678901234567890123456789012345678
+        }
+        
+        # Step 3: Current actor's PQ key signs the complete message
+        base_pq_message = self.create_base_pq_message(
+            current["eth_address"], new["eth_address"], base_eth_message,
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], current_pq_nonce)
+        pq_signature = sign_with_pq_key(base_pq_message, current["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print(f"Failed to generate PQ signature for {test_name}!")
+            return None
+        
+        return {
+            "test_name": test_name,
+            "description": description,
+            "current_actor": current_actor,
+            "new_actor": new_actor,
+            "old_eth_address": current["eth_address"],
+            "new_eth_address": new["eth_address"],
+            "pq_fingerprint": current["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": pq_signature,
+            "eth_nonce": new_eth_nonce,
+            "pq_nonce": current_pq_nonce
+        }
+
+    def generate_old_eth_address_mismatch(self, current_actor, new_actor, test_name, description):
+        """Generate a change ETH intent vector with wrong old ETH address in PQ message"""
+        current = self.actors[current_actor]
+        new = self.actors[new_actor]
+        charlie = self.actors["charlie"]  # Use Charlie's address as wrong old address
+        
+        # Use correct nonces
+        current_pq_nonce = 2  # Current actor used nonce 0 for registration, 1 for confirmation
+        new_eth_nonce = 0     # New actor first time being used
+        
+        # Step 1: New actor signs the base ETH message
+        base_eth_message = self.create_base_eth_message(current["pq_fingerprint"], new["eth_address"], new_eth_nonce)
+        eth_signature = self.sign_eth_message(new["eth_address"], current["pq_fingerprint"], new_eth_nonce, new["eth_private_key"])
+        
+        # Step 2: Current actor's PQ key signs with WRONG old ETH address (Charlie's instead of current's)
+        base_pq_message = self.create_base_pq_message(
+            charlie["eth_address"], new["eth_address"], base_eth_message,  # Wrong old address
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], current_pq_nonce)
+        pq_signature = sign_with_pq_key(base_pq_message, current["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print(f"Failed to generate PQ signature for {test_name}!")
+            return None
+        
+        return {
+            "test_name": test_name,
+            "description": description,
+            "current_actor": current_actor,
+            "new_actor": new_actor,
+            "old_eth_address": charlie["eth_address"],  # Wrong old address
+            "new_eth_address": new["eth_address"],
+            "pq_fingerprint": current["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": pq_signature,
+            "eth_nonce": new_eth_nonce,
+            "pq_nonce": current_pq_nonce
+        }
+
+    def generate_eth_message_pq_fingerprint_mismatch(self, current_actor, new_actor, test_name, description):
+        """Generate a change ETH intent vector with wrong PQ fingerprint in ETH message"""
+        current = self.actors[current_actor]
+        new = self.actors[new_actor]
+        charlie = self.actors["charlie"]  # Use Charlie's PQ fingerprint as wrong one
+        
+        # Use correct nonces
+        current_pq_nonce = 2  # Current actor used nonce 0 for registration, 1 for confirmation
+        new_eth_nonce = 0     # New actor first time being used
+        
+        # Step 1: New actor signs the base ETH message with WRONG PQ fingerprint (Charlie's instead of current's)
+        base_eth_message = self.create_base_eth_message(charlie["pq_fingerprint"], new["eth_address"], new_eth_nonce)  # Wrong PQ fingerprint
+        eth_signature = self.sign_eth_message(new["eth_address"], charlie["pq_fingerprint"], new_eth_nonce, new["eth_private_key"])
+        
+        # Step 2: Current actor's PQ key signs the complete message
+        base_pq_message = self.create_base_pq_message(
+            current["eth_address"], new["eth_address"], base_eth_message,
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], current_pq_nonce)
+        pq_signature = sign_with_pq_key(base_pq_message, current["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print(f"Failed to generate PQ signature for {test_name}!")
+            return None
+        
+        return {
+            "test_name": test_name,
+            "description": description,
+            "current_actor": current_actor,
+            "new_actor": new_actor,
+            "old_eth_address": current["eth_address"],
+            "new_eth_address": new["eth_address"],
+            "pq_fingerprint": current["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": pq_signature,
+            "eth_nonce": new_eth_nonce,
+            "pq_nonce": current_pq_nonce
+        }
+
+    def generate_eth_message_new_eth_address_mismatch(self, current_actor, new_actor, test_name, description):
+        """Generate a change ETH intent vector with wrong new ETH address in ETH message"""
+        current = self.actors[current_actor]
+        new = self.actors[new_actor]
+        charlie = self.actors["charlie"]  # Use Charlie's address as wrong new address
+        
+        # Use correct nonces
+        current_pq_nonce = 2  # Current actor used nonce 0 for registration, 1 for confirmation
+        new_eth_nonce = 0     # New actor first time being used
+        
+        # Step 1: New actor signs the base ETH message with WRONG new ETH address (Charlie's instead of new's)
+        base_eth_message = self.create_base_eth_message(current["pq_fingerprint"], charlie["eth_address"], new_eth_nonce)  # Wrong new address
+        eth_signature = self.sign_eth_message(charlie["eth_address"], current["pq_fingerprint"], new_eth_nonce, charlie["eth_private_key"])  # Sign with Charlie's key
+        
+        # Step 2: Current actor's PQ key signs the complete message
+        base_pq_message = self.create_base_pq_message(
+            current["eth_address"], new["eth_address"], base_eth_message,  # Correct addresses in PQ message
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], current_pq_nonce)
+        pq_signature = sign_with_pq_key(base_pq_message, current["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print(f"Failed to generate PQ signature for {test_name}!")
+            return None
+        
+        return {
+            "test_name": test_name,
+            "description": description,
+            "current_actor": current_actor,
+            "new_actor": new_actor,
+            "old_eth_address": current["eth_address"],
+            "new_eth_address": new["eth_address"],
+            "pq_fingerprint": current["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": pq_signature,
+            "eth_nonce": new_eth_nonce,
+            "pq_nonce": current_pq_nonce
+        }
+
+    def generate_wrong_signer_pq_signature(self, current_actor, new_actor, test_name, description):
+        """Generate a change ETH intent vector with PQ signature signed by wrong PQ key"""
+        current = self.actors[current_actor]
+        new = self.actors[new_actor]
+        charlie = self.actors["charlie"]  # Use Charlie's PQ key as wrong signer
+        
+        # Use correct nonces
+        current_pq_nonce = 2  # Current actor used nonce 0 for registration, 1 for confirmation
+        new_eth_nonce = 0     # New actor first time being used
+        
+        # Step 1: New actor signs the base ETH message
+        base_eth_message = self.create_base_eth_message(current["pq_fingerprint"], new["eth_address"], new_eth_nonce)
+        eth_signature = self.sign_eth_message(new["eth_address"], current["pq_fingerprint"], new_eth_nonce, new["eth_private_key"])
+        
+        # Step 2: Current actor's PQ key signs the complete message
+        base_pq_message = self.create_base_pq_message(
+            current["eth_address"], new["eth_address"], base_eth_message,
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], current_pq_nonce)
+        
+        # Step 3: But sign with Charlie's PQ key instead of current actor's key (wrong signer)
+        pq_signature = sign_with_pq_key(base_pq_message, charlie["pq_private_key_file"])
+        
+        if pq_signature is None:
+            print(f"Failed to generate PQ signature for {test_name}!")
+            return None
+        
+        return {
+            "test_name": test_name,
+            "description": description,
+            "current_actor": current_actor,
+            "new_actor": new_actor,
+            "old_eth_address": current["eth_address"],
+            "new_eth_address": new["eth_address"],
+            "pq_fingerprint": current["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": pq_signature,
+            "eth_nonce": new_eth_nonce,
+            "pq_nonce": current_pq_nonce
+        }
+
+    def generate_invalid_pq_signature(self, current_actor, new_actor, test_name, description):
+        """Generate a change ETH intent vector with invalid PQ signature components"""
+        current = self.actors[current_actor]
+        new = self.actors[new_actor]
+        
+        # Use correct nonces
+        current_pq_nonce = 2  # Current actor used nonce 0 for registration, 1 for confirmation
+        new_eth_nonce = 0     # New actor first time being used
+        
+        # Step 1: New actor signs the base ETH message
+        base_eth_message = self.create_base_eth_message(current["pq_fingerprint"], new["eth_address"], new_eth_nonce)
+        eth_signature = self.sign_eth_message(new["eth_address"], current["pq_fingerprint"], new_eth_nonce, new["eth_private_key"])
+        
+        # Step 2: Current actor's PQ key signs the complete message
+        base_pq_message = self.create_base_pq_message(
+            current["eth_address"], new["eth_address"], base_eth_message,
+            eth_signature["v"], eth_signature["r"], eth_signature["s"], current_pq_nonce)
+        
+        # Step 3: Use invalid PQ signature components
+        pq_signature = {
+            "salt": "0" * 80,  # Invalid salt (all zeros)
+            "cs1": ["0x" + "0" * 64] * 32,  # Invalid cs1 (all zeros)
+            "cs2": ["0x" + "0" * 64] * 32,  # Invalid cs2 (all zeros)
+            "hint": 0  # Invalid hint
+        }
+        
+        return {
+            "test_name": test_name,
+            "description": description,
+            "current_actor": current_actor,
+            "new_actor": new_actor,
+            "old_eth_address": current["eth_address"],
+            "new_eth_address": new["eth_address"],
+            "pq_fingerprint": current["pq_fingerprint"],
+            "base_eth_message": base_eth_message.hex(),
+            "pq_message": base_pq_message.hex(),
+            "eth_message": base_pq_message.hex(),
+            "eth_signature": {
+                "v": eth_signature["v"],
+                "r": eth_signature["r"],
+                "s": eth_signature["s"]
+            },
+            "pq_signature": pq_signature,
+            "eth_nonce": new_eth_nonce,
+            "pq_nonce": current_pq_nonce
+        }
+
     def generate_change_eth_revert_vectors(self) -> Dict[str, Any]:
         """Generate all change ETH revert test vectors"""
         
@@ -666,6 +992,97 @@ class ChangeETHRevertGenerator:
         )
         if wrong_pq_nonce_vector:
             vectors.append(wrong_pq_nonce_vector)
+        
+        # ============================================================================
+        # TEST 8: Wrong signer in ETH signature
+        # ============================================================================
+        print("Generating change ETH intent vector 8: Wrong signer in ETH signature")
+        wrong_signer_vector = self.generate_wrong_signer_eth_signature(
+            current_actor="alice",
+            new_actor="bob",
+            test_name="wrong_signer_eth_signature",
+            description="AlicePQ tries to change ETH to BobETH with wrong signer in ETH signature"
+        )
+        if wrong_signer_vector:
+            vectors.append(wrong_signer_vector)
+        
+        # ============================================================================
+        # TEST 9: Invalid ETH signature
+        # ============================================================================
+        print("Generating change ETH intent vector 9: Invalid ETH signature")
+        invalid_signature_vector = self.generate_invalid_eth_signature(
+            current_actor="alice",
+            new_actor="bob",
+            test_name="invalid_eth_signature",
+            description="AlicePQ tries to change ETH to BobETH with invalid ETH signature"
+        )
+        if invalid_signature_vector:
+            vectors.append(invalid_signature_vector)
+        
+        # ============================================================================
+        # TEST 10: Old ETH address mismatch in PQ message
+        # ============================================================================
+        print("Generating change ETH intent vector 10: Old ETH address mismatch in PQ message")
+        old_eth_address_mismatch_vector = self.generate_old_eth_address_mismatch(
+            current_actor="alice",
+            new_actor="bob",
+            test_name="old_eth_address_mismatch",
+            description="AlicePQ tries to change ETH to BobETH with wrong old ETH address in PQ message"
+        )
+        if old_eth_address_mismatch_vector:
+            vectors.append(old_eth_address_mismatch_vector)
+        
+        # ============================================================================
+        # TEST 11: PQ fingerprint mismatch in ETH message
+        # ============================================================================
+        print("Generating change ETH intent vector 11: PQ fingerprint mismatch in ETH message")
+        pq_fingerprint_mismatch_vector = self.generate_eth_message_pq_fingerprint_mismatch(
+            current_actor="alice",
+            new_actor="bob",
+            test_name="pq_fingerprint_mismatch",
+            description="AlicePQ tries to change ETH to BobETH with wrong PQ fingerprint in ETH message"
+        )
+        if pq_fingerprint_mismatch_vector:
+            vectors.append(pq_fingerprint_mismatch_vector)
+        
+        # ============================================================================
+        # TEST 12: New ETH address mismatch in ETH message
+        # ============================================================================
+        print("Generating change ETH intent vector 12: New ETH address mismatch in ETH message")
+        new_eth_address_mismatch_vector = self.generate_eth_message_new_eth_address_mismatch(
+            current_actor="alice",
+            new_actor="bob",
+            test_name="new_eth_address_mismatch",
+            description="AlicePQ tries to change ETH to BobETH with wrong new ETH address in ETH message"
+        )
+        if new_eth_address_mismatch_vector:
+            vectors.append(new_eth_address_mismatch_vector)
+        
+        # ============================================================================
+        # TEST 13: Wrong signer in PQ signature
+        # ============================================================================
+        print("Generating change ETH intent vector 13: Wrong signer in PQ signature")
+        wrong_signer_pq_vector = self.generate_wrong_signer_pq_signature(
+            current_actor="alice",
+            new_actor="bob",
+            test_name="wrong_signer_pq_signature",
+            description="AlicePQ tries to change ETH to BobETH with wrong signer in PQ signature"
+        )
+        if wrong_signer_pq_vector:
+            vectors.append(wrong_signer_pq_vector)
+        
+        # ============================================================================
+        # TEST 14: Invalid PQ signature
+        # ============================================================================
+        print("Generating change ETH intent vector 14: Invalid PQ signature")
+        invalid_pq_vector = self.generate_invalid_pq_signature(
+            current_actor="alice",
+            new_actor="bob",
+            test_name="invalid_pq_signature",
+            description="AlicePQ tries to change ETH to BobETH with invalid PQ signature"
+        )
+        if invalid_pq_vector:
+            vectors.append(invalid_pq_vector)
         
         return {
             "change_eth_address_intent": vectors
