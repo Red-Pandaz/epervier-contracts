@@ -1438,31 +1438,42 @@ class AdvancedVectorGenerator:
                 vectors["unregistration_confirmation"] = vector
         
         # Generate removal vectors
-        for removal_type in ["registration_pq_removal", "registration_eth_removal", "change_pq_removal", "change_eth_removal", "unregistration_removal"]:
-            if removal_type in scenario_config:
-                config = scenario_config[removal_type]
+        for scenario_key in [
+            "removal_registration_pq",
+            "removal_registration_eth",
+            "removal_change_pq",
+            "removal_change_eth",
+            "removal_unregistration"
+        ]:
+            if scenario_key in scenario_config:
+                print(f"DEBUG: Processing removal type: {scenario_key}")
+                config = scenario_config[scenario_key]
                 if isinstance(config, list):
-                    # Handle multiple removals
-                    vectors[removal_type] = []
+                    vectors[scenario_key] = []
                     for removal_config in config:
+                        removal_type = removal_config.get("removal_type", scenario_key.replace("removal_", ""))
                         vector = self.generate_removal_vector(
                             removal_config["actor"],
-                            removal_type.replace("_removal", ""),
+                            removal_type,
                             removal_config["eth_nonce"],
                             removal_config["pq_nonce"],
                             removal_config.get("target_pq_fingerprint")
                         )
-                        vectors[removal_type].append(vector)
+                        # No patching needed - use the keys as generated
+                        vectors[scenario_key].append(vector)
                 else:
-                    # Single removal
+                    removal_type = config.get("removal_type", scenario_key.replace("removal_", ""))
                     vector = self.generate_removal_vector(
                         config["actor"],
-                        removal_type.replace("_removal", ""),
+                        removal_type,
                         config["eth_nonce"],
                         config["pq_nonce"],
                         config.get("target_pq_fingerprint")
                     )
-                    vectors[removal_type] = vector
+                    # No patching needed - use the keys as generated
+                    vectors[scenario_key] = vector
+            else:
+                print(f"DEBUG: Removal type {scenario_key} not found in scenario config")
         
         # Generate final registration intent vectors (for test 9)
         if "final_registration_intent" in scenario_config:
@@ -1798,7 +1809,19 @@ def main():
         # Save combined scenario file with special handling for test1 and test2
         combined_file = output_path / f"{scenario['name']}_vectors.json"
         vectors_hex = {k: ([bytes_to_hex(v) for v in vlist] if isinstance(vlist, list) else bytes_to_hex(vlist)) for k, vlist in vectors.items()}
-        
+
+        # Enforce all removal vector keys are present in the combined file
+        removal_keys = [
+            "removal_registration_pq",
+            "removal_registration_eth",
+            "removal_change_pq",
+            "removal_change_eth",
+            "removal_unregistration"
+        ]
+        for key in removal_keys:
+            if key not in vectors_hex:
+                vectors_hex[key] = []  # Always include the key, even if empty
+
         # Special handling for test1 and test2 to create the expected key names
         if scenario['name'] == 'test1_eth_retry':
             # Create the specific keys expected by the test
@@ -1809,6 +1832,9 @@ def main():
             # Generate the confirmation (ETH nonce 2, PQ nonce 3)
             confirmation = generator.generate_registration_confirmation_vector("alice", 2, 3)
             test1_vectors['registration_confirmation_nonce3'] = [bytes_to_hex(confirmation)]
+            # Also include all removal keys (empty or not)
+            for key in removal_keys:
+                test1_vectors[key] = vectors_hex.get(key, [])
             vectors_hex = test1_vectors
         elif scenario['name'] == 'test2_pq_retry':
             # Create the specific keys expected by the test
@@ -1819,8 +1845,11 @@ def main():
             if 'registration_confirmation' in vectors_hex and vectors_hex['registration_confirmation']:
                 # The second confirmation (nonce 2, pq nonce 2) should be in registration_confirmation_nonce2_pq2
                 test2_vectors['registration_confirmation_nonce2_pq2'] = vectors_hex['registration_confirmation']
+            # Also include all removal keys (empty or not)
+            for key in removal_keys:
+                test2_vectors[key] = vectors_hex.get(key, [])
             vectors_hex = test2_vectors
-        
+
         if find_bytes(vectors_hex):
             print(f"ERROR: Still found bytes in {combined_file}")
         with open(combined_file, 'w') as f:
@@ -1837,30 +1866,6 @@ def main():
     with open(output_file, 'w') as f:
         json.dump({"pq_registration_eth_removal_retry_vector": [bob_confirmation_vector_hex]}, f, indent=2)
     print(f"Saved pq_registration_eth_removal_retry_vector to: {output_file}")
-    
-    # Copy test1 and test2 files to root directory where tests expect them
-    print("Copying test1 and test2 files to root directory...")
-    root_output_path = Path(__file__).resolve().parents[4] / "test" / "test_vectors"
-    
-    # Copy test1_eth_retry_vectors.json
-    test1_source = output_path / "test1_eth_retry_vectors.json"
-    test1_dest = root_output_path / "test1_eth_retry_vectors.json"
-    if test1_source.exists():
-        import shutil
-        shutil.copy2(test1_source, test1_dest)
-        print(f"Copied {test1_source} to {test1_dest}")
-    else:
-        print(f"Warning: {test1_source} not found")
-    
-    # Copy test2_pq_retry_vectors.json
-    test2_source = output_path / "test2_pq_retry_vectors.json"
-    test2_dest = root_output_path / "test2_pq_retry_vectors.json"
-    if test2_source.exists():
-        import shutil
-        shutil.copy2(test2_source, test2_dest)
-        print(f"Copied {test2_source} to {test2_dest}")
-    else:
-        print(f"Warning: {test2_source} not found")
     
     print("\nConsolidated advanced vector generation complete!")
 

@@ -29,24 +29,6 @@ REVERT_VECTOR_GENERATORS = [
         "script": "revert/revert_vector_generator.py",
         "output": "revert/comprehensive_revert_vectors.json",
         "description": "Comprehensive revert test vectors for all functions"
-    },
-    {
-        "name": "Remove Registration Intent ETH Reverts",
-        "script": "revert/generate_remove_registration_intent_eth_revert_vectors.py",
-        "output": "revert/remove_registration_intent_eth_revert_vectors.json",
-        "description": "Revert test vectors for removeRegistrationIntentByETH function"
-    },
-    {
-        "name": "Remove Registration Intent PQ Reverts",
-        "script": "revert/generate_remove_registration_intent_pq_revert_vectors.py",
-        "output": "revert/remove_registration_intent_pq_revert_vectors.json",
-        "description": "Revert test vectors for removeRegistrationIntentByPQ function"
-    },
-    {
-        "name": "Submit Registration Intent Reverts",
-        "script": "revert/generate_submit_registration_intent_revert_vectors.py",
-        "output": "revert/submit_registration_intent_revert_vectors.json",
-        "description": "Revert test vectors for submitRegistrationIntent function"
     }
 ]
 

@@ -144,8 +144,8 @@ contract PQRegistryAdvancedTests is Test {
     function testETHRegistrationWithPQRemovalAndRetry() public {
         // Load the advanced vectors for this test
         string memory intentJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_registration_intent_vectors.json");
-        string memory removalJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_removal_registration_pq_vectors.json");
-        string memory confirmJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_registration_confirmation_vectors.json");
+        string memory removalJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_vectors.json");
+        string memory confirmJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_vectors.json");
         string memory advancedJson = vm.readFile("test/test_vectors/advanced/test1_eth_retry_vectors.json");
         
         // Get Alice's configuration
@@ -496,7 +496,7 @@ contract PQRegistryAdvancedTests is Test {
 
         // Step 4: PQ cancels the change intent - USING ADVANCED VECTORS
         console.log("\n--- Step 4: PQ cancels the change intent (using advanced vectors) ---");
-        string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/test4_pq_cancels_change_eth_removal_change_pq_vectors.json");
+        string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/test4_pq_cancels_change_eth_vectors.json");
         bytes memory advancedCancelMessage = vm.parseBytes(vm.parseJsonString(advancedCancelJson, ".removal_change_pq[0].message"));
         bytes memory salt3 = vm.parseBytes(vm.parseJsonString(advancedCancelJson, ".removal_change_pq[0].signature.salt"));
         uint256[] memory cs1_3 = vm.parseJsonUintArray(advancedCancelJson, ".removal_change_pq[0].signature.cs1");
@@ -603,7 +603,7 @@ contract PQRegistryAdvancedTests is Test {
 
         // Step 4: ETH cancels the change intent - USING ADVANCED VECTORS
         console.log("\n--- Step 4: ETH cancels the change intent (using advanced vectors) ---");
-        string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/test5_eth_cancels_change_eth_removal_change_eth_vectors.json");
+        string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/test5_eth_cancels_change_eth_vectors.json");
         bytes memory ethMessage3 = vm.parseBytes(vm.parseJsonString(advancedCancelJson, ".removal_change_eth[0].message"));
         uint8 v3 = uint8(vm.parseUint(vm.parseJsonString(advancedCancelJson, ".removal_change_eth[0].signature.v")));
         uint256 r3Decimal = vm.parseUint(vm.parseJsonString(advancedCancelJson, ".removal_change_eth[0].signature.r"));
@@ -704,7 +704,7 @@ contract PQRegistryAdvancedTests is Test {
         
         // Step 4: AlicePQ cancels (AlicePQ nonce 2, BobETH nonce 0)
         console.log("\n--- Step 4: AlicePQ cancels ---");
-        string memory pqRemovalJson = vm.readFile("test/test_vectors/advanced/test6_multiple_registration_attempts_alice_pq_switches_targets_removal_registration_pq_vectors.json");
+        string memory pqRemovalJson = vm.readFile("test/test_vectors/advanced/test6_multiple_registration_attempts_alice_pq_switches_targets_vectors.json");
         bytes memory pqRemovalMessage = vm.parseBytes(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].pq_message"));
         bytes memory salt3 = vm.parseBytes(vm.parseJsonString(pqRemovalJson, ".removal_registration_pq[0].pq_signature.salt"));
         uint256[] memory cs1_3 = vm.parseJsonUintArray(pqRemovalJson, ".removal_registration_pq[0].pq_signature.cs1");
@@ -826,7 +826,7 @@ contract PQRegistryAdvancedTests is Test {
 
         // Step 6: AlicePQ cancels the change (ETH nonce 3, PQ nonce 4) - USING ADVANCED VECTORS
         console.log("\n--- Step 6: AlicePQ cancels the change ---");
-        string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/test7_multiple_change_attempts_removal_change_pq_vectors.json");
+        string memory advancedCancelJson = vm.readFile("test/test_vectors/advanced/test7_multiple_change_attempts_vectors.json");
         bytes memory advancedCancelMessage = vm.parseBytes(vm.parseJsonString(advancedCancelJson, ".removal_change_pq[0].message"));
         bytes memory advancedCancelSalt = vm.parseBytes(vm.parseJsonString(advancedCancelJson, ".removal_change_pq[0].signature.salt"));
         uint256[] memory cs1_3 = vm.parseJsonUintArray(advancedCancelJson, ".removal_change_pq[0].signature.cs1");
@@ -917,7 +917,7 @@ contract PQRegistryAdvancedTests is Test {
 
         // Step 3: AlicePQ revokes unregistration (removal)
         console.log("\n--- Step 3: AlicePQ revokes unregistration ---");
-        string memory unregRemovalJson = vm.readFile("test/test_vectors/advanced/test8_unregister_revoke_unregister_confirm_removal_unregistration_vectors.json");
+        string memory unregRemovalJson = vm.readFile("test/test_vectors/advanced/test8_unregister_revoke_unregister_confirm_vectors.json");
         bytes memory unregRemovalMessage = vm.parseBytes(vm.parseJsonString(unregRemovalJson, ".removal_unregistration[0].message"));
         bytes memory unregRemovalSalt = vm.parseBytes(vm.parseJsonString(unregRemovalJson, ".removal_unregistration[0].signature.salt"));
         uint256[] memory unregRemovalCs1 = vm.parseJsonUintArray(unregRemovalJson, ".removal_unregistration[0].signature.cs1");

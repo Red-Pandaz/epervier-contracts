@@ -21,7 +21,7 @@ from eth_account import Account
 from eth_utils import keccak
 
 # Add the project root to the Python path
-project_root = Path(__file__).parent.parent.parent.parent  # epervier-registry
+project_root = Path(__file__).parent.parent.parent.parent.parent  # epervier-registry
 sys.path.insert(0, str(project_root))
 
 # Load actors configuration

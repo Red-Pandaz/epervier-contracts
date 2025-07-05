@@ -697,8 +697,8 @@ class RevertVectorGenerator:
             eth_address_bytes +        # 20 bytes
             base_eth_message +         # 92 bytes
             eth_sig["v"].to_bytes(1, 'big') +  # 1 byte
-            eth_sig["r"] +            # 32 bytes
-            eth_sig["s"] +            # 32 bytes
+            eth_sig["r"].to_bytes(32, 'big') +            # 32 bytes
+            eth_sig["s"].to_bytes(32, 'big') +            # 32 bytes
             pq_nonce.to_bytes(32, 'big')  # 32 bytes
         )
         
@@ -715,8 +715,8 @@ class RevertVectorGenerator:
             "pq_message": pq_registration_confirmation_message.hex(),
             "pq_signature": {
                 "salt": pq_confirm_signature_mismatch["salt"].hex(),
-                "cs1": [cs.hex() for cs in pq_confirm_signature_mismatch["cs1"]],
-                "cs2": [cs.hex() for cs in pq_confirm_signature_mismatch["cs2"]],
+                "cs1": [hex(cs) for cs in pq_confirm_signature_mismatch["cs1"]],
+                "cs2": [hex(cs) for cs in pq_confirm_signature_mismatch["cs2"]],
                 "hint": pq_confirm_signature_mismatch["hint"]
             }
         })

@@ -706,5 +706,10 @@
       "eth_nonce": 3,
       "pq_nonce": 1
     }
-  ]
+  ],
+  "removal_registration_pq": [],
+  "removal_registration_eth": [],
+  "removal_change_pq": [],
+  "removal_change_eth": [],
+  "removal_unregistration": []
 }
