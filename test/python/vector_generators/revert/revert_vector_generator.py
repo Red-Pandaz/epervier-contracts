@@ -691,14 +691,15 @@ class RevertVectorGenerator:
         eth_address_bytes = bytes.fromhex(alice["eth_address"][2:])
         
         # Build the complete message: DOMAIN_SEPARATOR(32) + pattern(31) + ethAddress(20) + baseETHMessage(92) + v(1) + r(32) + s(32) + pqNonce(32) = 272 bytes
+        domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])
         pq_registration_confirmation_message = (
-            DOMAIN_SEPARATOR_BYTES +  # 32 bytes
+            domain_separator_bytes +   # 32 bytes
             pattern +                  # 31 bytes
             eth_address_bytes +        # 20 bytes
             base_eth_message +         # 92 bytes
             eth_sig["v"].to_bytes(1, 'big') +  # 1 byte
-            eth_sig["r"].to_bytes(32, 'big') +            # 32 bytes
-            eth_sig["s"].to_bytes(32, 'big') +            # 32 bytes
+            eth_sig["r"].to_bytes(32, 'big') +  # 32 bytes
+            eth_sig["s"].to_bytes(32, 'big') +  # 32 bytes
             pq_nonce.to_bytes(32, 'big')  # 32 bytes
         )
         
@@ -715,8 +716,8 @@ class RevertVectorGenerator:
             "pq_message": pq_registration_confirmation_message.hex(),
             "pq_signature": {
                 "salt": pq_confirm_signature_mismatch["salt"].hex(),
-                "cs1": [hex(cs) for cs in pq_confirm_signature_mismatch["cs1"]],
-                "cs2": [hex(cs) for cs in pq_confirm_signature_mismatch["cs2"]],
+                        "cs1": [f"0x{cs:x}" for cs in pq_confirm_signature_mismatch["cs1"]],
+        "cs2": [f"0x{cs:x}" for cs in pq_confirm_signature_mismatch["cs2"]],
                 "hint": pq_confirm_signature_mismatch["hint"]
             }
         })
@@ -1104,6 +1105,187 @@ class RevertVectorGenerator:
             pq_sig["hint"]
         )
 
+    def generate_change_intent_blocking_registration_vectors(self) -> Dict[str, Any]:
+        """Generate test vectors for the scenario where Alice has a change ETH intent pending (AlicePQ -> BobETH),
+        and Bob tries to submit a registration intent which should revert."""
+        
+        print("Generating change intent blocking registration vectors...")
+        
+        alice = self.actors["alice"]
+        bob = self.actors["bob"]
+        
+        # Step 1: Alice's registration (AliceETH and AlicePQ)
+        print("Step 1: Generating Alice's registration vectors...")
+        alice_eth_nonce = 0
+        alice_pq_nonce = 0
+        
+        # Generate Alice's registration intent
+        base_pq_message = build_base_pq_message(DOMAIN_SEPARATOR, alice["eth_address"], alice_pq_nonce)
+        pq_sig = sign_with_pq_key(base_pq_message, alice["pq_private_key_file"])
+        eth_intent_message = build_eth_intent_message(
+            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce
+        )
+        eth_sig = sign_with_eth_key(eth_intent_message, alice["eth_private_key"], pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce, base_pq_message)
+        
+        # Generate Alice's registration confirmation
+        # Create BaseETHRegistrationConfirmationMessage (92 bytes)
+        base_eth_confirm_message = b"Confirm bonding to Epervier Fingerprint " + bytes.fromhex(alice["pq_fingerprint"][2:]) + int_to_bytes32(alice_eth_nonce)
+        
+        # Sign the base ETH message with Alice's ETH key
+        eth_confirm_sig = sign_with_eth_key(base_eth_confirm_message, alice["eth_private_key"], pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce, base_pq_message)
+        
+        # Create PQRegistrationConfirmationMessage (272 bytes total)
+        domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+        pattern = b"Confirm bonding to ETH Address "
+        eth_address_bytes = bytes.fromhex(alice["eth_address"][2:])
+        
+        pq_confirm_message = (
+            domain_separator_bytes +              # DOMAIN_SEPARATOR (32 bytes)
+            pattern +                             # pattern (31 bytes)
+            eth_address_bytes +                   # ethAddress (20 bytes)
+            base_eth_confirm_message +            # baseETHMessage (92 bytes)
+            eth_confirm_sig["v"].to_bytes(1, 'big') +  # v (1 byte)
+            eth_confirm_sig["r"].to_bytes(32, 'big') + # r (32 bytes)
+            eth_confirm_sig["s"].to_bytes(32, 'big') + # s (32 bytes)
+            int_to_bytes32(alice_pq_nonce)        # pqNonce (32 bytes)
+        )
+        
+        # Verify the message is exactly 272 bytes
+        assert len(pq_confirm_message) == 272, f"PQ confirmation message length is {len(pq_confirm_message)}, expected 272"
+        pq_confirm_sig = sign_with_pq_key(pq_confirm_message, alice["pq_private_key_file"])
+        
+        # Step 2: Alice's change ETH intent (AlicePQ -> BobETH)
+        print("Step 2: Generating Alice's change ETH intent vectors...")
+        alice_change_eth_nonce = 1
+        alice_change_pq_nonce = 1
+        
+        # Create change ETH intent message
+        change_pattern = b"Intent to change ETH Address "
+        change_base_pq_message = bytes.fromhex(DOMAIN_SEPARATOR[2:]) + change_pattern + bytes.fromhex(bob["eth_address"][2:]) + int_to_bytes32(alice_change_pq_nonce)
+        change_pq_sig = sign_with_pq_key(change_base_pq_message, alice["pq_private_key_file"])
+        
+        # Create ETH intent message for change
+        change_eth_intent_message = build_eth_intent_message(
+            DOMAIN_SEPARATOR, change_base_pq_message, change_pq_sig["salt"], change_pq_sig["cs1"], change_pq_sig["cs2"], change_pq_sig["hint"], alice_change_eth_nonce
+        )
+        change_eth_sig = sign_with_eth_key(change_eth_intent_message, alice["eth_private_key"], change_pq_sig["salt"], change_pq_sig["cs1"], change_pq_sig["cs2"], change_pq_sig["hint"], alice_change_eth_nonce, change_base_pq_message)
+        
+        # Step 3: Bob's registration attempt (should revert)
+        print("Step 3: Generating Bob's registration attempt vectors...")
+        bob_eth_nonce = 1  # Bob's ETH nonce is 1 (he used 0 for change intent)
+        bob_pq_nonce = 0   # Bob's PQ nonce is 0 (first registration attempt)
+
+        # --- EXACT SAME LOGIC AS registration_intent_generator.py ---
+        # Build base PQ message for Bob's registration intent
+        bob_base_pq_message = build_base_pq_message(DOMAIN_SEPARATOR, bob["eth_address"], bob_pq_nonce)
+        
+        # PQ sign the base message
+        bob_pq_sig = sign_with_pq_key(bob_base_pq_message, bob["pq_private_key_file"])
+        
+        # Build ETH intent message (contains nested PQ signature and base PQ message)
+        bob_eth_message = build_eth_intent_message(
+            bob_base_pq_message,
+            bob_pq_sig["salt"],
+            bob_pq_sig["cs1"],
+            bob_pq_sig["cs2"],
+            bob_pq_sig["hint"],
+            bob_eth_nonce
+        )
+        
+        # ETH sign the ETH intent message
+        bob_eth_sig = sign_with_eth_key(bob_eth_message, bob["eth_private_key_file"])
+        
+        # Build the final PQ message (contains nested ETH signature and ETH message)
+        bob_pq_message = build_pq_intent_message(
+            DOMAIN_SEPARATOR,
+            bob["eth_address"],
+            bob_eth_message,
+            bob_eth_sig["v"],
+            bob_eth_sig["r"],
+            bob_eth_sig["s"],
+            bob_pq_nonce
+        )
+        
+        # PQ sign the final PQ message
+        bob_final_pq_sig = sign_with_pq_key(bob_pq_message, bob["pq_private_key_file"])
+        
+        # Store Bob's registration attempt
+        change_intent_blocking_registration_vectors["bob_registration_attempt"] = {
+            "eth_message": bob_eth_message.hex(),
+            "pq_message": bob_pq_message.hex(),
+            "eth_signature": {
+                "v": bob_eth_sig["v"],
+                "r": bob_eth_sig["r"],
+                "s": bob_eth_sig["s"]
+            },
+            "pq_signature": {
+                "salt": bob_final_pq_sig["salt"],
+                "cs1": bob_final_pq_sig["cs1"],
+                "cs2": bob_final_pq_sig["cs2"],
+                "hint": bob_final_pq_sig["hint"]
+            },
+            "eth_nonce": bob_eth_nonce,
+            "pq_nonce": bob_pq_nonce
+        }
+
+        # Create the test vector structure
+        test_vectors = {
+            "alice_registration": {
+                "eth_message": eth_intent_message.hex(),
+                "pq_message": base_pq_message.hex(),
+                "eth_signature": {
+                    "v": eth_sig["v"],
+                    "r": f"0x{eth_sig['r']:064x}",
+                    "s": f"0x{eth_sig['s']:064x}"
+                },
+                "pq_signature": {
+                    "salt": pq_sig["salt"].hex(),
+                    "cs1": [hex(x) for x in pq_sig["cs1"]],
+                    "cs2": [hex(x) for x in pq_sig["cs2"]],
+                    "hint": pq_sig["hint"]
+                },
+                "confirm_message": pq_confirm_message.hex(),
+                "confirm_signature": {
+                    "salt": pq_confirm_sig["salt"].hex(),
+                    "cs1": [hex(x) for x in pq_confirm_sig["cs1"]],
+                    "cs2": [hex(x) for x in pq_confirm_sig["cs2"]],
+                    "hint": pq_confirm_sig["hint"]
+                }
+            },
+            "alice_change_intent": {
+                "eth_message": change_eth_intent_message.hex(),
+                "pq_message": change_base_pq_message.hex(),
+                "eth_signature": {
+                    "v": change_eth_sig["v"],
+                    "r": f"0x{change_eth_sig['r']:064x}",
+                    "s": f"0x{change_eth_sig['s']:064x}"
+                },
+                "pq_signature": {
+                    "salt": change_pq_sig["salt"].hex(),
+                    "cs1": [hex(x) for x in change_pq_sig["cs1"]],
+                    "cs2": [hex(x) for x in change_pq_sig["cs2"]],
+                    "hint": change_pq_sig["hint"]
+                }
+            },
+            "bob_registration_attempt": {
+                "eth_message": bob_eth_message.hex(),
+                "pq_message": bob_pq_message.hex(),
+                "eth_signature": {
+                    "v": bob_eth_sig["v"],
+                    "r": f"0x{bob_eth_sig['r']:064x}",
+                    "s": f"0x{bob_eth_sig['s']:064x}"
+                },
+                "pq_signature": {
+                    "salt": bob_final_pq_sig["salt"].hex(),
+                    "cs1": bob_final_pq_sig["cs1"],
+                    "cs2": bob_final_pq_sig["cs2"],
+                    "hint": bob_final_pq_sig["hint"]
+                }
+            }
+        }
+        
+        return test_vectors
+
 def main():
     """Generate all revert test vectors"""
     
@@ -1118,6 +1300,7 @@ def main():
     confirm_reverts = generator.generate_confirm_registration_revert_vectors()
     remove_intent_eth_reverts = generator.generate_remove_registration_intent_eth_revert_vectors()
     remove_intent_pq_reverts = generator.generate_remove_registration_intent_pq_revert_vectors()
+    change_intent_blocking_registration = generator.generate_change_intent_blocking_registration_vectors()
     
     # Create comprehensive revert vectors file
     comprehensive_reverts = {
@@ -1131,6 +1314,12 @@ def main():
     comprehensive_file = output_dir / "comprehensive_revert_vectors.json"
     with open(comprehensive_file, "w") as f:
         json.dump(comprehensive_reverts, f, indent=2)
+    
+    # Write change intent blocking registration vectors
+    change_intent_file = output_dir / "change_intent_blocking_registration_revert_vectors.json"
+    with open(change_intent_file, "w") as f:
+        json.dump(change_intent_blocking_registration, f, indent=2)
+    print(f"Generated change intent blocking registration vectors: {change_intent_file}")
     
     # Also write individual files for backward compatibility
     with open(output_dir / "submit_registration_intent_revert_vectors.json", "w") as f:

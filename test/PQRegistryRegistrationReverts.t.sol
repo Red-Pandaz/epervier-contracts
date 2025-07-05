@@ -362,6 +362,54 @@ contract PQRegistryRegistrationRevertsTest is Test {
         registry.submitRegistrationIntent(ethIntentMessage, v, r, s);
     }
     
+    function testSubmitRegistrationIntent_RevertWhenBobETHAddressInvolvedInPendingChangeIntent() public {
+        // Step 1: AliceETH and AlicePQ submit and confirm registration
+        // Use working vectors from registration_intent_vectors.json and registration_confirmation_vectors.json
+        string memory aliceIntentJsonData = vm.readFile("test/test_vectors/register/registration_intent_vectors.json");
+        string memory aliceConfirmJsonData = vm.readFile("test/test_vectors/register/registration_confirmation_vectors.json");
+        
+        // Submit Alice's registration intent (index 0)
+        bytes memory aliceEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_message"));
+        uint8 aliceV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.v")));
+        bytes32 aliceR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.r"));
+        bytes32 aliceS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[0].eth_signature.s"));
+        
+        registry.submitRegistrationIntent(aliceEthIntentMessage, aliceV, aliceR, aliceS);
+        
+        // Confirm Alice's registration (index 0)
+        bytes memory alicePqConfirmMessage = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_message"));
+        bytes memory aliceConfirmSalt = vm.parseBytes(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.salt"));
+        uint256[] memory aliceConfirmCs1 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs1");
+        uint256[] memory aliceConfirmCs2 = vm.parseJsonUintArray(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.cs2");
+        uint256 aliceConfirmHint = vm.parseUint(vm.parseJsonString(aliceConfirmJsonData, ".registration_confirmation[0].pq_signature.hint"));
+        
+        registry.confirmRegistration(alicePqConfirmMessage, aliceConfirmSalt, aliceConfirmCs1, aliceConfirmCs2, aliceConfirmHint);
+        
+        // Step 2: BobETH and AlicePQ open change ETH intent
+        // Use working vectors from change_eth_address_intent_vectors.json
+        string memory changeIntentJsonData = vm.readFile("test/test_vectors/change_eth/change_eth_address_intent_vectors.json");
+        
+        // Submit change intent (index 0 - BobETH + AlicePQ)
+        bytes memory changePqMessage = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[0].pq_message"));
+        bytes memory changeSalt = vm.parseBytes(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[0].pq_signature.salt"));
+        uint256[] memory changeCs1 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[0].pq_signature.cs1");
+        uint256[] memory changeCs2 = vm.parseJsonUintArray(changeIntentJsonData, ".change_eth_address_intent[0].pq_signature.cs2");
+        uint256 changeHint = vm.parseUint(vm.parseJsonString(changeIntentJsonData, ".change_eth_address_intent[0].pq_signature.hint"));
+        
+        registry.submitChangeETHAddressIntent(changePqMessage, changeSalt, changeCs1, changeCs2, changeHint);
+        
+        // Step 3: BobETH and BobPQ attempt to submit a registration intent (SHOULD REVERT)
+        // Use Bob's registration intent from working vectors (index 1)
+        bytes memory bobEthIntentMessage = vm.parseBytes(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[1].eth_message"));
+        uint8 bobV = uint8(vm.parseUint(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[1].eth_signature.v")));
+        bytes32 bobR = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[1].eth_signature.r"));
+        bytes32 bobS = vm.parseBytes32(vm.parseJsonString(aliceIntentJsonData, ".registration_intent[1].eth_signature.s"));
+        
+        // This should revert because Bob's ETH address is involved in Alice's pending change intent
+        vm.expectRevert("ETH Address has pending change intent");
+        registry.submitRegistrationIntent(bobEthIntentMessage, bobV, bobR, bobS);
+    }
+    
     // ============================================================================
     // CONFIRM REGISTRATION REVERT TESTS  
     // ============================================================================

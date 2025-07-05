@@ -224,7 +224,14 @@ contract PQRegistry {
         address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
         
         // STEP 2: Validate the PQ registration confirmation message format
-        require(MessageParser.validatePQRegistrationConfirmationMessage(pqMessage), "Invalid PQ registration confirmation message");
+        console.log("DEBUG: pqMessage length:", pqMessage.length);
+        console.log("DEBUG: pqMessage first 64 bytes:");
+        for (uint i = 0; i < 64 && i < pqMessage.length; i++) {
+            console.log("  pqMessage[", i, "]:", uint8(pqMessage[i]));
+        }
+        bool valid = MessageParser.validatePQRegistrationConfirmationMessage(pqMessage);
+        console.log("DEBUG: validatePQRegistrationConfirmationMessage result:", valid);
+        require(valid, "Invalid PQ registration confirmation message");
         
         // STEP 3: Parse the PQ registration confirmation message
         (
@@ -608,6 +615,7 @@ contract PQRegistry {
         require(changeETHAddressIntents[recoveredFingerprint].timestamp == 0, "PQ fingerprint has pending change intent");
         require(ethAddressToChangeIntentFingerprint[oldEthAddress] == address(0), "Old ETH Address has pending change intent");
         require(ethAddressToChangeIntentFingerprint[newEthAddress] == address(0), "New ETH Address has pending change intent");
+        require(pendingIntents[newEthAddress].timestamp == 0, "New ETH Address has pending registration intent");
         
         // STEP 8: Nonce validation
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
