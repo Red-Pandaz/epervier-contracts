@@ -1843,4 +1843,40 @@ library MessageParser {
             revert("Invalid message type");
         }
     }
+    
+    /**
+     * @dev Validate that base PQ message contains confirmation text for change ETH address
+     * Expected format: DOMAIN_SEPARATOR + "Confirm changing bound ETH Address for Epervier Fingerprint from " + oldEthAddress + " to " + newEthAddress + pqNonce
+     */
+    function validateBasePQChangeETHAddressConfirmMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Confirm changing bound ETH Address for Epervier Fingerprint from ";
+        return findPattern(message, pattern, true) != type(uint).max;
+    }
+    
+    /**
+     * @dev Validate that base ETH message contains confirmation text for registration
+     * Expected format: "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+     */
+    function validateBaseETHRegistrationConfirmationMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Confirm bonding to Epervier Fingerprint ";
+        return findPattern(message, pattern, false) != type(uint).max;
+    }
+    
+    /**
+     * @dev Validate that base ETH message contains intent text for change ETH address
+     * Expected format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+     */
+    function validateBaseETHChangeETHAddressIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Intent to change ETH Address and bond with Epervier Fingerprint ";
+        return findPattern(message, pattern, false) != type(uint).max;
+    }
+    
+    /**
+     * @dev Validate that base ETH message contains intent text for unregistration
+     * Expected format: "Intent to unregister from Epervier Fingerprint " + pqFingerprint + ethNonce
+     */
+    function validateBaseETHUnregistrationIntentMessage(bytes memory message) internal pure returns (bool) {
+        bytes memory pattern = "Intent to unregister from Epervier Fingerprint ";
+        return findPattern(message, pattern, false) != type(uint).max;
+    }
 }
