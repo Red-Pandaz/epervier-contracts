@@ -1517,7 +1517,13 @@ library MessageParser {
      */
     function validateETHChangeETHAddressConfirmationMessage(bytes memory message) internal pure returns (bool) {
         bytes memory pattern = "Confirm change ETH Address for Epervier Fingerprint ";
-        return findPattern(message, pattern, false) != type(uint).max;
+        // Check that the pattern is at the beginning of the message (after DOMAIN_SEPARATOR if present)
+        uint256 patternIndex = findPattern(message, pattern, false);
+        if (patternIndex == type(uint).max) {
+            return false;
+        }
+        // For ETH messages, there's no DOMAIN_SEPARATOR, so pattern should be at index 0
+        return patternIndex == 0;
     }
 
     /**

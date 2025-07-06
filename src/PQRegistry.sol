@@ -618,6 +618,12 @@ contract PQRegistry {
         require(pendingIntents[newEthAddress].timestamp == 0, "New ETH Address has pending registration intent");
         
         // STEP 8: Nonce validation
+        console.log("DEBUG: submitChangeETHAddressIntent - Nonce validation:");
+        console.log("  - pqKeyNonces[recoveredFingerprint] (contract):", pqKeyNonces[recoveredFingerprint]);
+        console.log("  - pqNonce from message:", pqNonce);
+        console.log("  - ethNonces[newEthAddress] (contract):", ethNonces[newEthAddress]);
+        console.log("  - ethNonce from message:", ethNonce);
+        
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[newEthAddress] == ethNonce, "Invalid ETH nonce");
         
@@ -632,8 +638,16 @@ contract PQRegistry {
         ethAddressToChangeIntentFingerprint[newEthAddress] = recoveredFingerprint;
         
         // STEP 10: Increment nonces
+        console.log("DEBUG: submitChangeETHAddressIntent - Before nonce increments:");
+        console.log("  - pqKeyNonces[recoveredFingerprint]:", pqKeyNonces[recoveredFingerprint]);
+        console.log("  - ethNonces[newEthAddress]:", ethNonces[newEthAddress]);
+        
         pqKeyNonces[recoveredFingerprint]++;
         ethNonces[newEthAddress]++;
+        
+        console.log("DEBUG: submitChangeETHAddressIntent - After nonce increments:");
+        console.log("  - pqKeyNonces[recoveredFingerprint]:", pqKeyNonces[recoveredFingerprint]);
+        console.log("  - ethNonces[newEthAddress]:", ethNonces[newEthAddress]);
 
         emit ChangeETHAddressIntentSubmitted(recoveredFingerprint, newEthAddress, ethNonce);
 
@@ -649,7 +663,11 @@ contract PQRegistry {
         bytes32 r,
         bytes32 s
     ) external {
-        // STEP 1: Parse the ETH change address confirmation message
+        // STEP 1: Validate the ETH change address confirmation message format
+        bool valid = MessageParser.validateETHChangeETHAddressConfirmationMessage(ethMessage);
+        require(valid, "Invalid ETH change address confirmation message");
+        
+        // STEP 2: Parse the ETH change address confirmation message
         (
             address pqFingerprint,
             uint256 ethNonce,
@@ -726,6 +744,23 @@ contract PQRegistry {
         console.log("DEBUG: PQ nonce validation - pqNonce from message:", pqNonce);
         console.log("DEBUG: PQ nonce validation - nonces match:", pqKeyNonces[recoveredFingerprint] == pqNonce);
         
+        // ETH nonce validation with detailed logging
+        console.log("DEBUG: ETH nonce validation - newEthAddress:", uint256(uint160(newEthAddress)));
+        console.log("DEBUG: ETH nonce validation - ethNonces[newEthAddress] (contract state):", ethNonces[newEthAddress]);
+        console.log("DEBUG: ETH nonce validation - ethNonce from message:", ethNonce);
+        console.log("DEBUG: ETH nonce validation - nonces match:", ethNonces[newEthAddress] == ethNonce);
+        
+        // Log all relevant nonces for debugging
+        console.log("DEBUG: All nonces at this point:");
+        console.log("  - ethNonces[oldEthAddress]:", ethNonces[oldEthAddress]);
+        console.log("  - ethNonces[newEthAddress]:", ethNonces[newEthAddress]);
+        console.log("  - pqKeyNonces[recoveredFingerprint]:", pqKeyNonces[recoveredFingerprint]);
+        
+        // Additional debug info before nonce validation
+        console.log("DEBUG: About to validate nonces:");
+        console.log("  - Will check pqKeyNonces[", uint256(uint160(recoveredFingerprint)), "] == ", pqNonce);
+        console.log("  - Will check ethNonces[", uint256(uint160(newEthAddress)), "] == ", ethNonce);
+        
         require(pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
         require(ethNonces[newEthAddress] == ethNonce, "Invalid ETH nonce");
         
@@ -740,8 +775,16 @@ contract PQRegistry {
         delete ethAddressToChangeIntentFingerprint[newEthAddress];
         
         // STEP 10: Increment nonces
+        console.log("DEBUG: confirmChangeETHAddress - Before nonce increments:");
+        console.log("  - pqKeyNonces[recoveredFingerprint]:", pqKeyNonces[recoveredFingerprint]);
+        console.log("  - ethNonces[newEthAddress]:", ethNonces[newEthAddress]);
+        
         pqKeyNonces[recoveredFingerprint]++;
         ethNonces[newEthAddress]++;
+        
+        console.log("DEBUG: confirmChangeETHAddress - After nonce increments:");
+        console.log("  - pqKeyNonces[recoveredFingerprint]:", pqKeyNonces[recoveredFingerprint]);
+        console.log("  - ethNonces[newEthAddress]:", ethNonces[newEthAddress]);
         
         emit ChangeETHAddressConfirmed(recoveredFingerprint, oldEthAddress, newEthAddress);
     }

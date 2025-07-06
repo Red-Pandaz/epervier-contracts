@@ -186,6 +186,10 @@ class ChangeETHRevertGenerator:
             base_eth_message_bytes = base_eth_message_bytes[:140]
         
         # Convert signature components to bytes
+        if isinstance(r, str):
+            r = int(r, 16)
+        if isinstance(s, str):
+            s = int(s, 16)
         v_bytes = v.to_bytes(1, 'big')  # 1 byte
         r_bytes = r.to_bytes(32, 'big')  # 32 bytes
         s_bytes = s.to_bytes(32, 'big')  # 32 bytes
@@ -210,7 +214,12 @@ class ChangeETHRevertGenerator:
         # Sign the digest
         signature = sign_eip712_message(digest, private_key)
         
-        return signature
+        # Format signature values as hex strings with 0x prefix (matching working vectors)
+        return {
+            "v": signature["v"],
+            "r": f"0x{signature['r']:064x}",
+            "s": f"0x{signature['s']:064x}"
+        }
 
     def sign_remove_change_eth_message(self, pq_fingerprint, eth_nonce, private_key):
         """Sign the remove change ETH address intent message using EIP712"""
@@ -226,7 +235,12 @@ class ChangeETHRevertGenerator:
         # Sign the digest
         signature = sign_eip712_message(digest, private_key)
         
-        return signature
+        # Format signature values as hex strings with 0x prefix (matching working vectors)
+        return {
+            "v": signature["v"],
+            "r": f"0x{signature['r']:064x}",
+            "s": f"0x{signature['s']:064x}"
+        }
 
     def generate_wrong_domain_separator_pq_message(self, current_actor, new_actor, test_name, description):
         """Generate a change ETH intent vector with wrong domain separator in PQ message"""
@@ -257,8 +271,14 @@ class ChangeETHRevertGenerator:
         
         # Convert signature components to bytes
         v_bytes = eth_signature["v"].to_bytes(1, 'big')
-        r_bytes = eth_signature["r"].to_bytes(32, 'big')
-        s_bytes = eth_signature["s"].to_bytes(32, 'big')
+        r = eth_signature["r"]
+        s = eth_signature["s"]
+        if isinstance(r, str):
+            r = int(r, 16)
+        if isinstance(s, str):
+            s = int(s, 16)
+        r_bytes = r.to_bytes(32, 'big')
+        s_bytes = s.to_bytes(32, 'big')
         pq_nonce_bytes = current_pq_nonce.to_bytes(32, 'big')
         
         # Create message with WRONG domain separator
@@ -345,8 +365,8 @@ class ChangeETHRevertGenerator:
             "eth_message": base_pq_message.hex(),
             "eth_signature": {
                 "v": eth_signature["v"],
-                "r": eth_signature["r"],
-                "s": eth_signature["s"]
+                "r": eth_signature["r"] if isinstance(eth_signature["r"], str) else "0x%064x" % eth_signature["r"],
+                "s": eth_signature["s"] if isinstance(eth_signature["s"], str) else "0x%064x" % eth_signature["s"]
             },
             "pq_signature": pq_signature,
             "eth_nonce": new_eth_nonce,
@@ -480,8 +500,8 @@ class ChangeETHRevertGenerator:
             "eth_message": base_pq_message.hex(),
             "eth_signature": {
                 "v": eth_signature["v"],
-                "r": eth_signature["r"],
-                "s": eth_signature["s"]
+                "r": eth_signature["r"] if isinstance(eth_signature["r"], str) else "0x%064x" % eth_signature["r"],
+                "s": eth_signature["s"] if isinstance(eth_signature["s"], str) else "0x%064x" % eth_signature["s"]
             },
             "pq_signature": pq_signature,
             "eth_nonce": new_eth_nonce,
@@ -779,12 +799,12 @@ class ChangeETHRevertGenerator:
         vectors = []
         
         # ============================================================================
-        # TEST 1: New ETH Address has pending registration intent
+        # TEST 1: AlicePQ → BobETH change intent (BobETH is unregistered, nonce 0)
         # ============================================================================
-        print("Generating change ETH intent vector 1: AlicePQ → BobETH (BobETH nonce 1 - Bob has pending intent)")
+        print("Generating change ETH intent vector 1: AlicePQ → BobETH (BobETH nonce 0 - Bob is unregistered)")
         
         alice_pq_nonce = 2  # AlicePQ used nonce 0 for registration, 1 for confirmation
-        bob_eth_nonce = 1   # BobETH used nonce 0 for registration intent, so this is 1
+        bob_eth_nonce = 0   # BobETH is unregistered, so his nonce is 0
         
         # Step 1: Bob signs the base ETH message
         base_eth_message = self.create_base_eth_message(alice["pq_fingerprint"], bob["eth_address"], bob_eth_nonce)
@@ -813,8 +833,8 @@ class ChangeETHRevertGenerator:
             "eth_message": base_pq_message.hex(),  # For change intent, eth_message is the same as pq_message
             "eth_signature": {
                 "v": eth_signature["v"],
-                "r": eth_signature["r"],
-                "s": eth_signature["s"]
+                "r": eth_signature["r"] if isinstance(eth_signature["r"], str) else "0x%064x" % eth_signature["r"],
+                "s": eth_signature["s"] if isinstance(eth_signature["s"], str) else "0x%064x" % eth_signature["s"]
             },
             "pq_signature": pq_signature,
             "eth_nonce": bob_eth_nonce,
@@ -858,8 +878,8 @@ class ChangeETHRevertGenerator:
             "eth_message": base_pq_message.hex(),  # For change intent, eth_message is the same as pq_message
             "eth_signature": {
                 "v": eth_signature["v"],
-                "r": eth_signature["r"],
-                "s": eth_signature["s"]
+                "r": eth_signature["r"] if isinstance(eth_signature["r"], str) else "0x%064x" % eth_signature["r"],
+                "s": eth_signature["s"] if isinstance(eth_signature["s"], str) else "0x%064x" % eth_signature["s"]
             },
             "pq_signature": pq_signature,
             "eth_nonce": bob_eth_nonce,
@@ -905,8 +925,8 @@ class ChangeETHRevertGenerator:
             "eth_message": base_pq_message.hex(),  # For change intent, eth_message is the same as pq_message
             "eth_signature": {
                 "v": eth_signature["v"],
-                "r": eth_signature["r"],
-                "s": eth_signature["s"]
+                "r": eth_signature["r"] if isinstance(eth_signature["r"], str) else "0x%064x" % eth_signature["r"],
+                "s": eth_signature["s"] if isinstance(eth_signature["s"], str) else "0x%064x" % eth_signature["s"]
             },
             "pq_signature": pq_signature,
             "eth_nonce": charlie_eth_nonce,
@@ -948,8 +968,8 @@ class ChangeETHRevertGenerator:
             "eth_message": base_pq_message.hex(),  # For change intent, eth_message is the same as pq_message
             "eth_signature": {
                 "v": eth_signature["v"],
-                "r": eth_signature["r"],
-                "s": eth_signature["s"]
+                "r": eth_signature["r"] if isinstance(eth_signature["r"], str) else "0x%064x" % eth_signature["r"],
+                "s": eth_signature["s"] if isinstance(eth_signature["s"], str) else "0x%064x" % eth_signature["s"]
             },
             "pq_signature": pq_signature,
             "eth_nonce": charlie_eth_nonce,
@@ -1481,6 +1501,310 @@ class ChangeETHRevertGenerator:
             "remove_change_eth_address_intent": vectors
         }
 
+    def generate_confirm_change_eth_revert_vectors(self) -> Dict[str, Any]:
+        """Generate revert test vectors for confirm change ETH address"""
+        print("Generating confirm change ETH address revert vectors...")
+        vectors = []
+        alice = self.actors["alice"]
+        bob = self.actors["bob"]
+        charlie = self.actors["charlie"]
+
+        # Create a valid base setup for all tests
+        eth_nonce = 1
+        pq_nonce = 3
+        base_pq_message = self.create_base_pq_confirm_message(alice["eth_address"], bob["eth_address"], pq_nonce)
+        pq_signature = sign_with_pq_key(base_pq_message, alice["pq_private_key_file"])
+        if pq_signature is None:
+            print("Failed to generate PQ signature for valid setup!")
+            return {}
+        
+        eth_message = self.create_eth_confirm_message(alice["pq_fingerprint"], base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], eth_nonce)
+        eth_signature = self.sign_eth_confirm_message(eth_message, bob["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], eth_nonce)
+
+        # 1. Malformed message - wrong pattern at the start, correct length
+        wrong_pattern = b"THIS IS NOT THE RIGHT PATTERN FOR CONFIRM CHANGE ETH ADDRESS!"
+        malformed_eth_message = wrong_pattern + b"\x00" * (len(eth_message) - len(wrong_pattern))
+        assert len(malformed_eth_message) == len(eth_message), f"Malformed message must be {len(eth_message)} bytes, got {len(malformed_eth_message)}"
+        vectors.append({
+            "test_name": "malformed_message",
+            "description": "Test revert when ETH message has wrong pattern at the start (correct length)",
+            "current_actor": "alice",
+            "new_actor": "bob",
+            "eth_message": malformed_eth_message.hex(),
+            "eth_signature": eth_signature,
+            "pq_signature": pq_signature,
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce,
+            "expected_revert": "Invalid ETH change address confirmation message"
+        })
+
+        # 2. Invalid ETH signature - corrupted r value
+        invalid_eth_signature = {
+            "v": eth_signature["v"],
+            "r": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "s": eth_signature["s"]
+        }
+        vectors.append({
+            "test_name": "invalid_eth_signature",
+            "description": "Test revert when ETH signature is cryptographically invalid",
+            "current_actor": "alice",
+            "new_actor": "bob",
+            "eth_message": eth_message.hex(),
+            "eth_signature": invalid_eth_signature,
+            "pq_signature": pq_signature,
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce,
+            "expected_revert": "Invalid ETH signature"
+        })
+
+        # 3. Invalid PQ signature - corrupted cs1 values
+        invalid_pq_signature = pq_signature.copy()
+        invalid_pq_signature["cs1"] = ["0x0000000000000000000000000000000000000000000000000000000000000000"] * 32
+        eth_message_invalid_pq = self.create_eth_confirm_message(alice["pq_fingerprint"], base_pq_message, bytes.fromhex(invalid_pq_signature["salt"]), [int(x, 16) for x in invalid_pq_signature["cs1"]], [int(x, 16) for x in invalid_pq_signature["cs2"]], invalid_pq_signature["hint"], eth_nonce)
+        eth_signature_invalid_pq = self.sign_eth_confirm_message(eth_message_invalid_pq, bob["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message, bytes.fromhex(invalid_pq_signature["salt"]), [int(x, 16) for x in invalid_pq_signature["cs1"]], [int(x, 16) for x in invalid_pq_signature["cs2"]], invalid_pq_signature["hint"], eth_nonce)
+        vectors.append({
+            "test_name": "invalid_pq_signature",
+            "description": "Test revert when PQ signature is cryptographically invalid",
+            "current_actor": "alice",
+            "new_actor": "bob",
+            "eth_message": eth_message_invalid_pq.hex(),
+            "eth_signature": eth_signature_invalid_pq,
+            "pq_signature": invalid_pq_signature,
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce,
+            "expected_revert": "Invalid PQ signature"
+        })
+
+        # 4. ETH address mismatch - PQ message has different ETH address than signature
+        # Create a valid ETH signature that recovers to Bob's address
+        # But put Charlie's address in the PQ message as the old ETH address
+        # This should trigger "ETH Address mismatch: PQ message vs recovered ETH signature"
+        base_pq_message_eth_mismatch = self.create_base_pq_confirm_message(charlie["eth_address"], bob["eth_address"], pq_nonce)  # Use Charlie's address as old address
+        pq_signature_eth_mismatch = sign_with_pq_key(base_pq_message_eth_mismatch, alice["pq_private_key_file"])
+        if pq_signature_eth_mismatch is not None:
+            eth_message_eth_mismatch = self.create_eth_confirm_message(alice["pq_fingerprint"], base_pq_message_eth_mismatch, bytes.fromhex(pq_signature_eth_mismatch["salt"]), [int(x, 16) for x in pq_signature_eth_mismatch["cs1"]], [int(x, 16) for x in pq_signature_eth_mismatch["cs2"]], pq_signature_eth_mismatch["hint"], eth_nonce)
+            # Sign with Bob's key (so signature recovers to Bob's address)
+            # But PQ message contains Charlie's address as old address
+            eth_signature_eth_mismatch = self.sign_eth_confirm_message(eth_message_eth_mismatch, bob["eth_private_key"], charlie["eth_address"], alice["pq_fingerprint"], base_pq_message_eth_mismatch, bytes.fromhex(pq_signature_eth_mismatch["salt"]), [int(x, 16) for x in pq_signature_eth_mismatch["cs1"]], [int(x, 16) for x in pq_signature_eth_mismatch["cs2"]], pq_signature_eth_mismatch["hint"], eth_nonce)
+            vectors.append({
+                "test_name": "eth_address_mismatch",
+                "description": "Test revert when ETH address in PQ message doesn't match recovered ETH signature",
+                "current_actor": "alice",
+                "new_actor": "bob",
+                "eth_message": eth_message_eth_mismatch.hex(),
+                "eth_signature": eth_signature_eth_mismatch,
+                "pq_signature": pq_signature_eth_mismatch,
+                "eth_nonce": eth_nonce,
+                "pq_nonce": pq_nonce,
+                "expected_revert": "ETH Address mismatch: PQ message vs recovered ETH signature"
+            })
+
+        # 5. PQ fingerprint mismatch - ETH message has different PQ fingerprint than signature
+        base_pq_message_pq_mismatch = self.create_base_pq_confirm_message(alice["eth_address"], bob["eth_address"], pq_nonce)
+        pq_signature_pq_mismatch = sign_with_pq_key(base_pq_message_pq_mismatch, bob["pq_private_key_file"])  # Use Bob's PQ key instead of Alice's
+        if pq_signature_pq_mismatch is not None:
+            eth_message_pq_mismatch = self.create_eth_confirm_message(alice["pq_fingerprint"], base_pq_message_pq_mismatch, bytes.fromhex(pq_signature_pq_mismatch["salt"]), [int(x, 16) for x in pq_signature_pq_mismatch["cs1"]], [int(x, 16) for x in pq_signature_pq_mismatch["cs2"]], pq_signature_pq_mismatch["hint"], eth_nonce)
+            eth_signature_pq_mismatch = self.sign_eth_confirm_message(eth_message_pq_mismatch, bob["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message_pq_mismatch, bytes.fromhex(pq_signature_pq_mismatch["salt"]), [int(x, 16) for x in pq_signature_pq_mismatch["cs1"]], [int(x, 16) for x in pq_signature_pq_mismatch["cs2"]], pq_signature_pq_mismatch["hint"], eth_nonce)
+            vectors.append({
+                "test_name": "pq_fingerprint_mismatch",
+                "description": "Test revert when PQ fingerprint in ETH message doesn't match recovered PQ signature",
+                "current_actor": "alice",
+                "new_actor": "bob",
+                "eth_message": eth_message_pq_mismatch.hex(),
+                "eth_signature": eth_signature_pq_mismatch,
+                "pq_signature": pq_signature_pq_mismatch,
+                "eth_nonce": eth_nonce,
+                "pq_nonce": pq_nonce,
+                "expected_revert": "PQ fingerprint mismatch: ETH message vs recovered PQ signature"
+            })
+
+        # 6. Intent ETH address mismatch - PQ message has different intent ETH address
+        base_pq_message_intent_mismatch = self.create_base_pq_confirm_message(charlie["eth_address"], bob["eth_address"], pq_nonce)  # Use Charlie's address as old address
+        pq_signature_intent_mismatch = sign_with_pq_key(base_pq_message_intent_mismatch, alice["pq_private_key_file"])
+        if pq_signature_intent_mismatch is not None:
+            eth_message_intent_mismatch = self.create_eth_confirm_message(alice["pq_fingerprint"], base_pq_message_intent_mismatch, bytes.fromhex(pq_signature_intent_mismatch["salt"]), [int(x, 16) for x in pq_signature_intent_mismatch["cs1"]], [int(x, 16) for x in pq_signature_intent_mismatch["cs2"]], pq_signature_intent_mismatch["hint"], eth_nonce)
+            eth_signature_intent_mismatch = self.sign_eth_confirm_message(eth_message_intent_mismatch, bob["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message_intent_mismatch, bytes.fromhex(pq_signature_intent_mismatch["salt"]), [int(x, 16) for x in pq_signature_intent_mismatch["cs1"]], [int(x, 16) for x in pq_signature_intent_mismatch["cs2"]], pq_signature_intent_mismatch["hint"], eth_nonce)
+            vectors.append({
+                "test_name": "intent_eth_address_mismatch",
+                "description": "Test revert when intent ETH address in PQ message doesn't match expected",
+                "current_actor": "alice",
+                "new_actor": "bob",
+                "eth_message": eth_message_intent_mismatch.hex(),
+                "eth_signature": eth_signature_intent_mismatch,
+                "pq_signature": pq_signature_intent_mismatch,
+                "eth_nonce": eth_nonce,
+                "pq_nonce": pq_nonce,
+                "expected_revert": "Intent ETH address mismatch"
+            })
+
+        # 7. Wrong ETH nonce
+        wrong_eth_nonce = 999
+        eth_message_wrong_eth_nonce = self.create_eth_confirm_message(alice["pq_fingerprint"], base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], wrong_eth_nonce)
+        eth_signature_wrong_eth_nonce = self.sign_eth_confirm_message(eth_message_wrong_eth_nonce, bob["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], wrong_eth_nonce)
+        vectors.append({
+            "test_name": "wrong_eth_nonce",
+            "description": "Test revert when ETH nonce is wrong",
+            "current_actor": "alice",
+            "new_actor": "bob",
+            "eth_message": eth_message_wrong_eth_nonce.hex(),
+            "eth_signature": eth_signature_wrong_eth_nonce,
+            "pq_signature": pq_signature,
+            "eth_nonce": wrong_eth_nonce,
+            "pq_nonce": pq_nonce,
+            "expected_revert": "Invalid ETH nonce"
+        })
+
+        # 8. Wrong PQ nonce
+        wrong_pq_nonce = 999
+        base_pq_message_wrong_pq_nonce = self.create_base_pq_confirm_message(alice["eth_address"], bob["eth_address"], wrong_pq_nonce)
+        pq_signature_wrong_pq_nonce = sign_with_pq_key(base_pq_message_wrong_pq_nonce, alice["pq_private_key_file"])
+        if pq_signature_wrong_pq_nonce is not None:
+            eth_message_wrong_pq_nonce = self.create_eth_confirm_message(alice["pq_fingerprint"], base_pq_message_wrong_pq_nonce, bytes.fromhex(pq_signature_wrong_pq_nonce["salt"]), [int(x, 16) for x in pq_signature_wrong_pq_nonce["cs1"]], [int(x, 16) for x in pq_signature_wrong_pq_nonce["cs2"]], pq_signature_wrong_pq_nonce["hint"], eth_nonce)
+            eth_signature_wrong_pq_nonce = self.sign_eth_confirm_message(eth_message_wrong_pq_nonce, bob["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message_wrong_pq_nonce, bytes.fromhex(pq_signature_wrong_pq_nonce["salt"]), [int(x, 16) for x in pq_signature_wrong_pq_nonce["cs1"]], [int(x, 16) for x in pq_signature_wrong_pq_nonce["cs2"]], pq_signature_wrong_pq_nonce["hint"], eth_nonce)
+            vectors.append({
+                "test_name": "wrong_pq_nonce",
+                "description": "Test revert when PQ nonce is wrong",
+                "current_actor": "alice",
+                "new_actor": "bob",
+                "eth_message": eth_message_wrong_pq_nonce.hex(),
+                "eth_signature": eth_signature_wrong_pq_nonce,
+                "pq_signature": pq_signature_wrong_pq_nonce,
+                "eth_nonce": eth_nonce,
+                "pq_nonce": wrong_pq_nonce,
+                "expected_revert": "Invalid PQ nonce"
+            })
+
+        # 9. Wrong ETH signer - signature from Charlie instead of Bob
+        eth_signature_wrong_signer = self.sign_eth_confirm_message(eth_message, charlie["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], eth_nonce)
+        vectors.append({
+            "test_name": "wrong_eth_signer",
+            "description": "Test revert when ETH signature is from wrong key",
+            "current_actor": "alice",
+            "new_actor": "bob",
+            "eth_message": eth_message.hex(),
+            "eth_signature": eth_signature_wrong_signer,
+            "pq_signature": pq_signature,
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce,
+            "expected_revert": "ETH Address mismatch: PQ message vs recovered ETH signature"
+        })
+
+        # 10. Wrong PQ signer - signature from Bob instead of Alice
+        pq_signature_wrong_pq_signer = sign_with_pq_key(base_pq_message, bob["pq_private_key_file"])
+        if pq_signature_wrong_pq_signer is not None:
+            eth_message_wrong_pq_signer = self.create_eth_confirm_message(alice["pq_fingerprint"], base_pq_message, bytes.fromhex(pq_signature_wrong_pq_signer["salt"]), [int(x, 16) for x in pq_signature_wrong_pq_signer["cs1"]], [int(x, 16) for x in pq_signature_wrong_pq_signer["cs2"]], pq_signature_wrong_pq_signer["hint"], eth_nonce)
+            eth_signature_wrong_pq_signer = self.sign_eth_confirm_message(eth_message_wrong_pq_signer, bob["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message, bytes.fromhex(pq_signature_wrong_pq_signer["salt"]), [int(x, 16) for x in pq_signature_wrong_pq_signer["cs1"]], [int(x, 16) for x in pq_signature_wrong_pq_signer["cs2"]], pq_signature_wrong_pq_signer["hint"], eth_nonce)
+            vectors.append({
+                "test_name": "wrong_pq_signer",
+                "description": "Test revert when PQ signature is from wrong key",
+                "current_actor": "alice",
+                "new_actor": "bob",
+                "eth_message": eth_message_wrong_pq_signer.hex(),
+                "eth_signature": eth_signature_wrong_pq_signer,
+                "pq_signature": pq_signature_wrong_pq_signer,
+                "eth_nonce": eth_nonce,
+                "pq_nonce": pq_nonce,
+                "expected_revert": "PQ fingerprint mismatch: ETH message vs recovered PQ signature"
+            })
+
+        # 11. Wrong domain separator
+        eth_signature_wrong_domain = self.sign_eth_confirm_message_with_wrong_domain(eth_message, bob["eth_private_key"], alice["eth_address"], alice["pq_fingerprint"], base_pq_message, bytes.fromhex(pq_signature["salt"]), [int(x, 16) for x in pq_signature["cs1"]], [int(x, 16) for x in pq_signature["cs2"]], pq_signature["hint"], eth_nonce)
+        vectors.append({
+            "test_name": "wrong_domain_separator",
+            "description": "Test revert when ETH signature uses wrong domain separator",
+            "current_actor": "alice",
+            "new_actor": "bob",
+            "eth_message": eth_message.hex(),
+            "eth_signature": eth_signature_wrong_domain,
+            "pq_signature": pq_signature,
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce,
+            "expected_revert": "Invalid ETH signature"
+        })
+
+        # 12. No pending intent (this will be tested by not setting up the intent in the test)
+        vectors.append({
+            "test_name": "no_pending_intent",
+            "description": "Test revert when there's no pending change intent",
+            "current_actor": "alice",
+            "new_actor": "bob",
+            "eth_message": eth_message.hex(),
+            "eth_signature": eth_signature,
+            "pq_signature": pq_signature,
+            "eth_nonce": eth_nonce,
+            "pq_nonce": pq_nonce,
+            "expected_revert": "No pending change intent found for PQ fingerprint"
+        })
+
+        return {
+            "confirm_change_eth_address": vectors
+        }
+
+    def create_base_pq_confirm_message(self, old_eth_address, new_eth_address, pq_nonce):
+        """Create base PQ message for change ETH Address confirmation"""
+        domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+        pattern = b"Confirm changing bound ETH Address for Epervier Fingerprint from "
+        message = (
+            domain_separator +
+            pattern +
+            bytes.fromhex(old_eth_address[2:]) +
+            b" to " +
+            bytes.fromhex(new_eth_address[2:]) +
+            pq_nonce.to_bytes(32, 'big')
+        )
+        return message
+
+    def create_eth_confirm_message(self, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
+        """Create ETH message for change ETH Address confirmation"""
+        pattern = b"Confirm change ETH Address for Epervier Fingerprint "
+        def pack_uint256_array(arr):
+            return b"".join(x.to_bytes(32, 'big') for x in arr)
+        
+        message = (
+            pattern +
+            bytes.fromhex(pq_fingerprint[2:]) +
+            base_pq_message +
+            salt +
+            pack_uint256_array(cs1) +
+            pack_uint256_array(cs2) +
+            hint.to_bytes(32, 'big') +
+            eth_nonce.to_bytes(32, 'big')
+        )
+        return message
+
+    def sign_eth_confirm_message(self, message_bytes, private_key, old_eth_address, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
+        """Sign ETH confirmation message using EIP712"""
+        from eip712_helpers import get_change_eth_address_confirmation_struct_hash, get_eip712_digest, sign_eip712_message
+        
+        domain_separator = bytes.fromhex(DOMAIN_SEPARATOR[2:])
+        struct_hash = get_change_eth_address_confirmation_struct_hash(old_eth_address, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce)
+        digest = get_eip712_digest(domain_separator, struct_hash)
+        signature = sign_eip712_message(digest, private_key)
+        
+        # Format signature values as hex strings with 0x prefix (matching working vectors)
+        return {
+            "v": signature["v"],
+            "r": f"0x{signature['r']:064x}",
+            "s": f"0x{signature['s']:064x}"
+        }
+
+    def sign_eth_confirm_message_with_wrong_domain(self, message_bytes, private_key, old_eth_address, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
+        """Sign ETH confirmation message using EIP712 with wrong domain separator"""
+        from eip712_helpers import get_change_eth_address_confirmation_struct_hash, get_eip712_digest, sign_eip712_message
+        
+        # Use wrong domain separator
+        wrong_domain_separator = bytes.fromhex("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+        struct_hash = get_change_eth_address_confirmation_struct_hash(old_eth_address, pq_fingerprint, base_pq_message, salt, cs1, cs2, hint, eth_nonce)
+        digest = get_eip712_digest(wrong_domain_separator, struct_hash)
+        signature = sign_eip712_message(digest, private_key)
+        
+        # Format signature values as hex strings with 0x prefix (matching working vectors)
+        return {
+            "v": signature["v"],
+            "r": f"0x{signature['r']:064x}",
+            "s": f"0x{signature['s']:064x}"
+        }
+
 def main():
     """Generate change ETH revert test vectors"""
     
@@ -1496,10 +1820,14 @@ def main():
     # Generate remove change ETH revert vectors
     remove_change_eth_reverts = generator.generate_remove_change_eth_revert_vectors()
     
-    # Combine both sets of vectors
+    # Generate confirm change ETH revert vectors
+    confirm_change_eth_reverts = generator.generate_confirm_change_eth_revert_vectors()
+    
+    # Combine all sets of vectors
     all_vectors = {
         **change_eth_reverts,
-        **remove_change_eth_reverts
+        **remove_change_eth_reverts,
+        **confirm_change_eth_reverts
     }
     
     # Write to file
