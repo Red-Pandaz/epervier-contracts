@@ -180,6 +180,179 @@ contract PQRegistryUnregistrationRevertsTest is Test {
     // - testSubmitUnregistrationIntent_RevertWhenETHAddressMismatch()
     // - testSubmitUnregistrationIntent_RevertWhenPQFingerprintMismatch()
 
+    function testSubmitUnregistrationIntent_RevertWhenPQFingerprintNotRegistered() public {
+        // Setup: Register Alice
+        _registerAlice();
+        
+        // Attempt to submit unregistration intent for unregistered PQ fingerprint
+        string memory submitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[5].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[5].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[5].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[5].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[5].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with ETH address mismatch error (this happens before PQ fingerprint check)
+        vm.expectRevert("ETH Address mismatch: PQ message vs stored registration");
+        registry.submitUnregistrationIntent(pqMessage, salt, cs1, cs2, hint, publicKey);
+    }
+
+    function testSubmitUnregistrationIntent_RevertWhenWrongETHNonce() public {
+        // Setup: Register Alice
+        _registerAlice();
+        
+        // Attempt to submit unregistration intent with wrong ETH nonce
+        string memory submitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[6].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[6].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[6].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[6].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[6].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with wrong ETH nonce error
+        vm.expectRevert("Invalid ETH nonce");
+        registry.submitUnregistrationIntent(pqMessage, salt, cs1, cs2, hint, publicKey);
+    }
+
+    function testSubmitUnregistrationIntent_RevertWhenWrongPQNonce() public {
+        // Setup: Register Alice
+        _registerAlice();
+        
+        // Attempt to submit unregistration intent with wrong PQ nonce
+        string memory submitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[7].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[7].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[7].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[7].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[7].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with wrong PQ nonce error
+        vm.expectRevert("Invalid PQ nonce");
+        registry.submitUnregistrationIntent(pqMessage, salt, cs1, cs2, hint, publicKey);
+    }
+
+    function testSubmitUnregistrationIntent_RevertWhenPendingIntentExists() public {
+        // Setup: Register Alice and submit unregistration intent (but don't confirm)
+        _registerAlice();
+        
+        // Submit first unregistration intent
+        string memory firstSubmitJsonData = vm.readFile("test/test_vectors/unregister/unregistration_intent_vectors.json");
+        bytes memory firstPqMessage = vm.parseBytes(vm.parseJsonString(firstSubmitJsonData, ".unregistration_intent[0].pq_message"));
+        bytes memory firstSalt = vm.parseBytes(vm.parseJsonString(firstSubmitJsonData, ".unregistration_intent[0].pq_signature.salt"));
+        uint256[] memory firstCs1 = vm.parseJsonUintArray(firstSubmitJsonData, ".unregistration_intent[0].pq_signature.cs1");
+        uint256[] memory firstCs2 = vm.parseJsonUintArray(firstSubmitJsonData, ".unregistration_intent[0].pq_signature.cs2");
+        uint256 firstHint = vm.parseUint(vm.parseJsonString(firstSubmitJsonData, ".unregistration_intent[0].pq_signature.hint"));
+        uint256[2] memory firstPublicKey = [uint256(0), uint256(0)];
+        
+        registry.submitUnregistrationIntent(firstPqMessage, firstSalt, firstCs1, firstCs2, firstHint, firstPublicKey);
+        
+        // Attempt to submit second unregistration intent (should revert - pending intent exists)
+        string memory secondSubmitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory secondPqMessage = vm.parseBytes(vm.parseJsonString(secondSubmitJsonData, ".submit_unregistration_intent[8].pq_message"));
+        bytes memory secondSalt = vm.parseBytes(vm.parseJsonString(secondSubmitJsonData, ".submit_unregistration_intent[8].pq_signature.salt"));
+        uint256[] memory secondCs1 = vm.parseJsonUintArray(secondSubmitJsonData, ".submit_unregistration_intent[8].pq_signature.cs1");
+        uint256[] memory secondCs2 = vm.parseJsonUintArray(secondSubmitJsonData, ".submit_unregistration_intent[8].pq_signature.cs2");
+        uint256 secondHint = vm.parseUint(vm.parseJsonString(secondSubmitJsonData, ".submit_unregistration_intent[8].pq_signature.hint"));
+        uint256[2] memory secondPublicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with pending intent exists error
+        vm.expectRevert("ETH Address has pending unregistration intent");
+        registry.submitUnregistrationIntent(secondPqMessage, secondSalt, secondCs1, secondCs2, secondHint, secondPublicKey);
+    }
+
+    function testSubmitUnregistrationIntent_RevertWhenWrongDomainSeparator() public {
+        // Setup: Register Alice
+        _registerAlice();
+        
+        // Attempt to submit unregistration intent with wrong domain separator
+        string memory submitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[9].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[9].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[9].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[9].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[9].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with wrong domain separator error
+        vm.expectRevert("Invalid domain separator in PQ message");
+        registry.submitUnregistrationIntent(pqMessage, salt, cs1, cs2, hint, publicKey);
+    }
+
+    function testSubmitUnregistrationIntent_RevertWhenWrongETHSigner() public {
+        // Setup: Register Alice
+        _registerAlice();
+        
+        // Attempt to submit unregistration intent with wrong ETH signer
+        string memory submitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[10].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[10].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[10].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[10].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[10].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with wrong ETH signer error
+        vm.expectRevert("ETH signature must be from intent address");
+        registry.submitUnregistrationIntent(pqMessage, salt, cs1, cs2, hint, publicKey);
+    }
+
+    function testSubmitUnregistrationIntent_RevertWhenWrongPQSigner() public {
+        // Setup: Register Alice
+        _registerAlice();
+        
+        // Attempt to submit unregistration intent with wrong PQ signer
+        string memory submitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[11].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[11].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[11].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[11].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[11].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with ETH address mismatch error (this happens before PQ signature validation)
+        vm.expectRevert("ETH Address mismatch: PQ message vs stored registration");
+        registry.submitUnregistrationIntent(pqMessage, salt, cs1, cs2, hint, publicKey);
+    }
+
+    function testSubmitUnregistrationIntent_RevertWhenETHAddressMismatch() public {
+        // Setup: Register Alice
+        _registerAlice();
+        
+        // Attempt to submit unregistration intent with ETH address mismatch
+        string memory submitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[12].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[12].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[12].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[12].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[12].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with ETH address mismatch error
+        vm.expectRevert("ETH Address mismatch: PQ message vs stored registration");
+        registry.submitUnregistrationIntent(pqMessage, salt, cs1, cs2, hint, publicKey);
+    }
+
+    function testSubmitUnregistrationIntent_RevertWhenPQFingerprintMismatch() public {
+        // Setup: Register Alice
+        _registerAlice();
+        
+        // Attempt to submit unregistration intent with PQ fingerprint mismatch
+        string memory submitJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[13].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[13].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[13].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(submitJsonData, ".submit_unregistration_intent[13].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(submitJsonData, ".submit_unregistration_intent[13].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        // Expect revert with ETH address mismatch error (this happens before PQ fingerprint check)
+        vm.expectRevert("ETH Address mismatch: PQ message vs stored registration");
+        registry.submitUnregistrationIntent(pqMessage, salt, cs1, cs2, hint, publicKey);
+    }
+
     // =============================
     // removeUnregistrationIntent
     // =============================
