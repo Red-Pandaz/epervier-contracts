@@ -488,6 +488,160 @@ def generate_unregistration_revert_vectors():
             }
         })
     
+    # =============================
+    # removeUnregistrationIntent vectors
+    # =============================
+    
+    # Helper function to create remove intent message
+    def create_remove_intent_message(domain_separator, eth_address, pq_nonce):
+        """Create a remove unregistration intent message"""
+        # Format: DOMAIN_SEPARATOR + "Remove unregistration intent from ETH Address " + ethAddress + pqNonce
+        # Schema: 32 bytes domain + 46 bytes pattern + 20 bytes address + 32 bytes nonce = 130 bytes total
+        pattern = "Remove unregistration intent from ETH Address "
+        
+        # Convert eth_address from hex string to bytes (remove 0x prefix if present)
+        if eth_address.startswith('0x'):
+            eth_address = eth_address[2:]
+        eth_address_bytes = bytes.fromhex(eth_address)
+        
+        # Convert pq_nonce to 32-byte big-endian representation
+        pq_nonce_bytes = pq_nonce.to_bytes(32, 'big')
+        
+        # Combine all components
+        message = domain_separator + pattern.encode() + eth_address_bytes + pq_nonce_bytes
+        return message
+    
+    # Vector 0: Malformed message (wrong text)
+    print("Generating remove vector 0: Malformed message")
+    remove_message = domain_separator_bytes + b"Wrong remove message text"
+    pq_sig = sign_with_pq_key(remove_message, alice["pq_private_key_file"])
+    if pq_sig:
+        vectors.append({
+            "description": "Malformed remove message - wrong text",
+            "pq_message": remove_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": [hex(x) for x in pq_sig["cs1"]],
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            }
+        })
+    
+    # Vector 1: Invalid PQ signature (malformed signature)
+    print("Generating remove vector 1: Invalid PQ signature")
+    remove_message = create_remove_intent_message(domain_separator_bytes, alice["eth_address"], 3)
+    pq_sig = sign_with_pq_key(remove_message, alice["pq_private_key_file"])
+    if pq_sig:
+        # Corrupt the signature by setting cs1 to max values
+        corrupted_cs1 = ["0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"] * 32
+        vectors.append({
+            "description": "Invalid PQ signature - malformed signature",
+            "pq_message": remove_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": corrupted_cs1,
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            }
+        })
+    
+    # Vector 2: No pending intent (valid message but no intent exists)
+    print("Generating remove vector 2: No pending intent")
+    remove_message = create_remove_intent_message(domain_separator_bytes, alice["eth_address"], 3)
+    pq_sig = sign_with_pq_key(remove_message, alice["pq_private_key_file"])
+    if pq_sig:
+        vectors.append({
+            "description": "No pending intent - valid message but no intent exists",
+            "pq_message": remove_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": [hex(x) for x in pq_sig["cs1"]],
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            }
+        })
+    
+    # Vector 3: Wrong PQ nonce (use nonce 0 instead of 3)
+    print("Generating remove vector 3: Wrong PQ nonce")
+    remove_message = create_remove_intent_message(domain_separator_bytes, alice["eth_address"], 0)  # Wrong nonce
+    pq_sig = sign_with_pq_key(remove_message, alice["pq_private_key_file"])
+    if pq_sig:
+        vectors.append({
+            "description": "Wrong PQ nonce - using nonce 0 instead of 3",
+            "pq_message": remove_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": [hex(x) for x in pq_sig["cs1"]],
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            }
+        })
+    
+    # Vector 4: Address mismatch (Bob's ETH address in Alice's message)
+    print("Generating remove vector 4: Address mismatch")
+    remove_message = create_remove_intent_message(domain_separator_bytes, bob["eth_address"], 3)  # Bob's address
+    pq_sig = sign_with_pq_key(remove_message, alice["pq_private_key_file"])  # Alice's key
+    if pq_sig:
+        vectors.append({
+            "description": "Address mismatch - Bob's ETH address in Alice's message",
+            "pq_message": remove_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": [hex(x) for x in pq_sig["cs1"]],
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            }
+        })
+    
+    # Vector 5: Wrong domain separator
+    print("Generating remove vector 5: Wrong domain separator")
+    wrong_domain = b'\x00' * 32  # All zeros instead of correct domain
+    remove_message = create_remove_intent_message(wrong_domain, alice["eth_address"], 3)
+    pq_sig = sign_with_pq_key(remove_message, alice["pq_private_key_file"])
+    if pq_sig:
+        vectors.append({
+            "description": "Wrong domain separator - using all zeros",
+            "pq_message": remove_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": [hex(x) for x in pq_sig["cs1"]],
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            }
+        })
+    
+    # Vector 6: Wrong PQ signer (Bob's PQ key signs Alice's message)
+    print("Generating remove vector 6: Wrong PQ signer")
+    remove_message = create_remove_intent_message(domain_separator_bytes, alice["eth_address"], 3)
+    pq_sig = sign_with_pq_key(remove_message, bob["pq_private_key_file"])  # Bob's key
+    if pq_sig:
+        vectors.append({
+            "description": "Wrong PQ signer - Bob's PQ key signs Alice's message",
+            "pq_message": remove_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": [hex(x) for x in pq_sig["cs1"]],
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            }
+        })
+    
+    # Vector 7: ETH address mismatch (Charlie's ETH address)
+    print("Generating remove vector 7: ETH address mismatch")
+    remove_message = create_remove_intent_message(domain_separator_bytes, charlie["eth_address"], 3)  # Charlie's address
+    pq_sig = sign_with_pq_key(remove_message, alice["pq_private_key_file"])  # Alice's key
+    if pq_sig:
+        vectors.append({
+            "description": "ETH address mismatch - Charlie's ETH address",
+            "pq_message": remove_message.hex(),
+            "pq_signature": {
+                "salt": pq_sig["salt"].hex(),
+                "cs1": [hex(x) for x in pq_sig["cs1"]],
+                "cs2": [hex(x) for x in pq_sig["cs2"]],
+                "hint": pq_sig["hint"]
+            }
+        })
+    
     return vectors
 
 
@@ -498,16 +652,31 @@ def main():
     try:
         vectors = generate_unregistration_revert_vectors()
         
+        # Split vectors into submit and remove
+        submit_vectors = vectors[:14]  # First 14 vectors are for submit
+        remove_vectors = vectors[14:]  # Remaining 8 vectors are for remove
+        
         # Save to JSON file
         OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(OUTPUT_PATH, 'w') as f:
-            json.dump({"submit_unregistration_intent": vectors}, f, indent=2)
-        print(f"Wrote {len(vectors)} unregistration revert vectors to {OUTPUT_PATH}")
+            json.dump({
+                "submit_unregistration_intent": submit_vectors,
+                "remove_unregistration_intent": remove_vectors
+            }, f, indent=2)
+        print(f"Wrote {len(submit_vectors)} submit vectors and {len(remove_vectors)} remove vectors to {OUTPUT_PATH}")
         
-        # Print sample vector for verification
-        if vectors:
-            print("\nSample unregistration revert vector:")
-            sample = vectors[0]
+        # Print sample vectors for verification
+        if submit_vectors:
+            print("\nSample submit vector:")
+            sample = submit_vectors[0]
+            print(f"Description: {sample['description']}")
+            print(f"PQ Message Length: {len(bytes.fromhex(sample['pq_message']))}")
+            print(f"PQ Signature Salt: {sample['pq_signature']['salt']}")
+            print(f"PQ Signature Hint: {sample['pq_signature']['hint']}")
+        
+        if remove_vectors:
+            print("\nSample remove vector:")
+            sample = remove_vectors[0]
             print(f"Description: {sample['description']}")
             print(f"PQ Message Length: {len(bytes.fromhex(sample['pq_message']))}")
             print(f"PQ Signature Salt: {sample['pq_signature']['salt']}")

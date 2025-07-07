@@ -58,6 +58,22 @@ contract PQRegistryUnregistrationRevertsTest is Test {
         registry.submitChangeETHAddressIntent(bobToAlicePqMessage, bobToAlicePqSalt, bobToAlicePqCs1, bobToAlicePqCs2, bobToAlicePqHint);
     }
 
+    // Helper function to submit unregistration intent for Alice
+    function _submitUnregistrationIntent() internal {
+        // Submit Alice's unregistration intent
+        string memory unregisterIntentJsonData = vm.readFile("test/test_vectors/unregister/unregistration_intent_vectors.json");
+        
+        // Use Alice's unregistration intent (index 0)
+        bytes memory alicePqMessage = vm.parseBytes(vm.parseJsonString(unregisterIntentJsonData, ".unregistration_intent[0].pq_message"));
+        bytes memory alicePqSalt = vm.parseBytes(vm.parseJsonString(unregisterIntentJsonData, ".unregistration_intent[0].pq_signature.salt"));
+        uint256[] memory alicePqCs1 = vm.parseJsonUintArray(unregisterIntentJsonData, ".unregistration_intent[0].pq_signature.cs1");
+        uint256[] memory alicePqCs2 = vm.parseJsonUintArray(unregisterIntentJsonData, ".unregistration_intent[0].pq_signature.cs2");
+        uint256 alicePqHint = vm.parseUint(vm.parseJsonString(unregisterIntentJsonData, ".unregistration_intent[0].pq_signature.hint"));
+        uint256[2] memory publicKey = [uint256(0), uint256(0)];
+        
+        registry.submitUnregistrationIntent(alicePqMessage, alicePqSalt, alicePqCs1, alicePqCs2, alicePqHint, publicKey);
+    }
+
     // =============================
     // submitUnregistrationIntent
     // =============================
@@ -366,15 +382,148 @@ contract PQRegistryUnregistrationRevertsTest is Test {
     // - Wrong PQ signer
     // - ETH address mismatch
 
-    // TODO: Implement all removeUnregistrationIntent tests
-    // - testRemoveUnregistrationIntent_RevertWhenMalformedMessage()
-    // - testRemoveUnregistrationIntent_RevertWhenInvalidPQSignature()
-    // - testRemoveUnregistrationIntent_RevertWhenNoPendingIntent()
-    // - testRemoveUnregistrationIntent_RevertWhenWrongPQNonce()
-    // - testRemoveUnregistrationIntent_RevertWhenAddressMismatch()
-    // - testRemoveUnregistrationIntent_RevertWhenWrongDomainSeparator()
-    // - testRemoveUnregistrationIntent_RevertWhenWrongPQSigner()
-    // - testRemoveUnregistrationIntent_RevertWhenETHAddressMismatch()
+    function testRemoveUnregistrationIntent_RevertWhenMalformedMessage() public {
+        // Setup: Register Alice and submit unregistration intent
+        _registerAlice();
+        _submitUnregistrationIntent();
+        
+        // Attempt to remove unregistration intent with malformed message
+        string memory removeJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[0].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[0].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[0].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[0].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[0].pq_signature.hint"));
+        
+        // Expect revert with malformed message error
+        vm.expectRevert("Message too short for PQ nonce from remove message");
+        registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
+    }
+
+    function testRemoveUnregistrationIntent_RevertWhenInvalidPQSignature() public {
+        // Setup: Register Alice and submit unregistration intent
+        _registerAlice();
+        _submitUnregistrationIntent();
+        
+        // Attempt to remove unregistration intent with invalid PQ signature
+        string memory removeJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[1].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[1].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[1].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[1].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[1].pq_signature.hint"));
+        
+        // Expect revert with invalid PQ signature error
+        vm.expectRevert("norm too large");
+        registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
+    }
+
+    function testRemoveUnregistrationIntent_RevertWhenNoPendingIntent() public {
+        // Setup: Register Alice (no unregistration intent submitted)
+        _registerAlice();
+        
+        // Attempt to remove unregistration intent when none exists
+        string memory removeJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[2].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[2].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[2].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[2].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[2].pq_signature.hint"));
+        
+        // Expect revert with no pending intent error
+        vm.expectRevert("No pending unregistration intent found");
+        registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
+    }
+
+    function testRemoveUnregistrationIntent_RevertWhenWrongPQNonce() public {
+        // Setup: Register Alice and submit unregistration intent
+        _registerAlice();
+        _submitUnregistrationIntent();
+        
+        // Attempt to remove unregistration intent with wrong PQ nonce
+        string memory removeJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[3].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[3].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[3].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[3].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[3].pq_signature.hint"));
+        
+        // Expect revert with wrong PQ nonce error
+        vm.expectRevert("Invalid PQ nonce");
+        registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
+    }
+
+    function testRemoveUnregistrationIntent_RevertWhenAddressMismatch() public {
+        // Setup: Register Alice and submit unregistration intent
+        _registerAlice();
+        _submitUnregistrationIntent();
+        
+        // Attempt to remove unregistration intent with address mismatch
+        string memory removeJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[4].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[4].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[4].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[4].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[4].pq_signature.hint"));
+        
+        // Expect revert with address mismatch error
+        vm.expectRevert("No pending unregistration intent found");
+        registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
+    }
+
+    function testRemoveUnregistrationIntent_RevertWhenWrongDomainSeparator() public {
+        // Setup: Register Alice and submit unregistration intent
+        _registerAlice();
+        _submitUnregistrationIntent();
+        
+        // Attempt to remove unregistration intent with wrong domain separator
+        string memory removeJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[5].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[5].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[5].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[5].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[5].pq_signature.hint"));
+        
+        // Expect revert with wrong domain separator error
+        vm.expectRevert("Invalid domain separator in PQ message");
+        registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
+    }
+
+    function testRemoveUnregistrationIntent_RevertWhenWrongPQSigner() public {
+        // Setup: Register Alice and submit unregistration intent
+        _registerAlice();
+        _submitUnregistrationIntent();
+        
+        // Attempt to remove unregistration intent with wrong PQ signer
+        string memory removeJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[6].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[6].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[6].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[6].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[6].pq_signature.hint"));
+        
+        // Expect revert with wrong PQ signer error
+        vm.expectRevert("PQ key mismatch");
+        registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
+    }
+
+    function testRemoveUnregistrationIntent_RevertWhenETHAddressMismatch() public {
+        // Setup: Register Alice and submit unregistration intent
+        _registerAlice();
+        _submitUnregistrationIntent();
+        
+        // Attempt to remove unregistration intent with ETH address mismatch
+        string memory removeJsonData = vm.readFile("test/test_vectors/revert/unregistration_revert_vectors.json");
+        bytes memory pqMessage = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[7].pq_message"));
+        bytes memory salt = vm.parseBytes(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[7].pq_signature.salt"));
+        uint256[] memory cs1 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[7].pq_signature.cs1");
+        uint256[] memory cs2 = vm.parseJsonUintArray(removeJsonData, ".remove_unregistration_intent[7].pq_signature.cs2");
+        uint256 hint = vm.parseUint(vm.parseJsonString(removeJsonData, ".remove_unregistration_intent[7].pq_signature.hint"));
+        
+        // Expect revert with ETH address mismatch error
+        vm.expectRevert("No pending unregistration intent found");
+        registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
+    }
 
     // =============================
     // confirmUnregistration
