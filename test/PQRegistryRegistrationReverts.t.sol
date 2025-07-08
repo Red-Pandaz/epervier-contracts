@@ -424,7 +424,7 @@ contract PQRegistryRegistrationRevertsTest is Test {
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_signature.hint"));
         
         // This should revert because there's no pending intent
-        vm.expectRevert("Invalid PQ registration confirmation message");
+        vm.expectRevert("No pending intent found for PQ fingerprint");
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
     }
     
@@ -452,7 +452,7 @@ contract PQRegistryRegistrationRevertsTest is Test {
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[2].pq_signature.hint"));
         
         // This should revert because the domain separator is wrong
-        vm.expectRevert("Invalid PQ registration confirmation message");
+        vm.expectRevert("Invalid domain separator in PQ message");
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
     }
     

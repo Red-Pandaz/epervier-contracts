@@ -524,35 +524,4 @@ contract PQRegistryUnregistrationRevertsTest is Test {
         vm.expectRevert("No pending unregistration intent found");
         registry.removeUnregistrationIntent(pqMessage, salt, cs1, cs2, hint);
     }
-
-    // =============================
-    // confirmUnregistration
-    // =============================
-    // Revert scenarios to cover:
-    // - Malformed message
-    // - Invalid ETH signature
-    // - Invalid PQ signature
-    // - No pending intent
-    // - Wrong ETH nonce
-    // - Wrong PQ nonce
-    // - Address mismatch
-    // - Wrong domain separator
-    // - Wrong ETH signer
-    // - Wrong PQ signer
-    // - ETH address mismatch
-    // - PQ fingerprint mismatch
-
-    // TODO: Implement all confirmUnregistration tests
-    // - testConfirmUnregistration_RevertWhenMalformedMessage()
-    // - testConfirmUnregistration_RevertWhenInvalidETHSignature()
-    // - testConfirmUnregistration_RevertWhenInvalidPQSignature()
-    // - testConfirmUnregistration_RevertWhenNoPendingIntent()
-    // - testConfirmUnregistration_RevertWhenWrongETHNonce()
-    // - testConfirmUnregistration_RevertWhenWrongPQNonce()
-    // - testConfirmUnregistration_RevertWhenAddressMismatch()
-    // - testConfirmUnregistration_RevertWhenWrongDomainSeparator()
-    // - testConfirmUnregistration_RevertWhenWrongETHSigner()
-    // - testConfirmUnregistration_RevertWhenWrongPQSigner()
-    // - testConfirmUnregistration_RevertWhenETHAddressMismatch()
-    // - testConfirmUnregistration_RevertWhenPQFingerprintMismatch()
 } 
