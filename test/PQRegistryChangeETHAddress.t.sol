@@ -3,6 +3,8 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import "../src/PQRegistry.sol";
+import "../src/PQERC721.sol";
+import "../src/interfaces/IPQERC721.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
@@ -19,6 +21,7 @@ contract PQRegistryChangeETHAddressTest is Test {
     using Strings for string;
     
     PQRegistry public registry;
+    PQERC721 public nft;
     ZKNOX_epervier public epervierVerifier;
     
     // Actor data structure
@@ -48,6 +51,15 @@ contract PQRegistryChangeETHAddressTest is Test {
         registry = new PQRegistry(
             address(epervierVerifier)
         );
+        
+        // Deploy and initialize NFT contract
+        nft = new PQERC721("PQ NFT", "PQNFT");
+        nft.initialize(address(registry));
+        
+        // Initialize the registry with the NFT contract
+        address[] memory nftContracts = new address[](1);
+        nftContracts[0] = address(nft);
+        registry.initializeNFTContracts(nftContracts);
         
         // DEBUG: Print the contract address
         console.log("DEBUG: Contract address:", address(registry));

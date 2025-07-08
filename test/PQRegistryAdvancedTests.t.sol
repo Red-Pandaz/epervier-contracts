@@ -3,6 +3,8 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import "../src/PQRegistry.sol";
+import "../src/PQERC721.sol";
+import "../src/interfaces/IPQERC721.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "../src/libraries/MessageParser.sol";
 
@@ -20,6 +22,7 @@ contract PQRegistryAdvancedTests is Test {
 
     
     PQRegistry public registry;
+    PQERC721 public nft;
     ZKNOX_epervier public epervierVerifier;
     MockConsole public mockConsole;
     
@@ -43,6 +46,15 @@ contract PQRegistryAdvancedTests is Test {
         
         // Deploy the registry with real verifier
         registry = new PQRegistry(address(epervierVerifier));
+        
+        // Deploy and initialize NFT contract
+        nft = new PQERC721("PQ NFT", "PQNFT");
+        nft.initialize(address(registry));
+        
+        // Initialize the registry with the NFT contract
+        address[] memory nftContracts = new address[](1);
+        nftContracts[0] = address(nft);
+        registry.initializeNFTContracts(nftContracts);
     }
     
     /**

@@ -192,5 +192,16 @@
       {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
     ],
     "total_length": 2375
+  },
+  "PQTransferMessage": {
+    "description": "PQ message for ERC721 token transfers using PQ signatures.",
+    "fields": [
+      {"name": "DOMAIN_SEPARATOR", "type": "bytes32", "length": 32, "description": "Domain separator for PQERC721 transfers (keccak256('PQERC721 Transfer'))"},
+      {"name": "tokenId", "type": "uint256", "length": 32, "description": "The token ID to transfer"},
+      {"name": "recipient", "type": "address", "length": 20, "description": "The recipient address for the transfer"},
+      {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"},
+      {"name": "timestamp", "type": "uint256", "length": 32, "description": "Timestamp for the transfer"}
+    ],
+    "total_length": 148
   }
 } 

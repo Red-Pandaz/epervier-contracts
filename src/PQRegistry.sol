@@ -7,11 +7,8 @@ import "./libraries/MessageParser.sol";
 import "./libraries/MessageValidation.sol";
 import "./libraries/SignatureExtractor.sol";
 import "./libraries/AddressUtils.sol";
-
-interface IEpervierVerifier {
-    function recover(bytes memory, bytes memory, uint256[] memory, uint256[] memory, uint256) external returns (address);
-}
-
+import "./interfaces/IEpervierVerifier.sol";
+import "./interfaces/IPQERC721.sol";
 
 
 contract PQRegistry {
@@ -74,6 +71,14 @@ contract PQRegistry {
     // --- External dependencies (mocked as interfaces for this extraction) ---
     IEpervierVerifier public epervierVerifier;
     
+    // NFT contract tracking
+    mapping(address => bool) public registeredNFTContracts;
+    address[] public registeredNFTContractAddresses;
+    uint256 public registeredNFTContractCount;
+    
+    // Event for NFT minting
+    event NFTMinted(address indexed nftContract, address indexed pqFingerprint, address indexed ethAddress, uint256 tokenId);
+    
     // EIP-712 Domain Separator - Hardcoded for consistency with test vectors
     string public constant DOMAIN_NAME = "PQRegistry";
     string public constant DOMAIN_VERSION = "1";
@@ -99,6 +104,20 @@ contract PQRegistry {
     }
     
     /**
+     * @dev Initialize the registry with NFT contracts
+     * This can be called after deployment to register NFT contracts
+     * @param nftContracts Array of NFT contract addresses to register
+     */
+    function initializeNFTContracts(address[] memory nftContracts) external {
+        for (uint256 i = 0; i < nftContracts.length; i++) {
+            require(nftContracts[i] != address(0), "Invalid NFT contract address");
+            registeredNFTContracts[nftContracts[i]] = true;
+            registeredNFTContractAddresses.push(nftContracts[i]);
+            registeredNFTContractCount++;
+        }
+    }
+    
+    /**
      * @dev Returns the EIP-712 domain separator
      */
     function getDomainSeparator() external view returns (bytes32) {
@@ -112,7 +131,7 @@ contract PQRegistry {
         bytes32 r,
         bytes32 s
     ) external {
-
+        require(registeredNFTContractCount > 0, "No NFT contract registered");
         
         // STEP 1: Validate the ETH registration intent message format
         require(MessageParser.validateETHRegistrationIntentMessage(ethMessage), "Invalid ETH registration intent message");
@@ -225,6 +244,7 @@ contract PQRegistry {
         uint256[] calldata cs2,
         uint256 hint
     ) external {
+        require(registeredNFTContractCount > 0, "No NFT contract registered");
         
         // STEP 1: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
@@ -302,11 +322,22 @@ contract PQRegistry {
         delete pendingIntents[ethAddress];
         delete pqFingerprintToPendingIntentAddress[recoveredFingerprint];
         
-        
         // STEP 13: Increment nonces
         pqKeyNonces[recoveredFingerprint]++;
         ethNonces[ethAddress]++;
         
+        // STEP 14: Mint NFTs for all registered NFT contracts
+        for (uint i = 0; i < registeredNFTContractAddresses.length; i++) {
+            address nftContract = registeredNFTContractAddresses[i];
+            if (registeredNFTContracts[nftContract]) {
+                try IPQERC721(nftContract).mint(recoveredFingerprint, ethAddress) {
+                    // NFT minted successfully
+                } catch {
+                    // NFT minting failed, but don't revert the registration
+                    console.log("Failed to mint NFT for contract:", nftContract);
+                }
+            }
+        }
         
         emit RegistrationConfirmed(ethAddress, recoveredFingerprint);
     }
@@ -1084,5 +1115,88 @@ contract PQRegistry {
         
 
         emit UnregistrationIntentRemoved(publicKeyAddress);
+    }
+    
+    // ============================================================================
+    // PQ SIGNATURE VERIFICATION AND NFT MINTING
+    // ============================================================================
+    
+    /**
+     * @dev Get the registered address for a PQ fingerprint
+     * @param pqFingerprint The PQ fingerprint
+     * @return The registered ETH address (address(0) if not registered)
+     */
+    function getRegisteredAddress(address pqFingerprint) external view returns (address) {
+        return epervierKeyToAddress[pqFingerprint];
+    }
+    
+    /**
+     * @dev Register an NFT contract to enable minting
+     * @param nftContract The NFT contract address
+     *
+     * NOTE: At least one NFT contract must be registered before registration or minting is allowed.
+     */
+    function registerNFTContract(address nftContract) external {
+        require(nftContract != address(0), "Invalid NFT contract address");
+        if (!registeredNFTContracts[nftContract]) {
+            registeredNFTContracts[nftContract] = true;
+            registeredNFTContractAddresses.push(nftContract);
+            registeredNFTContractCount++;
+        }
+    }
+    
+    /**
+     * @dev Unregister an NFT contract
+     * @param nftContract The NFT contract address
+     */
+    function unregisterNFTContract(address nftContract) external {
+        if (registeredNFTContracts[nftContract]) {
+            registeredNFTContracts[nftContract] = false;
+            registeredNFTContractCount--;
+        }
+    }
+    
+    /**
+     * @dev Mint an NFT when a fingerprint is paired
+     * This function is called by the NFT contract when a fingerprint is registered
+     * @param pqFingerprint The PQ fingerprint
+     * @param ethAddress The ETH address associated with the fingerprint
+     * @param nftContract The NFT contract address
+     */
+    function mintNFTForFingerprint(
+        address pqFingerprint,
+        address ethAddress,
+        address nftContract
+    ) external {
+        require(registeredNFTContractCount > 0, "No NFT contract registered");
+        require(registeredNFTContracts[nftContract], "NFT contract not registered");
+        require(msg.sender == nftContract, "Only registered NFT contract can mint");
+        require(pqFingerprint != address(0), "Invalid PQ fingerprint");
+        require(ethAddress != address(0), "Invalid ETH address");
+        
+        // Verify that the fingerprint is registered to this ETH address
+        require(epervierKeyToAddress[pqFingerprint] == ethAddress, "Fingerprint not registered to ETH address");
+        
+        // Call the NFT contract's mint function
+        // The NFT contract will handle the actual minting
+        emit NFTMinted(nftContract, pqFingerprint, ethAddress, 0); // tokenId will be set by NFT contract
+    }
+    
+    /**
+     * @dev Check if a fingerprint is registered
+     * @param pqFingerprint The PQ fingerprint to check
+     * @return True if the fingerprint is registered
+     */
+    function isFingerprintRegistered(address pqFingerprint) external view returns (bool) {
+        return epervierKeyToAddress[pqFingerprint] != address(0);
+    }
+    
+    /**
+     * @dev Check if an ETH address is registered
+     * @param ethAddress The ETH address to check
+     * @return True if the address is registered
+     */
+    function isAddressRegistered(address ethAddress) external view returns (bool) {
+        return addressToEpervierKey[ethAddress] != address(0);
     }
 } 
