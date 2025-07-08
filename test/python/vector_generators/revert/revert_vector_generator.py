@@ -108,17 +108,26 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
         print(f"Exception during PQ signing: {e}")
         return None
 
-def build_eth_intent_message(domain_separator, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
-    pattern = b"Intent to pair Epervier Key"
+def build_eth_intent_message(pattern, base_pq_message, salt, cs1, cs2, hint, eth_nonce, pq_fingerprint):
+    # Ensure all parts are bytes before concatenation
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
-    eth_message = (
-        pattern + base_pq_message + salt +
-        pack_uint256_array(cs1) + pack_uint256_array(cs2) +
-        hint.to_bytes(32, 'big') + int_to_bytes32(eth_nonce)
-    )
-    print(f"[DEBUG] eth_intent_message length: {len(eth_message)}")
-    return eth_message
+    if isinstance(pattern, str):
+        pattern = pattern.encode()
+    if isinstance(hint, str):
+        hint = hint.encode()
+    if isinstance(eth_nonce, int):
+        eth_nonce = eth_nonce.to_bytes(32, 'big')
+    if isinstance(pq_fingerprint, str):
+        pq_fingerprint = bytes.fromhex(pq_fingerprint[2:]) if pq_fingerprint.startswith('0x') else pq_fingerprint.encode()
+    cs1_bytes = pack_uint256_array(cs1) if isinstance(cs1, list) else cs1
+    cs2_bytes = pack_uint256_array(cs2) if isinstance(cs2, list) else cs2
+    if isinstance(salt, int):
+        salt = salt.to_bytes(32, 'big')
+    if isinstance(base_pq_message, int):
+        base_pq_message = base_pq_message.to_bytes(32, 'big')
+    # base_pq_message, salt are now ensured to be bytes
+    return pattern + base_pq_message + salt + cs1_bytes + cs2_bytes + hint + eth_nonce + pq_fingerprint
 
 def sign_with_eth_key(eth_intent_message, eth_private_key, salt, cs1, cs2, hint, eth_nonce, base_pq_message):
     struct_hash = keccak(encode_packed(
@@ -174,7 +183,7 @@ class RevertVectorGenerator:
         # 3. Build ETH intent message
         print("Building ETH intent message...")
         eth_intent_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce, pq_fingerprint
         )
         print(f"ETH intent message length: {len(eth_intent_message)} bytes")
         
@@ -227,7 +236,7 @@ class RevertVectorGenerator:
         pq_signature = sign_with_pq_key(base_pq_message, alice["pq_private_key_file"])
         
         eth_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message, pq_signature["salt"], pq_signature["cs1"], pq_signature["cs2"], pq_signature["hint"], eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message, pq_signature["salt"], pq_signature["cs1"], pq_signature["cs2"], pq_signature["hint"], eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature = sign_with_eth_key(eth_message, alice["eth_private_key"], pq_signature["salt"], pq_signature["cs1"], pq_signature["cs2"], pq_signature["hint"], eth_nonce, base_pq_message)
         
@@ -269,7 +278,7 @@ class RevertVectorGenerator:
         pq_signature_bob = sign_with_pq_key(base_pq_message_bob, bob["pq_private_key_file"])
         
         eth_message_bob = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_bob, pq_signature_bob["salt"], pq_signature_bob["cs1"], pq_signature_bob["cs2"], pq_signature_bob["hint"], eth_nonce_bob
+            DOMAIN_SEPARATOR, base_pq_message_bob, pq_signature_bob["salt"], pq_signature_bob["cs1"], pq_signature_bob["cs2"], pq_signature_bob["hint"], eth_nonce_bob, bob["pq_fingerprint"]
         )
         eth_signature_bob = sign_with_eth_key(eth_message_bob, bob["eth_private_key"], pq_signature_bob["salt"], pq_signature_bob["cs1"], pq_signature_bob["cs2"], pq_signature_bob["hint"], eth_nonce_bob, base_pq_message_bob)
         
@@ -333,7 +342,7 @@ class RevertVectorGenerator:
         pq_signature_wrong_nonce = sign_with_pq_key(base_pq_message_wrong_nonce, alice["pq_private_key_file"])
         
         eth_message_wrong_nonce = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_wrong_nonce, pq_signature_wrong_nonce["salt"], pq_signature_wrong_nonce["cs1"], pq_signature_wrong_nonce["cs2"], pq_signature_wrong_nonce["hint"], wrong_eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message_wrong_nonce, pq_signature_wrong_nonce["salt"], pq_signature_wrong_nonce["cs1"], pq_signature_wrong_nonce["cs2"], pq_signature_wrong_nonce["hint"], wrong_eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature_wrong_nonce = sign_with_eth_key(eth_message_wrong_nonce, alice["eth_private_key"], pq_signature_wrong_nonce["salt"], pq_signature_wrong_nonce["cs1"], pq_signature_wrong_nonce["cs2"], pq_signature_wrong_nonce["hint"], wrong_eth_nonce, base_pq_message_wrong_nonce)
         
@@ -371,7 +380,7 @@ class RevertVectorGenerator:
         pq_signature_wrong_pq_nonce = sign_with_pq_key(base_pq_message_wrong_pq_nonce, alice["pq_private_key_file"])
         
         eth_message_wrong_pq_nonce = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_wrong_pq_nonce, pq_signature_wrong_pq_nonce["salt"], pq_signature_wrong_pq_nonce["cs1"], pq_signature_wrong_pq_nonce["cs2"], pq_signature_wrong_pq_nonce["hint"], eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message_wrong_pq_nonce, pq_signature_wrong_pq_nonce["salt"], pq_signature_wrong_pq_nonce["cs1"], pq_signature_wrong_pq_nonce["cs2"], pq_signature_wrong_pq_nonce["hint"], eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature_wrong_pq_nonce = sign_with_eth_key(eth_message_wrong_pq_nonce, alice["eth_private_key"], pq_signature_wrong_pq_nonce["salt"], pq_signature_wrong_pq_nonce["cs1"], pq_signature_wrong_pq_nonce["cs2"], pq_signature_wrong_pq_nonce["hint"], eth_nonce, base_pq_message_wrong_pq_nonce)
         
@@ -409,7 +418,7 @@ class RevertVectorGenerator:
         pq_signature_alice_pq_bob_eth = sign_with_pq_key(base_pq_message_alice_pq_bob_eth, alice["pq_private_key_file"])
         
         eth_message_alice_pq_bob_eth = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_alice_pq_bob_eth, pq_signature_alice_pq_bob_eth["salt"], pq_signature_alice_pq_bob_eth["cs1"], pq_signature_alice_pq_bob_eth["cs2"], pq_signature_alice_pq_bob_eth["hint"], bob_eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message_alice_pq_bob_eth, pq_signature_alice_pq_bob_eth["salt"], pq_signature_alice_pq_bob_eth["cs1"], pq_signature_alice_pq_bob_eth["cs2"], pq_signature_alice_pq_bob_eth["hint"], bob_eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature_alice_pq_bob_eth = sign_with_eth_key(eth_message_alice_pq_bob_eth, bob["eth_private_key"], pq_signature_alice_pq_bob_eth["salt"], pq_signature_alice_pq_bob_eth["cs1"], pq_signature_alice_pq_bob_eth["cs2"], pq_signature_alice_pq_bob_eth["hint"], bob_eth_nonce, base_pq_message_alice_pq_bob_eth)
         
@@ -461,7 +470,7 @@ class RevertVectorGenerator:
         pq_signature_alice_eth_alice_pq_2 = sign_with_pq_key(base_pq_message_alice_eth_alice_pq_2, alice["pq_private_key_file"])
         
         eth_message_alice_eth_alice_pq_2 = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_alice_eth_alice_pq_2, pq_signature_alice_eth_alice_pq_2["salt"], pq_signature_alice_eth_alice_pq_2["cs1"], pq_signature_alice_eth_alice_pq_2["cs2"], pq_signature_alice_eth_alice_pq_2["hint"], alice_eth_nonce_2
+            DOMAIN_SEPARATOR, base_pq_message_alice_eth_alice_pq_2, pq_signature_alice_eth_alice_pq_2["salt"], pq_signature_alice_eth_alice_pq_2["cs1"], pq_signature_alice_eth_alice_pq_2["cs2"], pq_signature_alice_eth_alice_pq_2["hint"], alice_eth_nonce_2, alice["pq_fingerprint"]
         )
         eth_signature_alice_eth_alice_pq_2 = sign_with_eth_key(eth_message_alice_eth_alice_pq_2, alice["eth_private_key"], pq_signature_alice_eth_alice_pq_2["salt"], pq_signature_alice_eth_alice_pq_2["cs1"], pq_signature_alice_eth_alice_pq_2["cs2"], pq_signature_alice_eth_alice_pq_2["hint"], alice_eth_nonce_2, base_pq_message_alice_eth_alice_pq_2)
         
@@ -500,7 +509,7 @@ class RevertVectorGenerator:
         pq_signature_wrong_ds = sign_with_pq_key(base_pq_message_wrong_ds, alice["pq_private_key_file"])
         
         eth_message_wrong_ds = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_wrong_ds, pq_signature_wrong_ds["salt"], pq_signature_wrong_ds["cs1"], pq_signature_wrong_ds["cs2"], pq_signature_wrong_ds["hint"], eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message_wrong_ds, pq_signature_wrong_ds["salt"], pq_signature_wrong_ds["cs1"], pq_signature_wrong_ds["cs2"], pq_signature_wrong_ds["hint"], eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature_wrong_ds = sign_with_eth_key(eth_message_wrong_ds, alice["eth_private_key"], pq_signature_wrong_ds["salt"], pq_signature_wrong_ds["cs1"], pq_signature_wrong_ds["cs2"], pq_signature_wrong_ds["hint"], eth_nonce, base_pq_message_wrong_ds)
         
@@ -535,7 +544,7 @@ class RevertVectorGenerator:
         
         # Create ETH message with correct PQ message but sign with wrong domain separator
         eth_message_correct_pq = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_correct, pq_signature_correct["salt"], pq_signature_correct["cs1"], pq_signature_correct["cs2"], pq_signature_correct["hint"], eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message_correct, pq_signature_correct["salt"], pq_signature_correct["cs1"], pq_signature_correct["cs2"], pq_signature_correct["hint"], eth_nonce, alice["pq_fingerprint"]
         )
         
         # Sign with wrong domain separator
@@ -1176,7 +1185,7 @@ class RevertVectorGenerator:
         base_pq_message = build_base_pq_message(DOMAIN_SEPARATOR, alice["eth_address"], alice_pq_nonce)
         pq_sig = sign_with_pq_key(base_pq_message, alice["pq_private_key_file"])
         eth_intent_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce
+            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce, alice["pq_fingerprint"]
         )
         eth_sig = sign_with_eth_key(eth_intent_message, alice["eth_private_key"], pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce, base_pq_message)
         
@@ -1219,7 +1228,7 @@ class RevertVectorGenerator:
         
         # Create ETH intent message for change
         change_eth_intent_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, change_base_pq_message, change_pq_sig["salt"], change_pq_sig["cs1"], change_pq_sig["cs2"], change_pq_sig["hint"], alice_change_eth_nonce
+            DOMAIN_SEPARATOR, change_base_pq_message, change_pq_sig["salt"], change_pq_sig["cs1"], change_pq_sig["cs2"], change_pq_sig["hint"], alice_change_eth_nonce, bob["pq_fingerprint"]
         )
         change_eth_sig = sign_with_eth_key(change_eth_intent_message, alice["eth_private_key"], change_pq_sig["salt"], change_pq_sig["cs1"], change_pq_sig["cs2"], change_pq_sig["hint"], alice_change_eth_nonce, change_base_pq_message)
         
@@ -1243,21 +1252,32 @@ class RevertVectorGenerator:
             bob_pq_sig["cs1"],
             bob_pq_sig["cs2"],
             bob_pq_sig["hint"],
-            bob_eth_nonce
+            bob_eth_nonce,
+            bob["pq_fingerprint"]
         )
         
         # ETH sign the ETH intent message
-        bob_eth_sig = sign_with_eth_key(bob_eth_message, bob["eth_private_key_file"])
+        bob_eth_sig = sign_with_eth_key(
+            bob_eth_message,
+            bob["eth_private_key"],
+            bob_pq_sig["salt"],
+            bob_pq_sig["cs1"],
+            bob_pq_sig["cs2"],
+            bob_pq_sig["hint"],
+            bob_eth_nonce,
+            bob_base_pq_message
+        )
         
         # Build the final PQ message (contains nested ETH signature and ETH message)
-        bob_pq_message = build_pq_intent_message(
+        bob_pq_message = build_eth_intent_message(
             DOMAIN_SEPARATOR,
             bob["eth_address"],
             bob_eth_message,
             bob_eth_sig["v"],
             bob_eth_sig["r"],
             bob_eth_sig["s"],
-            bob_pq_nonce
+            bob_pq_nonce,
+            bob["pq_fingerprint"]
         )
         
         # PQ sign the final PQ message
