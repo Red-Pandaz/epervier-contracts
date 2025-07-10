@@ -2,26 +2,15 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../src/PQRegistry.sol";
-import "../src/PQERC721.sol";
+import "./PQRegistryTestSetup.sol";
 import "../src/interfaces/IPQERC721.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-contract MockConsole {
-    function log(string memory) external {}
-    function log(string memory, uint256) external {}
-    function log(string memory, address) external {}
-}
-
-contract PQRegistryBasicTests is Test {
+contract PQRegistryBasicTests is PQRegistryTestSetup {
     using ECDSA for bytes32;
     using Strings for string;
-    
-    PQRegistry public registry;
-    PQERC721 public nft;
-    ZKNOX_epervier public epervierVerifier;
     
     // Actor data structure
     struct Actor {
@@ -41,24 +30,8 @@ contract PQRegistryBasicTests is Test {
     // Test events for verification
     event ChangeETHAddressIntentSubmitted(address indexed pqFingerprint, address indexed newETHAddress, uint256 ethNonce);
     
-    function setUp() public {
-        epervierVerifier = new ZKNOX_epervier();
-        
-        // Deploy mock contracts for the dependencies
-        MockConsole mockConsole = new MockConsole();
-        
-        registry = new PQRegistry(
-            address(epervierVerifier)
-        );
-        
-        // Deploy and initialize NFT contract
-        nft = new PQERC721("PQ NFT", "PQNFT");
-        nft.initialize(address(registry));
-        
-        // Initialize the registry with the NFT contract
-        address[] memory nftContracts = new address[](1);
-        nftContracts[0] = address(nft);
-        registry.initializeNFTContracts(nftContracts);
+    function setUp() public override {
+        super.setUp();
         
         // Load actor data from centralized config
         loadActorsConfig();
@@ -212,7 +185,7 @@ contract PQRegistryBasicTests is Test {
         // Parse the ETH intent message to extract components for EIP712 signing
         // Note: ETH message no longer contains domain separator in content
         (uint256 ethNonce, bytes memory salt, uint256[] memory cs1Array, uint256[] memory cs2Array, uint256 hint, bytes memory basePQMessage) = 
-            MessageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
+            messageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
         
         // Convert dynamic arrays to fixed-size arrays for EIP712 struct hash
         uint256[32] memory cs1;
@@ -278,7 +251,7 @@ contract PQRegistryBasicTests is Test {
             // Parse the ETH intent message to extract components for EIP712 signing
             // Note: ETH message no longer contains domain separator in content
             (uint256 ethNonce2, bytes memory salt2, uint256[] memory cs1Array2, uint256[] memory cs2Array2, uint256 hint2, bytes memory basePQMessage2) = 
-                MessageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
+                messageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
             
             // Convert dynamic arrays to fixed-size arrays for EIP712 struct hash
             uint256[32] memory cs1_2;
@@ -367,7 +340,7 @@ contract PQRegistryBasicTests is Test {
             // Parse the ETH intent message to extract components for EIP712 signing
             // Note: ETH message no longer contains domain separator in content
             (uint256 ethNonce3, bytes memory salt3, uint256[] memory cs1Array3, uint256[] memory cs2Array3, uint256 hint3, bytes memory basePQMessage3) = 
-                MessageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
+                messageParser.parseETHRegistrationIntentMessage(ethIntentMessage);
             
             // Convert dynamic arrays to fixed-size arrays for EIP712 struct hash
             uint256[32] memory cs1_3;

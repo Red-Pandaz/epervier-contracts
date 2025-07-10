@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import "../lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
 import "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
-
 import "./libraries/MessageParser.sol";
 import "./interfaces/IEpervierVerifier.sol";
 import "./interfaces/IPQRegistry.sol";
@@ -14,29 +13,15 @@ import "./interfaces/IPQRegistry.sol";
  * Standard ERC721 transfer functions are disabled
  * Only pqTransferFrom is allowed, which requires PQ signatures
  */
-contract PQERC721 is ERC721, Ownable {
+contract PQERC721Legacy is ERC721, Ownable {
     // Registry contract that handles PQ fingerprint validation
     IPQRegistry public registry;
 
     // Epervier verifier interface
     IEpervierVerifier public epervierVerifier;
 
-    // Domain separator for PQERC721 transfers - computed dynamically
-    
-    /**
-     * @dev Compute the EIP-712 domain separator for this contract
-     */
-    function getPQTransferDomainSeparator() public view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256(bytes("PQERC721")),
-                keccak256(bytes("1")),
-                block.chainid,
-                address(this)
-            )
-        );
-    }
+    // Domain separator for PQERC721 transfers (keccak256("PQERC721 Transfer"))
+    bytes32 public constant PQ_TRANSFER_DOMAIN_SEPARATOR = 0xf5514acfa26be825f841b1d19d3b102fc708b67a0f729c16164a24d825356df0;
 
     // Base URI for token metadata
     string private _baseTokenURI;
@@ -165,12 +150,11 @@ contract PQERC721 is ERC721, Ownable {
 
         // Validate domain separator in the PQ message
         PQTransferMessage memory msgStruct = parsePQTransferMessage(pqMessage);
-        bytes32 expectedDomainSeparator = getPQTransferDomainSeparator();
         console.logBytes32(msgStruct.domainSeparator);
-        console.logBytes32(expectedDomainSeparator);
-        emit DomainSeparatorDebug(msgStruct.domainSeparator, expectedDomainSeparator);
+        console.logBytes32(PQ_TRANSFER_DOMAIN_SEPARATOR);
+        emit DomainSeparatorDebug(msgStruct.domainSeparator, PQ_TRANSFER_DOMAIN_SEPARATOR);
         require(
-            msgStruct.domainSeparator == expectedDomainSeparator,
+            msgStruct.domainSeparator == PQ_TRANSFER_DOMAIN_SEPARATOR,
             "Invalid domain separator in PQ message"
         );
 
@@ -299,9 +283,9 @@ contract PQERC721 is ERC721, Ownable {
      */
     function validateDomainSeparator(
         bytes memory pqMessage
-    ) internal view returns (bool) {
+    ) internal pure returns (bool) {
         PQTransferMessage memory message = parsePQTransferMessage(pqMessage);
-        return message.domainSeparator == getPQTransferDomainSeparator();
+        return message.domainSeparator == PQ_TRANSFER_DOMAIN_SEPARATOR;
     }
 
     event DomainSeparatorDebug(bytes32 parsed, bytes32 expected);

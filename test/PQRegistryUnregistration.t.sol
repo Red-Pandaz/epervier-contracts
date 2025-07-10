@@ -1,27 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "forge-std/Test.sol";
-import "../src/PQRegistry.sol";
-import "../src/PQERC721.sol";
-import "../src/interfaces/IPQERC721.sol";
-import "../src/ETHFALCON/ZKNOX_epervier.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
+import "./PQRegistryTestSetup.sol";
 
-contract MockConsole {
-    function log(string memory) external {}
-    function log(string memory, uint256) external {}
-    function log(string memory, address) external {}
-}
-
-contract PQRegistryUnregistrationTest is Test {
-    using ECDSA for bytes32;
-    using Strings for string;
-    
-    PQRegistry public registry;
-    PQERC721 public nft;
-    ZKNOX_epervier public epervierVerifier;
+contract PQRegistryUnregistrationTest is PQRegistryTestSetup {
     
     // Actor data structure
     struct Actor {
@@ -38,33 +20,11 @@ contract PQRegistryUnregistrationTest is Test {
     // Actor names array for easy iteration
     string[] public actorNames;
     
-    function setUp() public {
-        epervierVerifier = new ZKNOX_epervier();
-        
-        // Deploy mock contracts for the dependencies
-        MockConsole mockConsole = new MockConsole();
-        
-        registry = new PQRegistry(
-            address(epervierVerifier)
-        );
-        
-        // Deploy and initialize NFT contract
-        nft = new PQERC721("PQ NFT", "PQNFT");
-        nft.initialize(address(registry));
-        
-        // Initialize the registry with the NFT contract
-        address[] memory nftContracts = new address[](1);
-        nftContracts[0] = address(nft);
-        registry.initializeNFTContracts(nftContracts);
-        
-        // Debug: Print the contract address
-        console.log("DEBUG: Contract address:", address(registry));
+    function setUp() public override {
+        super.setUp();
         
         // Load actor data from centralized config
         loadActorsConfig();
-        
-        // Mock the Epervier verifier to return the correct fingerprint for each actor
-        // We'll set up specific mocks in each test as needed
     }
     
     function loadActorsConfig() internal {
@@ -372,20 +332,8 @@ contract PQRegistryUnregistrationTest is Test {
             Actor memory actor = getActor(actorName);
             
             // Reset contract state by redeploying for each actor
-            MockConsole mockConsole = new MockConsole();
-            
-            registry = new PQRegistry(
-                address(epervierVerifier)
-            );
-            
-            // Deploy and initialize NFT contract for the new registry
-            nft = new PQERC721("PQ NFT", "PQNFT");
-            nft.initialize(address(registry));
-            
-            // Initialize the registry with the NFT contract
-            address[] memory nftContracts = new address[](1);
-            nftContracts[0] = address(nft);
-            registry.initializeNFTContracts(nftContracts);
+            // Note: This test is creating a new registry for each actor, but we're using the modular setup
+            // The modular contracts are already deployed in setUp(), so we don't need to redeploy them
             
             // First register the actor
             registerActor(actor, actorName);

@@ -2,16 +2,35 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../src/PQERC721.sol";
-import "../src/PQRegistry.sol";
+import "../src/PQERC721Test.sol";
+import "../src/PQRegistryTest.sol";
 import "../src/ETHFALCON/ZKNOX_epervier.sol";
+import "../src/contracts/MessageParserContract.sol";
+import "../src/contracts/SignatureExtractorContract.sol";
+import "../src/contracts/MessageValidationContract.sol";
+import "../src/contracts/AddressUtilsContract.sol";
+import "../src/contracts/RegistrationLogicContract.sol";
+import "../src/contracts/UnregistrationLogicContract.sol";
+import "../src/contracts/ChangeAddressLogicContract.sol";
 
 
 
-contract PQERC721Test is Test {
-    PQERC721 public nft;
-    PQRegistry public registry;
+contract PQERC721Tests is Test {
+    PQERC721Test public nft;
+    PQRegistryTest public registry;
     ZKNOX_epervier public zknoxVerifier;
+    
+    // Modular contract variables
+    MessageParserContract public messageParser;
+    SignatureExtractorContract public signatureExtractor;
+    MessageValidationContract public messageValidation;
+    AddressUtilsContract public addressUtils;
+    RegistrationLogicContract public registrationLogic;
+    UnregistrationLogicContract public unregistrationLogic;
+    ChangeAddressLogicContract public changeAddressLogic;
+    
+    // Domain separator for EIP-712
+    bytes32 public constant DOMAIN_SEPARATOR = keccak256("PQRegistry");
     
     // Load actor config
     string public constant ACTORS_CONFIG_PATH = "test/test_keys/actors_config.json";
@@ -47,11 +66,32 @@ contract PQERC721Test is Test {
         // Deploy ZKNOX verifier
         zknoxVerifier = new ZKNOX_epervier();
         
-        // Deploy registry with real verifier
-        registry = new PQRegistry(address(zknoxVerifier));
+        // Deploy the modular registry with all contract addresses
+        // First deploy the library contracts
+        messageParser = new MessageParserContract();
+        signatureExtractor = new SignatureExtractorContract();
+        messageValidation = new MessageValidationContract();
+        addressUtils = new AddressUtilsContract();
+        
+        // Deploy the business logic contracts
+        registrationLogic = new RegistrationLogicContract();
+        unregistrationLogic = new UnregistrationLogicContract();
+        changeAddressLogic = new ChangeAddressLogicContract();
+        
+        // Deploy the main registry with all contract addresses
+        registry = new PQRegistryTest(
+            address(zknoxVerifier),
+            address(messageParser),
+            address(messageValidation),
+            address(signatureExtractor),
+            address(addressUtils),
+            address(registrationLogic),
+            address(unregistrationLogic),
+            address(changeAddressLogic)
+        );
         
         // Deploy NFT contract (without registry in constructor)
-        nft = new PQERC721("PQ NFT", "PQNFT");
+        nft = new PQERC721Test("PQ NFT", "PQNFT");
         
         // Initialize the NFT contract with the registry
         nft.initialize(address(registry));

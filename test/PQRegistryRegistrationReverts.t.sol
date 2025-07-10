@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import {Test, console} from "forge-std/Test.sol";
-import {PQRegistry} from "../src/PQRegistry.sol";
-import {PQERC721} from "../src/PQERC721.sol";
-import {IPQERC721} from "../src/interfaces/IPQERC721.sol";
-import {ZKNOX_epervier} from "../ETHFALCON/src/ZKNOX_epervier.sol";
-import {MessageParser} from "../src/libraries/MessageParser.sol";
+import "./PQRegistryTestSetup.sol";
 
-contract PQRegistryRegistrationRevertsTest is Test {
-    PQRegistry public registry;
-    PQERC721 public nft;
-    ZKNOX_epervier public epervierVerifier;
+contract PQRegistryRegistrationRevertsTest is PQRegistryTestSetup {
     
     // Actor data structure
     struct Actor {
@@ -27,21 +19,8 @@ contract PQRegistryRegistrationRevertsTest is Test {
     // Actor names for test vectors
     string[] public actorNames = ["alice"];
     
-    function setUp() public {
-        // Deploy the Epervier verifier
-        epervierVerifier = new ZKNOX_epervier();
-        
-        // Deploy the registry
-        registry = new PQRegistry(address(epervierVerifier));
-        
-        // Deploy and initialize NFT contract
-        nft = new PQERC721("PQ NFT", "PQNFT");
-        nft.initialize(address(registry));
-        
-        // Initialize the registry with the NFT contract
-        address[] memory nftContracts = new address[](1);
-        nftContracts[0] = address(nft);
-        registry.initializeNFTContracts(nftContracts);
+    function setUp() public override {
+        super.setUp();
         
         // Initialize Alice's data
         alice = Actor({
@@ -796,7 +775,7 @@ contract PQRegistryRegistrationRevertsTest is Test {
         console.log("Expected nonce from test vector:", expectedNonce);
         
         // Log the actual nonce that would be extracted from the message
-        uint256 actualNonce = MessageParser.extractPQNonceFromRemoveMessage(pqMessage);
+        uint256 actualNonce = messageParser.extractPQNonceFromRemoveMessage(pqMessage);
         console.log("Actual nonce extracted from message:", actualNonce);
         
         // Log the PQ fingerprint that would be recovered

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.25;
+pragma solidity ^0.8.19;
 
-import {Script} from "forge-std/Script.sol";
+import "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
-import "../src/ETHFALCON/ZKNOX_epervier.sol";
 import "../src/PQRegistry.sol";
+import "../src/PQERC721.sol";
 import "../src/contracts/MessageParserContract.sol";
 import "../src/contracts/MessageValidationContract.sol";
 import "../src/contracts/SignatureExtractorContract.sol";
@@ -13,9 +13,11 @@ import "../src/contracts/RegistrationLogicContract.sol";
 import "../src/contracts/UnregistrationLogicContract.sol";
 import "../src/contracts/ChangeAddressLogicContract.sol";
 
-contract DeployPQRegistry is Script {
+contract DeployOPSepolia is Script {
     function run() external {
-        uint256 deployerPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+        // Get deployment parameters from environment
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address epervierVerifier = 0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B; // OP Sepolia Epervier contract
         
         vm.startBroadcast(deployerPrivateKey);
         
@@ -50,9 +52,9 @@ contract DeployPQRegistry is Script {
         ChangeAddressLogicContract changeAddressLogic = new ChangeAddressLogicContract();
         console.log("ChangeAddressLogic deployed at:", address(changeAddressLogic));
         
-        console.log("Deploying PQRegistry contract...");
+        // Deploy the registry first
         PQRegistry registry = new PQRegistry(
-            address(0x1234), // epervierVerifier
+            epervierVerifier,
             address(messageParser),
             address(messageValidation),
             address(signatureExtractor),
@@ -63,6 +65,22 @@ contract DeployPQRegistry is Script {
         );
         console.log("PQRegistry deployed at:", address(registry));
         
+        console.log("Deploying PQERC721 contract...");
+        PQERC721 nft = new PQERC721("PQ NFT", "PQNFT");
+        console.log("PQERC721 deployed at:", address(nft));
+        
+        console.log("Initializing contracts with each other...");
+        
+        // Initialize the NFT contract with the registry
+        nft.initialize(address(registry));
+        console.log("NFT contract initialized with registry");
+        
+        // Initialize the registry with the NFT contract
+        address[] memory nftContracts = new address[](1);
+        nftContracts[0] = address(nft);
+        registry.initializeNFTContracts(nftContracts);
+        console.log("Registry initialized with NFT contract");
+        
         vm.stopBroadcast();
         
         console.log("");
@@ -72,7 +90,8 @@ contract DeployPQRegistry is Script {
         console.log("MessageValidation:", address(messageValidation));
         console.log("AddressUtils:", address(addressUtils));
         console.log("PQRegistry:", address(registry));
-        console.log("EpervierVerifier:", address(0x1234));
+        console.log("PQERC721:", address(nft));
+        console.log("EpervierVerifier:", epervierVerifier);
         
         // Deployment complete - addresses will be shown in forge output
     }

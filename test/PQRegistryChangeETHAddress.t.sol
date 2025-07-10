@@ -1,28 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "forge-std/Test.sol";
-import "../src/PQRegistry.sol";
-import "../src/PQERC721.sol";
-import "../src/interfaces/IPQERC721.sol";
-import "../src/ETHFALCON/ZKNOX_epervier.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
+import "./PQRegistryTestSetup.sol";
 
-// Mock contracts for testing
-contract MockConsole {
-    function log(string memory) external {}
-    function log(string memory, uint256) external {}
-    function log(string memory, address) external {}
-}
-
-contract PQRegistryChangeETHAddressTest is Test {
-    using ECDSA for bytes32;
-    using Strings for string;
-    
-    PQRegistry public registry;
-    PQERC721 public nft;
-    ZKNOX_epervier public epervierVerifier;
+contract PQRegistryChangeETHAddressTest is PQRegistryTestSetup {
     
     // Actor data structure
     struct Actor {
@@ -42,33 +23,11 @@ contract PQRegistryChangeETHAddressTest is Test {
     // Test events for verification
     event ChangeETHAddressIntentSubmitted(address indexed pqFingerprint, address indexed newETHAddress, uint256 ethNonce);
     
-    function setUp() public {
-        epervierVerifier = new ZKNOX_epervier();
-        
-        // Deploy mock contracts for the dependencies
-        MockConsole mockConsole = new MockConsole();
-        
-        registry = new PQRegistry(
-            address(epervierVerifier)
-        );
-        
-        // Deploy and initialize NFT contract
-        nft = new PQERC721("PQ NFT", "PQNFT");
-        nft.initialize(address(registry));
-        
-        // Initialize the registry with the NFT contract
-        address[] memory nftContracts = new address[](1);
-        nftContracts[0] = address(nft);
-        registry.initializeNFTContracts(nftContracts);
-        
-        // DEBUG: Print the contract address
-        console.log("DEBUG: Contract address:", address(registry));
+    function setUp() public override {
+        super.setUp();
         
         // Load actor data from centralized config
         loadActorsConfig();
-        
-        // Mock the Epervier verifier to return the correct fingerprint for each actor
-        // We'll set up specific mocks in each test as needed
     }
     
     function loadActorsConfig() internal {

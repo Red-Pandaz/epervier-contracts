@@ -1,30 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "forge-std/Test.sol";
-import "../src/PQRegistry.sol";
-import "../src/PQERC721.sol";
-import "../src/interfaces/IPQERC721.sol";
-import "../src/ETHFALCON/ZKNOX_epervier.sol";
-import "../src/libraries/MessageParser.sol";
+import "./PQRegistryTestSetup.sol";
 
-// Mock for Console
-contract MockConsole {
-    function log(string memory) external {}
-    function log(string memory, uint256) external {}
-    function log(string memory, address) external {}
-}
-
-contract PQRegistryAdvancedTests is Test {
-    using ECDSA for bytes32;
-    using Strings for string;
-    
-
-    
-    PQRegistry public registry;
-    PQERC721 public nft;
-    ZKNOX_epervier public epervierVerifier;
-    MockConsole public mockConsole;
+contract PQRegistryAdvancedTests is PQRegistryTestSetup {
     
     // Actor configuration
     struct Actor {
@@ -37,24 +16,8 @@ contract PQRegistryAdvancedTests is Test {
     
     string[] public actorNames = ["alice", "bob", "charlie", "danielle", "eve", "frank", "grace", "henry", "iris", "jack"];
     
-    function setUp() public {
-        // Deploy the real Epervier verifier
-        epervierVerifier = new ZKNOX_epervier();
-        
-        // Deploy mock console
-        mockConsole = new MockConsole();
-        
-        // Deploy the registry with real verifier
-        registry = new PQRegistry(address(epervierVerifier));
-        
-        // Deploy and initialize NFT contract
-        nft = new PQERC721("PQ NFT", "PQNFT");
-        nft.initialize(address(registry));
-        
-        // Initialize the registry with the NFT contract
-        address[] memory nftContracts = new address[](1);
-        nftContracts[0] = address(nft);
-        registry.initializeNFTContracts(nftContracts);
+    function setUp() public override {
+        super.setUp();
     }
     
     /**
@@ -242,7 +205,7 @@ contract PQRegistryAdvancedTests is Test {
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(advancedJson, ".registration_confirmation_nonce3[0].pq_signature.hint"));
         
         // Log the ETH address from the PQ message
-        (address ethAddressFromPQMessage,,,,,) = MessageParser.parsePQRegistrationConfirmationMessage(confirmMessage, registry.DOMAIN_SEPARATOR());
+        (address ethAddressFromPQMessage,,,,,) = messageParser.parsePQRegistrationConfirmationMessage(confirmMessage, registry.DOMAIN_SEPARATOR());
         console.log("ETH address from PQ message:", ethAddressFromPQMessage);
         console.log("Expected ETH address:", alice.ethAddress);
         
@@ -746,13 +709,13 @@ contract PQRegistryAdvancedTests is Test {
         uint256 confirmHint = vm.parseUint(vm.parseJsonString(confirmJson, ".registration_confirmation[0].pq_signature.hint"));
         
         // Debug: Parse the PQ message to extract ETH address using MessageParser
-        (address ethAddressInPQMessage, , , , , ) = MessageParser.parsePQRegistrationConfirmationMessage(confirmMessage, registry.DOMAIN_SEPARATOR());
+        (address ethAddressInPQMessage, , , , , ) = messageParser.parsePQRegistrationConfirmationMessage(confirmMessage, registry.DOMAIN_SEPARATOR());
         console.log("DEBUG: ETH address in PQ message:", ethAddressInPQMessage);
         console.log("DEBUG: Expected ETH address (Charlie):", charlie.ethAddress);
         console.log("DEBUG: ETH addresses match:", ethAddressInPQMessage == charlie.ethAddress);
         
         // Debug: Parse the base ETH message to extract signature components
-        (address pqFingerprint, uint256 ethNonce) = MessageParser.parseBaseETHRegistrationConfirmationMessage(confirmMessage);
+        (address pqFingerprint, uint256 ethNonce) = messageParser.parseBaseETHRegistrationConfirmationMessage(confirmMessage);
         console.log("DEBUG: PQ fingerprint in base ETH message:", pqFingerprint);
         console.log("DEBUG: Expected PQ fingerprint (Alice):", alice.pqFingerprint);
         console.log("DEBUG: PQ fingerprints match:", pqFingerprint == alice.pqFingerprint);
