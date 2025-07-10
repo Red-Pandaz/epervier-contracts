@@ -11,7 +11,7 @@
 > - 🤖 **AI-assisted development** - Code generated with AI tools requires careful review  
 > - 🔬 **Research prototype** - Intended for academic and experimental use only
 > - 🚫 **No security audits** - Smart contracts have not undergone professional security audits
-> - 🧪 **Unaudited cryptographic implementation** - The underlying ETHFALCON library is experimental
+> - 🧪 **One person team** - There is currently no one else developing, reviewing or maintaining this work
 
 A comprehensive post-quantum cryptographic smart contract system built on Ethereum, featuring quantum-resistant digital signatures and NFT transfers using the Evervier variant of the ETHFALCON signature scheme.
 
@@ -264,10 +264,9 @@ The system uses a modular architecture where logic is separated into dedicated c
 
 ## 📚 Documentation
 
-- [Advanced Testing Plan](test/advanced_testing_plan.md)
 - [OP Sepolia Deployment Guide](script/README_OP_SEPOLIA.md)
 - [ETHFALCON Documentation](ETHFALCON/README.md)
-- [API Reference](docs/)
+- [Message Schemas](preregistry_message_schema.json)
 
 ## 🔬 Research & Development
 
@@ -275,8 +274,8 @@ This project represents cutting-edge research in post-quantum cryptography for b
 
 - **First practical PQ-secured NFT implementation**
 - **Intent-based cryptographic workflows**
+- **Nested signature model with a two-step process proving two keys have ownership of one-another**
 - **Hybrid classical/post-quantum security models**
-- **Gas-optimized lattice signature verification**
 
 ## 🤝 Contributing
 
