@@ -11,7 +11,7 @@
 > - 🤖 **AI-assisted development** - Code generated with AI tools requires careful review  
 > - 🔬 **Research prototype** - Intended for academic and experimental use only
 > - 🚫 **No security audits** - Smart contracts have not undergone professional security audits
-> - 🧪 **One person team** - There is currently no one else developing, reviewing or maintaining this work
+> - 🙋 **One person team** - There is currently no one else developing, reviewing or maintaining this work
 
 A comprehensive post-quantum cryptographic smart contract system built on Ethereum, featuring quantum-resistant digital signatures and NFT transfers using the Evervier variant of the ETHFALCON signature scheme.
 
@@ -75,9 +75,14 @@ The **PQERC721** extends the standard ERC721 NFT contract with post-quantum tran
 - **Registry Integration**: Automatically validates transfers against registered PQ keys
 
 #### Transfer Methods:
-1. **Traditional Transfer**: Standard ERC721 transfers using ECDSA signatures
-2. **PQ Transfer**: Quantum-resistant transfers using Epervier signatures
-3. **Mixed Validation**: Automatically routes transfers based on sender's registered PQ status
+1. **PQ-backed**: Transfering is **only possible** through with a valid Epervier signature
+2. **Extends security to Ethereum addresses via registry**: A token can be moved by a signature that recovers to either the owner of the token or the owner's registered Epervier fingerprint
+
+### Future Developments:
+- The proof of concept PQERC721 is one of at least 8 potential token variants
+- PQ tokens can be either ERC20 or ERC721, backwards compatible or PQ only, and extend ownership via the registry or not
+- Backwards compatible tokens would behave as regular ECDSA tokens but would also have a PQTransferFrom so they could be moved by fingerprints
+- Tokens can reference the registry can extend PQ security to registered Ethereum addresses
 
 ## 🔐 Epervier/ETHFALCON Integration
 
@@ -88,7 +93,7 @@ Epervier is an EVM-optimized variant of the ETHFALCON post-quantum digital signa
 #### Key Properties:
 - **Quantum Resistance**: Secure against both classical and quantum computer attacks
 - **Lattice-Based**: Built on the mathematical hardness of lattice problems
-- **NIST Standardized**: Based on FALCON, a NIST post-quantum cryptography standard
+- **NIST Standardized**: Based on FALCON, a NIST post-quantum cryptography standard, although Epervier and other ETHFALCON variants are themselves **not standardized**
 - **Efficient Verification**: Optimized for blockchain verification with reasonable gas costs
 
 ### Integration Architecture
