@@ -193,7 +193,7 @@ contract PQRegistryTest {
             }
         }
     }
-    
+
     /**
      * @dev Remove a pending registration intent (PQ controlled)
      * @param pqMessage The PQ message containing the remove intent request
