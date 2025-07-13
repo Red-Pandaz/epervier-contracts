@@ -2,7 +2,7 @@
 
 > **⚠️ EXPERIMENTAL SOFTWARE WARNING ⚠️**
 > 
-> This is an **experimental smart contract stack** built with AI assistance on top of an **unaudited EVM-compatible variant** of the Falcon signature standard created by [ZKNOX/ETHFALCON](https://github.com/ZKNoxHQ/ETHFALCON).
+> This is an **experimental smart contract stack** built with AI assistance on top of an **unaudited EVM-compatible variant** of the Falcon signature standard created by [ZKNoxHQ](https://github.com/ZKNoxHQ/ETHFALCON).
 > 
 > **🚫 DO NOT USE IN PRODUCTION** - This software is for research and development purposes only.
 > 
@@ -23,7 +23,7 @@ A comprehensive post-quantum cryptographic smart contract system built on Ethere
 |----------|---------|-------------|
 | **PQRegistry** | [`0x18E3bc34fc2645bDCe2b85AF6f9e0ac3cD26637e`](https://sepolia-optimistic.etherscan.io/address/0x18E3bc34fc2645bDCe2b85AF6f9e0ac3cD26637e) | Main registry for post-quantum key management |
 | **PQERC721** | [`0x9f6A2b8560FceF521ACe81c651CFd8A07381B950`](https://sepolia-optimistic.etherscan.io/address/0x9f6A2b8560FceF521ACe81c651CFd8A07381B950) | Post-quantum secured NFT contract |
-| **EpervierVerifier** | [`0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B`](https://sepolia-optimistic.etherscan.io/address/0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B) | Epervier signature verifier |
+| **EpervierVerifier** | [`0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B`](https://sepolia-optimistic.etherscan.io/address/0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B) | Epervier signature verifier deployed by ZKNoxHQ |
 
 ### Logic Contracts (Modular Architecture)
 
@@ -58,31 +58,46 @@ The **PQRegistry** is the core contract that manages post-quantum cryptographic 
 
 #### Core Operations:
 1. **Registration Intent**: Submit intent to register a new PQ key with Epervier signature
-2. **Registration Confirmation**: Confirm registration with both Epervier and ECDSA signatures
-3. **Unregistration Intent**: Submit intent to remove a PQ key
-4. **Unregistration Confirmation**: Confirm unregistration of both PQ and Ethereum keys
-5. **Address Change Intent**: Submit intent to change the associated Ethereum address
-6. **Address Change Confirmation**: Confirm address changes with proper validation
+2. **Remove Registration Intent by ETH**: Remove a registration intent using just the ECDSA key from the intent
+3. **Remove Registration Intent by PQ**: Remove a registration intent using just the PQ key from the intent
+4. **Registration Confirmation**: Confirm registration with both Epervier and ECDSA signatures
+5. **Unregistration Intent**: Submit intent to remove a PQ key
+6. **Remove Unregistration Intent by PQ**: Remove an unregistration intent using just the PQ key from the intent (note: no ETH equivalent)
+7. **Unregistration Confirmation**: Confirm unregistration of both PQ and ECDSA keys
+8. **Address Change Intent**: Submit intent to change the associated Ethereum address
+9. **Remove Address Change Intent by ETH**: Remove an address change intent using just the ECDSA key for the new ETH address from the intent (Note: only the new address can use this function, in case of compromised keys)
+10. **Remove Address Change Intent by PQ**: Remove an address change intent using just the PQ key from the intent
+11. **Address Change Confirmation**: Confirm address changes with proper validation
 
 ### PQERC721 Contract
 
 The **PQERC721** extends the standard ERC721 NFT contract with post-quantum transfer capabilities, enabling quantum-resistant NFT ownership and transfers.
 
 #### Key Features:
-- **Standard ERC721 Compatibility**: Fully compatible with existing NFT infrastructure
 - **Proof of Post-Quantum Keys**: Tokens can only be minted by successfully pairing an Epervier ffingerprint to an Ethereum address
 - **Post-Quantum Transfers**: Supports transfers using Epervier signatures instead of ECDSA
-- **Registry Integration**: Automatically validates transfers against registered PQ keys
+- **Registry Integration**: Automatically validates transfers against registered Ethereum addresses
 
-#### Transfer Methods:
-1. **PQ-backed**: Transfering is **only possible** through with a valid Epervier signature
-2. **Extends security to Ethereum addresses via registry**: A token can be moved by a signature that recovers to either the owner of the token or the owner's registered Epervier fingerprint
+#### New PQTransferFrom method:
+- **PQ-backed**: Transfering is **only possible** through with a valid Epervier signature
+- **Extends security to Ethereum addresses via registry**: A token can be moved by a signature that recovers to either the owner of the token or the owner's registered Epervier fingerprint
 
-### Future Developments:
-- The proof of concept PQERC721 is one of at least 8 potential token variants
-- PQ tokens can be either ERC20 or ERC721, backwards compatible or PQ only, and extend ownership via the registry or not
-- Backwards compatible tokens would behave as regular ECDSA tokens but would also have a PQTransferFrom so they could be moved by fingerprints
-- Tokens can reference the registry can extend PQ security to registered Ethereum addresses
+### Future Developments (possibly):
+- **Front-end app**: Improve UX by building an interface that allows generating PQ keys all well as performing registry operations
+- **PQ smart contract wallet**: Extend PQ security to ECDSA-backed assets
+- **Extensive PQ token contract library**: The proof of concept PQERC721 is one of at least 8 potential token variants
+  - PQ tokens can be either ERC20 or ERC721, backwards compatible or PQ-only, and extend ownership via the registry or not
+  - Backwards compatible tokens would behave as regular ECDSA tokens but would also have a PQTransferFrom so they could be moved by fingerprints
+  - Tokens can reference the registry to extend PQ security to registered Ethereum addresses
+- **Oracle service for verifying credentials**: Allow users to bind their Epervier fingerprints with verified email addresses, PGP and ML-KEM/Kyber pubkeys
+  - Users sign an intent message to bind a given email address and send it to the oracle
+  - Oracle verifies signature, then cosigns the message and calculates the hash of the message + oracle sig
+  - User commits hash onchain alongside intent message and signature components and the oracle subequently sends the unhashed signature to the intent email address
+  - If the user does have access to this address they will be able to retrieve the signature and put it onchain alongside a signed confirmation message
+  = All signatures get verified and the intent message + oracle sig hash is verified
+  - After email verification, users can complete a similar process to register PGP or ML-KEM/Kyber pubkeys
+  - In these cases the emailed signature will be encrypted with their alleged public key for users to demonstrate proof of keys
+
 
 ## 🔐 Epervier/ETHFALCON Integration
 
@@ -206,9 +221,29 @@ The system uses a modular architecture where logic is separated into dedicated c
 
 ### Benefits:
 - **Upgradability**: Logic contracts can be upgraded without changing the main registry
-- **Gas Optimization**: Modular design reduces deployment and execution costs
 - **Maintainability**: Separation of concerns makes the codebase easier to maintain
 - **Testing**: Individual components can be tested in isolation
+
+### Limitations:
+
+#### Gas Costs
+
+The system's cryptographic operations result in high gas costs due to extensive message parsing and post-quantum signature verification:
+
+| Operation | Gas Range | Description |
+|-----------|-----------|-------------|
+| **Registration Intent** | ~9-9.5M gas | Submit intent with dual signatures |
+| **Registration Confirmation** | ~7.8-8.3M gas | Confirm with dual signatures |
+| **Total Registration** | ~16.8-17.8M gas | Complete registration process |
+| **PQ Token Transfer** | ~7M gas | ERC721 transfer using Epervier signature |
+
+**Note**: These costs make the system impractical for Ethereum L1. The current deployment is on OP Sepolia to work with the official Epervier contract. OP Mainnet and Base are potential candidates for mainnet implementation.
+
+On-chain Post-Quantum signature verification is inherently gas-intensive. This contract stack intentionally prioritizes security over gas-optimization. One could theoretically create a working registry that only relies on a single message signed with both an Ethereum and an Epervier key; this suite however utilizes nested signatures with both an intent and a confirm transaction. This gives either key the opportunity to cancel the intent and requires a more concerted effort to successfully pair keys. This was designed with the consideration that following a successful registration, the Ethereum key loses substantial privileges as the Epervier key becomes the primary identity on the contract.
+
+#### PQ Key Storage
+
+Epervier and other Falcon variants have extremely large key sizes, and their signature requirements exceed the capabilities of modern hardware wallets. If and when a front-end for this contract stack is developed it will likely use some sort of password-protected encryption and will store keys in IndexedDB.
 
 ## 🚀 Getting Started
 
@@ -263,9 +298,9 @@ The system uses a modular architecture where logic is separated into dedicated c
 ### For Users
 
 1. **Generate Epervier Keys**: Use the ETHFALCON reference implementation to generate post-quantum key pairs
-2. **Register Your Key**: Submit a registration intent with your Epervier signature
-3. **Confirm Registration**: Provide ECDSA confirmation to complete registration
-4. **Use PQ Features**: Transfer NFTs and perform operations using post-quantum signatures
+2. **Register Your Key**: Submit a registration intent with an Epervier signature nested inside an Ethereum message
+3. **Confirm Registration**: Confirm registration with an Ethereum signature nested inside an Epervier message
+4. **Use PQ Features**: Transfer NFTs and perform operations using post-quantum signatures from any Ethereum address
 
 ## 📚 Documentation
 
@@ -275,7 +310,7 @@ The system uses a modular architecture where logic is separated into dedicated c
 
 ## 🔬 Research & Development
 
-This project represents cutting-edge research in post-quantum cryptography for blockchain applications. Key innovations include:
+This project represents innovative research in post-quantum cryptography for blockchain applications. Key innovations include:
 
 - **First practical PQ-secured NFT implementation**
 - **Intent-based cryptographic workflows**
@@ -292,7 +327,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## ⚠️ Security Notice
 
-This is experimental software implementing cutting-edge cryptographic techniques. While thoroughly tested, it should be used with caution in production environments. Post-quantum cryptography is an evolving field, and standards may change.
+This is experimental software created for demonstration/research purposes. It implments bleeding edge cryptographic techniques, and while thoroughly tested, it should be absolutely not be used in any production environment. Post-quantum cryptography is an evolving field, and standards may change.
 
 ---
 
