@@ -1,0 +1,74 @@
+{
+  "change_eth_address_cancel_eth": [
+    {
+      "current_actor": "kyle",
+      "current_eth_address": "0x4516BbbdA560e166C95c4249252566DFe6E3D4D6",
+      "next_eth_address": "0xd39698599A4e692b0C57b6ef03a3a801d0AE3792",
+      "pq_fingerprint": "0x29fcb35fe4bdca1b53c99143d33bcd76f064c975",
+      "eth_message": "52656d6f7665206368616e676520696e74656e742066726f6d2045706572766965722046696e6765727072696e742029fcb35fe4bdca1b53c99143d33bcd76f064c9750000000000000000000000000000000000000000000000000000000000000001",
+      "eth_signature": {
+        "v": 28,
+        "r": "0x44e7996d826ebcf6e59976b8d78344a09916c502b27e44b29890cb9057bb2d5b",
+        "s": "0x3681769dc0f90348955fac9a84ebd3377cc81a7e820b0390e566b30196dcc717"
+      },
+      "pq_nonce": 3,
+      "eth_nonce": 1
+    },
+    {
+      "current_actor": "luke",
+      "current_eth_address": "0xd39698599A4e692b0C57b6ef03a3a801d0AE3792",
+      "next_eth_address": "0x635dfE2bFD4fb480a25Fa329accD727C9FDd3D27",
+      "pq_fingerprint": "0x2b03a9c54d168f36e6027a57fe3e5fea23c713ec",
+      "eth_message": "52656d6f7665206368616e676520696e74656e742066726f6d2045706572766965722046696e6765727072696e74202b03a9c54d168f36e6027a57fe3e5fea23c713ec0000000000000000000000000000000000000000000000000000000000000001",
+      "eth_signature": {
+        "v": 28,
+        "r": "0x9a4aa2331ad3134ec8e8a27cefc9e58de9fb0beba902316ecc1d8b1192b614a0",
+        "s": "0x51d346a3672cbe2d9357358e781ca8d31a7c5f368fe602e8eee2986f34e388e1"
+      },
+      "pq_nonce": 3,
+      "eth_nonce": 1
+    },
+    {
+      "current_actor": "marie",
+      "current_eth_address": "0x635dfE2bFD4fb480a25Fa329accD727C9FDd3D27",
+      "next_eth_address": "0x780c90b799cbB2cb651210f958de91Cf45720390",
+      "pq_fingerprint": "0x0e06303bf9cc172bd49ea1ad2499c519f9ff5258",
+      "eth_message": "52656d6f7665206368616e676520696e74656e742066726f6d2045706572766965722046696e6765727072696e74200e06303bf9cc172bd49ea1ad2499c519f9ff52580000000000000000000000000000000000000000000000000000000000000001",
+      "eth_signature": {
+        "v": 28,
+        "r": "0xa8a2d554cac175e892b6744e06f11121580c9e17ca21b9f6df127ee37b83e1d3",
+        "s": "0x465a70316db48aa0d886a226f45013aba5e8b2b83bcc692df1191e8d5c63e363"
+      },
+      "pq_nonce": 3,
+      "eth_nonce": 1
+    },
+    {
+      "current_actor": "nancy",
+      "current_eth_address": "0x780c90b799cbB2cb651210f958de91Cf45720390",
+      "next_eth_address": "0xF84e98eA223457F6e4f237Cc04FD240f7bd4186b",
+      "pq_fingerprint": "0x86052c11c00c3a0860dac9b0a5d2585b40305525",
+      "eth_message": "52656d6f7665206368616e676520696e74656e742066726f6d2045706572766965722046696e6765727072696e742086052c11c00c3a0860dac9b0a5d2585b403055250000000000000000000000000000000000000000000000000000000000000001",
+      "eth_signature": {
+        "v": 28,
+        "r": "0x73e66107626c5c69f992a4b5eb88b01deef0502e6063ab306cec81f4fd654494",
+        "s": "0x3cf7bae2c1e0e335b03f3b600569673384664f7f4b4bd6417936228ab5854839"
+      },
+      "pq_nonce": 3,
+      "eth_nonce": 1
+    },
+    {
+      "current_actor": "oscar",
+      "current_eth_address": "0xF84e98eA223457F6e4f237Cc04FD240f7bd4186b",
+      "next_eth_address": "0x4516BbbdA560e166C95c4249252566DFe6E3D4D6",
+      "pq_fingerprint": "0xc8bed874d86d8d369f35ce0343aca2d1503cc6e4",
+      "eth_message": "52656d6f7665206368616e676520696e74656e742066726f6d2045706572766965722046696e6765727072696e7420c8bed874d86d8d369f35ce0343aca2d1503cc6e40000000000000000000000000000000000000000000000000000000000000001",
+      "eth_signature": {
+        "v": 28,
+        "r": "0xbb87a18418eda0ee091a12a22d2f3a8f743906ae4bad2bee12df95e1e11945b6",
+        "s": "0x38d576d03381f43325efdf39c2750ee3c07d86a005436a110ac53a9961f7f83b"
+      },
+      "pq_nonce": 3,
+      "eth_nonce": 1
+    }
+  ]
+}

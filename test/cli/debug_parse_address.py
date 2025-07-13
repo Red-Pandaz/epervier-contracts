@@ -16,7 +16,7 @@ def main():
     print(f"Intent message hex: {intent_message.hex()}")
 
     # Test the parseIntentAddress function by calling it directly
-    registry_address = "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6"
+    registry_address = "0x1291Be112d480055DaFd8a610b7d1e203891C274"
     
     # Create a simple call to test the parsing
     command = [

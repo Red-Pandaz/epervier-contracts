@@ -13,4 +13,13 @@ docs/
 # Dotenv file
 .env
 
-test/python/vector_generators/sig 
+test/python/vector_generators/sig
+
+# Production actor config (contains private keys)
+test/test_keys/production_actors_config.json
+test/test_keys/prod_private_key_*.pem
+test/test_keys/prod_public_key_*.pem
+test/python/production_config.json
+
+# Production test vectors
+test/test_vectors/dev/ 

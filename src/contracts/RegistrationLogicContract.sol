@@ -115,13 +115,20 @@ contract RegistrationLogicContract {
         uint256 hint
     ) external {
         RegistryStorage.Layout storage storage_s = RegistryStorage.layout();
+        console.log("DEBUG: require registeredNFTContractCount > 0", storage_s.registeredNFTContractCount);
         require(storage_s.registeredNFTContractCount > 0, "No NFT contract registered");
+        console.log("DEBUG: Starting confirmRegistration");
         
         // STEP 1: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = storage_s.epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
+        console.log("DEBUG: Recovered fingerprint:", recoveredFingerprint);
+        
         // STEP 2: Validate the PQ registration confirmation message format
         bool valid = storage_s.messageParser.validatePQRegistrationConfirmationMessage(pqMessage);
+        console.log("DEBUG: require valid PQ registration confirmation message", valid);
         require(valid, "Invalid PQ registration confirmation message");
+        console.log("DEBUG: PQ message validation passed");
+        
         // STEP 3: Parse the PQ registration confirmation message
         (
             address ethAddress,
@@ -131,10 +138,20 @@ contract RegistrationLogicContract {
             bytes32 s,
             uint256 pqNonce
         ) = storage_s.messageParser.parsePQRegistrationConfirmationMessage(pqMessage, storage_s.DOMAIN_SEPARATOR);
+        console.log("DEBUG: Parsed ethAddress:", ethAddress);
+        console.log("DEBUG: Parsed pqNonce:", pqNonce);
+        
         // STEP 4: Parse the base ETH message to get pqFingerprint and ethNonce
         (address pqFingerprint, uint256 ethNonce) = storage_s.messageParser.parseBaseETHRegistrationConfirmationMessage(baseETHMessage);
+        console.log("DEBUG: Parsed pqFingerprint from ETH message:", pqFingerprint);
+        console.log("DEBUG: Parsed ethNonce from ETH message:", ethNonce);
+        
         // STEP 5: Validate the base ETH registration confirmation message format
-        require(storage_s.messageParser.validateBaseETHRegistrationConfirmationMessage(baseETHMessage), "Invalid base ETH registration confirmation message");
+        bool baseValid = storage_s.messageParser.validateBaseETHRegistrationConfirmationMessage(baseETHMessage);
+        console.log("DEBUG: require valid base ETH registration confirmation message", baseValid);
+        require(baseValid, "Invalid base ETH registration confirmation message");
+        console.log("DEBUG: Base ETH message validation passed");
+        
         // STEP 6: Verify the ETH signature using EIP712
         bytes32 structHash = storage_s.signatureExtractor.getRegistrationConfirmationStructHash(
             pqFingerprint,
@@ -142,23 +159,52 @@ contract RegistrationLogicContract {
         );
         bytes32 digest = storage_s.signatureExtractor.getEIP712Digest(storage_s.DOMAIN_SEPARATOR, structHash);
         address recoveredETHAddress = ECDSA.recover(digest, v, r, s);
+        console.log("DEBUG: require recoveredETHAddress != 0", recoveredETHAddress);
         require(recoveredETHAddress != address(0), "Invalid ETH signature");
+        console.log("DEBUG: Recovered ETH address:", recoveredETHAddress);
+        
         // STEP 7: Cross-reference validation
+        console.log("DEBUG: require ethAddress == recoveredETHAddress", ethAddress, recoveredETHAddress);
         require(ethAddress == recoveredETHAddress, "ETH Address mismatch: PQ message vs recovered ETH signature");
+        console.log("DEBUG: require pqFingerprint == recoveredFingerprint", pqFingerprint, recoveredFingerprint);
         require(pqFingerprint == recoveredFingerprint, "PQ fingerprint mismatch: ETH message vs recovered PQ signature");
+        console.log("DEBUG: Cross-reference validation passed");
+        
         // STEP 8: State validation - Check PQ fingerprint mapping first
         address intentAddress = storage_s.pqFingerprintToPendingIntentAddress[recoveredFingerprint];
+        console.log("DEBUG: Intent address for fingerprint:", intentAddress);
+        console.log("DEBUG: require intentAddress != 0", intentAddress);
         require(intentAddress != address(0), "No pending intent found for PQ fingerprint");
+        
         RegistryStorage.Intent storage intent = storage_s.pendingIntents[intentAddress];
+        console.log("DEBUG: Intent timestamp:", intent.timestamp);
+        console.log("DEBUG: require intent.timestamp != 0", intent.timestamp);
         require(intent.timestamp != 0, "No pending intent found for ETH Address");
+        console.log("DEBUG: require intentAddress == recoveredETHAddress", intentAddress, recoveredETHAddress);
         require(intentAddress == recoveredETHAddress, "ETH Address mismatch: PQ message vs stored intent");
+        console.log("DEBUG: require intent.pqFingerprint == pqFingerprint", intent.pqFingerprint, pqFingerprint);
         require(intent.pqFingerprint == pqFingerprint, "PQ fingerprint mismatch: ETH message vs stored intent");
+        console.log("DEBUG: require intent.pqFingerprint == recoveredFingerprint", intent.pqFingerprint, recoveredFingerprint);
         require(intent.pqFingerprint == recoveredFingerprint, "PQ fingerprint mismatch: recovered vs stored intent");
+        console.log("DEBUG: Intent validation passed");
+        
         // STEP 9: Comprehensive conflict prevention check
+        console.log("DEBUG: require pqFingerprintToPendingIntentAddress[recoveredFingerprint] != 0", storage_s.pqFingerprintToPendingIntentAddress[recoveredFingerprint]);
         require(storage_s.pqFingerprintToPendingIntentAddress[recoveredFingerprint] != address(0), "PQ fingerprint does not have pending registration intent");
+        console.log("DEBUG: Conflict prevention check passed");
+        
         // STEP 10: Nonce validation
+        console.log("DEBUG: Expected PQ nonce:", storage_s.pqKeyNonces[recoveredFingerprint]);
+        console.log("DEBUG: Provided PQ nonce:", pqNonce);
+        console.log("DEBUG: require pqKeyNonces[recoveredFingerprint] == pqNonce", storage_s.pqKeyNonces[recoveredFingerprint], pqNonce);
         require(storage_s.pqKeyNonces[recoveredFingerprint] == pqNonce, "Invalid PQ nonce");
+        
+        console.log("DEBUG: Expected ETH nonce:", storage_s.ethNonces[ethAddress]);
+        console.log("DEBUG: Provided ETH nonce:", ethNonce);
+        console.log("DEBUG: require ethNonces[ethAddress] == ethNonce", storage_s.ethNonces[ethAddress], ethNonce);
         require(storage_s.ethNonces[ethAddress] == ethNonce, "Invalid ETH nonce");
+        console.log("DEBUG: Nonce validation passed");
+        
         // STEP 11: Complete the registration
         // Update bidirectional mappings
         storage_s.epervierKeyToAddress[recoveredFingerprint] = ethAddress;
@@ -166,23 +212,33 @@ contract RegistrationLogicContract {
         
         // Debug: Log the mapping update
         console.log("Setting addressToEpervierKey[", ethAddress, "] =", recoveredFingerprint);
+        console.log("DEBUG: Registration mappings updated");
+        
         // STEP 12: Clear the pending intent and bidirectional mapping
         delete storage_s.pendingIntents[ethAddress];
         delete storage_s.pqFingerprintToPendingIntentAddress[recoveredFingerprint];
+        console.log("DEBUG: Pending intent cleared");
+        
         // STEP 13: Increment nonces
         storage_s.pqKeyNonces[recoveredFingerprint]++;
         storage_s.ethNonces[ethAddress]++;
+        console.log("DEBUG: Nonces incremented");
+        
         // STEP 14: Mint NFTs for all registered NFT contracts
+        console.log("DEBUG: Starting NFT minting, count:", storage_s.registeredNFTContractAddresses.length);
         for (uint i = 0; i < storage_s.registeredNFTContractAddresses.length; i++) {
             address nftContract = storage_s.registeredNFTContractAddresses[i];
+            console.log("DEBUG: Attempting to mint for NFT contract:", nftContract);
             if (storage_s.registeredNFTContracts[nftContract]) {
                 try IPQERC721(nftContract).mint(recoveredFingerprint, ethAddress) {
-                    // NFT minted successfully
+                    console.log("DEBUG: NFT minted successfully for contract:", nftContract);
                 } catch {
+                    console.log("DEBUG: NFT minting failed for contract:", nftContract);
                     // NFT minting failed, but don't revert the registration
                 }
             }
         }
+        console.log("DEBUG: Registration confirmation completed successfully");
         emit RegistrationConfirmed(ethAddress, recoveredFingerprint);
     }
 

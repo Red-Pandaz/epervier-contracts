@@ -12,16 +12,22 @@ import "../src/contracts/AddressUtilsContract.sol";
 import "../src/contracts/RegistrationLogicContract.sol";
 import "../src/contracts/UnregistrationLogicContract.sol";
 import "../src/contracts/ChangeAddressLogicContract.sol";
+import "../src/ETHFALCON/ZKNOX_epervier.sol";
 
 contract DeployOPSepolia is Script {
     function run() external {
         // Get deployment parameters from environment
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address epervierVerifier = 0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B; // OP Sepolia Epervier contract
         
         vm.startBroadcast(deployerPrivateKey);
         
         console.log("Deploying library contracts...");
+        
+        // Deploy the Epervier verifier contract
+        console.log("Deploying Epervier verifier contract...");
+        // Replace with your actual Epervier verifier contract if different
+        address epervierVerifier = address(new ZKNOX_epervier());
+        console.log("EpervierVerifier deployed at:", epervierVerifier);
         
         // Deploy the 4 library contracts first
         console.log("Deploying MessageParser contract...");
@@ -52,7 +58,7 @@ contract DeployOPSepolia is Script {
         ChangeAddressLogicContract changeAddressLogic = new ChangeAddressLogicContract();
         console.log("ChangeAddressLogic deployed at:", address(changeAddressLogic));
         
-        // Deploy the registry first
+        // Deploy the registry with correct addresses
         PQRegistry registry = new PQRegistry(
             epervierVerifier,
             address(messageParser),

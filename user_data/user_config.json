@@ -1,0 +1,13 @@
+{
+  "pq_fingerprint": "0x0000000000000000000000008ca32b67a841f910",
+  "eth_address": "0xc956Cb7A8A9FC7e1fA52d7e8CDBC0ce0C8b8F633",
+  "private_key": "0xb49660ef7fa1301a20a20d2c5ab59e43c4d1699dce2dd89fa646db6eb3b7f7b3",
+  "setup_complete": true,
+  "auto_detected": true,
+  "setup_timestamp": 1752176973.2340748,
+  "registered": true,
+  "registration_timestamp": 1752176980.957671,
+  "nft_token_id": 2822895888,
+  "nft_minted": true,
+  "simulated": true
+}

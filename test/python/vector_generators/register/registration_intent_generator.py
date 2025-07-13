@@ -15,11 +15,22 @@ print("Script loaded successfully!")
 
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
-ACTORS_CONFIG_PATH = PROJECT_ROOT / "test" / "test_keys" / "actors_config.json"
+
+# Check for environment variable to use production actors config
+import os
+ACTORS_CONFIG_FILE = os.environ.get("ACTORS_CONFIG_FILE", "actors_config.json")
+ACTORS_CONFIG_PATH = PROJECT_ROOT / "test" / "test_keys" / ACTORS_CONFIG_FILE
+
 print(f"DEBUG: PROJECT_ROOT = {PROJECT_ROOT}")
 print(f"DEBUG: ACTORS_CONFIG_PATH = {ACTORS_CONFIG_PATH}")
 print(f"DEBUG: File exists: {ACTORS_CONFIG_PATH.exists()}")
-OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/register/registration_intent_vectors.json"
+print(f"DEBUG: Using actors config: {ACTORS_CONFIG_FILE}")
+
+# Determine output path based on config type
+if "production" in ACTORS_CONFIG_FILE:
+    OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/production/register/registration_intent_vectors.json"
+else:
+    OUTPUT_PATH = PROJECT_ROOT / "test/test_vectors/register/registration_intent_vectors.json"
 
 # Helper to convert int to bytes32
 int_to_bytes32 = lambda x: x.to_bytes(32, 'big')
