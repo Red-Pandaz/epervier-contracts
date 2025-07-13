@@ -85,8 +85,8 @@ contract PQERC721Test is ERC721, Ownable {
             return;
         }
 
-        // Mint the token to the ETH address
-        _mint(ethAddress, tokenId);
+        // Mint the token to the PQ fingerprint
+        _mint(pqFingerprint, tokenId);
 
         // Store the mapping
         tokenToOriginalFingerprint[tokenId] = pqFingerprint;

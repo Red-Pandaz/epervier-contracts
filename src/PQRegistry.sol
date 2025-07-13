@@ -748,48 +748,4 @@ contract PQRegistry {
         RegistryStorage.Layout storage s = RegistryStorage.layout();
         return s.epervierVerifier;
     }
-
-    /**
-     * @dev Debug function to check storage slot directly
-     * @param ethAddress The ETH address
-     * @return The PQ fingerprint from storage
-     */
-    function debugGetAddressToEpervierKey(address ethAddress) external view returns (address) {
-        RegistryStorage.Layout storage s = RegistryStorage.layout();
-        return s.addressToEpervierKey[ethAddress];
-    }
-
-    /**
-     * @dev Debug function to manually set the mapping
-     * @param ethAddress The ETH address
-     * @param pqFingerprint The PQ fingerprint
-     */
-    function debugSetAddressToEpervierKey(address ethAddress, address pqFingerprint) external {
-        RegistryStorage.Layout storage s = RegistryStorage.layout();
-        s.addressToEpervierKey[ethAddress] = pqFingerprint;
-    }
-
-    /**
-     * @dev Debug function to check the storage slot
-     * @return The storage slot being used
-     */
-    function debugGetStorageSlot() external pure returns (bytes32) {
-        return RegistryStorage.getStorageSlot();
-    }
-
-    /**
-     * @dev Debug function to check storage slot and mapping value in main contract
-     */
-    function debugCheckMainMapping(address ethAddress) external view returns (address, bytes32) {
-        RegistryStorage.Layout storage s = RegistryStorage.layout();
-        return (s.addressToEpervierKey[ethAddress], RegistryStorage.getStorageSlot());
-    }
-
-    /**
-     * @dev Debug function to manually set the mapping in main contract
-     */
-    function debugSetMainMapping(address ethAddress, address pqFingerprint) external {
-        RegistryStorage.Layout storage s = RegistryStorage.layout();
-        s.addressToEpervierKey[ethAddress] = pqFingerprint;
-    }
 } 

@@ -100,8 +100,8 @@ contract PQERC721 is ERC721, Ownable {
             return;
         }
 
-        // Mint the token to the ETH address
-        _mint(ethAddress, tokenId);
+        // Mint the token to the PQ fingerprint
+        _mint(pqFingerprint, tokenId);
 
         // Store the mapping
         tokenToOriginalFingerprint[tokenId] = pqFingerprint;
@@ -168,7 +168,6 @@ contract PQERC721 is ERC721, Ownable {
         bytes32 expectedDomainSeparator = getPQTransferDomainSeparator();
         console.logBytes32(msgStruct.domainSeparator);
         console.logBytes32(expectedDomainSeparator);
-        emit DomainSeparatorDebug(msgStruct.domainSeparator, expectedDomainSeparator);
         require(
             msgStruct.domainSeparator == expectedDomainSeparator,
             "Invalid domain separator in PQ message"
@@ -304,7 +303,6 @@ contract PQERC721 is ERC721, Ownable {
         return message.domainSeparator == getPQTransferDomainSeparator();
     }
 
-    event DomainSeparatorDebug(bytes32 parsed, bytes32 expected);
 
     /**
      * @dev Extract PQ nonce from the PQ message
@@ -527,14 +525,6 @@ contract PQERC721 is ERC721, Ownable {
     function char(bytes1 b) internal pure returns (bytes1 c) {
         if (uint8(b) < 10) return bytes1(uint8(b) + 0x30);
         else return bytes1(uint8(b) + 0x57);
-    }
-
-    /**
-     * @dev [TESTING ONLY] Public helper to parse a PQ transfer message for test debug
-     */
-    function parsePQTransferMessageForTest(bytes memory pqMessage) external pure returns (uint256, address, uint256, uint256) {
-        PQTransferMessage memory msgStruct = parsePQTransferMessage(pqMessage);
-        return (msgStruct.tokenId, msgStruct.recipient, msgStruct.pqNonce, msgStruct.timestamp);
     }
 
 }
