@@ -1,7 +1,7 @@
 {
   "contract_address": "0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B",
   "rpc_url": "https://sepolia.optimism.io",
-  "validated_count": 10,
+  "validated_count": 0,
   "total_actors": 10,
   "timestamp": "2024-06-25"
 }

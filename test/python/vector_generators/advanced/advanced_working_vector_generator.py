@@ -38,10 +38,10 @@ DOMAIN_SEPARATOR = keccak(b"PQRegistry")
 def create_base_eth_message(domain_separator, pq_fingerprint, new_eth_address, eth_nonce):
     """
     Create base ETH message for change ETH Address intent
-    Format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+    Format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
     This is signed by Bob (new ETH Address)
     """
-    pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
+    pattern = b"Intent to change ETH Address and bind with Epervier Fingerprint "
     message = (
         domain_separator +
         pattern +
@@ -308,7 +308,7 @@ def generate_change_eth_address_intent_vectors():
     
     eth_message = (
         DOMAIN_SEPARATOR +
-        b"Intent to change ETH Address and bond with Epervier Fingerprint " +
+        b"Intent to change ETH Address and bind with Epervier Fingerprint " +
         bytes.fromhex(pq_fingerprint[2:]) +
         base_pq_message_for_contract +
         bytes.fromhex(pq_signature["salt"]) +
@@ -387,7 +387,7 @@ def generate_change_eth_address_intent_vectors():
     
     eth_message = (
         DOMAIN_SEPARATOR +
-        b"Intent to change ETH Address and bond with Epervier Fingerprint " +
+        b"Intent to change ETH Address and bind with Epervier Fingerprint " +
         bytes.fromhex(pq_fingerprint[2:]) +
         base_pq_message_for_contract +
         bytes.fromhex(pq_signature["salt"]) +
@@ -477,7 +477,7 @@ def generate_change_eth_address_intent_vectors():
     
     eth_message = (
         DOMAIN_SEPARATOR +
-        b"Intent to change ETH Address and bond with Epervier Fingerprint " +
+        b"Intent to change ETH Address and bind with Epervier Fingerprint " +
         bytes.fromhex(pq_fingerprint[2:]) +
         base_pq_message_for_contract +
         bytes.fromhex(pq_signature["salt"]) +

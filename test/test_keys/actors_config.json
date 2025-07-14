@@ -6,7 +6,7 @@
       "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
       "pq_private_key_file": "private_key_1.pem",
       "pq_public_key_file": "public_key_1.pem",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb"
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb"
     },
     "bob": {
       "index": 1,
@@ -86,6 +86,6 @@
     "total_actors": 10,
     "fingerprints_validated": true,
     "last_updated": "2024-06-25",
-    "validated_count": 10
+    "validated_count": 0
   }
 }

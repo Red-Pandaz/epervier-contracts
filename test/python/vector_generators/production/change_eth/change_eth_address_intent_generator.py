@@ -46,10 +46,10 @@ def get_actor_config():
 def create_base_eth_message(pq_fingerprint, new_eth_address, eth_nonce):
     """
     Create base ETH message for change ETH Address intent
-    Format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+    Format: "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
     This is signed by Bob (new ETH Address) (no domain separator in content)
     """
-    pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
+    pattern = b"Intent to change ETH Address and bind with Epervier Fingerprint "
     message = (
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
@@ -285,7 +285,7 @@ def generate_change_eth_address_intent_vectors():
         
         eth_message = (
             bytes.fromhex(DOMAIN_SEPARATOR[2:]) +
-            b"Intent to change ETH Address and bond with Epervier Fingerprint " +
+            b"Intent to change ETH Address and bind with Epervier Fingerprint " +
             bytes.fromhex(pq_fingerprint[2:]) +
             base_pq_message_for_contract +
             bytes.fromhex(pq_signature["salt"]) +

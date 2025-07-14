@@ -146,10 +146,10 @@ class ChangeETHRevertGenerator:
     def create_base_eth_message(self, pq_fingerprint, new_eth_address, eth_nonce):
         """
         Create base ETH message for change ETH Address intent
-        Format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+        Format: "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
         This is signed by the new ETH Address (no domain separator in content)
         """
-        pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
+        pattern = b"Intent to change ETH Address and bind with Epervier Fingerprint "
         message = (
             pattern +
             bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix

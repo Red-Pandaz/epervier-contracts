@@ -16,7 +16,7 @@ contract MessageParserContract is IMessageParser {
         }
         require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         
-        bytes memory pattern = "Intent to pair ETH Address ";
+        bytes memory pattern = "Intent to bind ETH Address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
@@ -41,7 +41,7 @@ contract MessageParserContract is IMessageParser {
     
     /**
      * @dev Parse an ETHRegistrationIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Intent to bind Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function parseETHRegistrationIntentMessage(bytes memory message) external pure returns (
         uint256 ethNonce,
@@ -51,7 +51,7 @@ contract MessageParserContract is IMessageParser {
         uint256 hint,
         bytes memory basePQMessage
     ) {
-        bytes memory pattern = "Intent to pair Epervier Key";
+        bytes memory pattern = "Intent to bind Epervier Key";
         uint256[] memory fieldOffsets = new uint256[](6);
         uint256[] memory fieldLengths = new uint256[](6);
         string[] memory fieldTypes = new string[](6);
@@ -118,13 +118,13 @@ contract MessageParserContract is IMessageParser {
     
     /**
      * @dev Parse a BaseETHRegistrationConfirmationMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm binding to Epervier Fingerprint " + pqFingerprint + ethNonce
      */
     function parseBaseETHRegistrationConfirmationMessage(bytes memory message) external pure returns (
         address pqFingerprint,
         uint256 ethNonce
     ) {
-        bytes memory pattern = "Confirm bonding to Epervier Fingerprint ";
+        bytes memory pattern = "Confirm binding to Epervier Fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
@@ -152,7 +152,7 @@ contract MessageParserContract is IMessageParser {
     
     /**
      * @dev Parse a PQRegistrationConfirmationMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm binding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
      */
     function parsePQRegistrationConfirmationMessage(bytes memory message, bytes32 domainSeparator) public pure returns (
         address ethAddress,
@@ -171,7 +171,7 @@ contract MessageParserContract is IMessageParser {
         require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         // According to schema:
         // DOMAIN_SEPARATOR (32) + pattern (31) + ethAddress (20) + baseETHMessage (92) + v (1) + r (32) + s (32) + pqNonce (32)
-        bytes memory pattern = "Confirm bonding to ETH Address ";
+        bytes memory pattern = "Confirm binding to ETH Address ";
         uint256 patternOffset = 32; // DOMAIN_SEPARATOR is 32 bytes
         uint256 ethAddressOffset = patternOffset + pattern.length;
         uint256 baseETHMessageOffset = ethAddressOffset + 20;
@@ -292,14 +292,14 @@ contract MessageParserContract is IMessageParser {
     
     /**
      * @dev Parse a BaseETHChangeETHAddressIntentMessage according to our schema
-     * Expected format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+     * Expected format: "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
      */
     function parseBaseETHChangeETHAddressIntentMessage(bytes memory message) external pure returns (
         address pqFingerprint,
         address newEthAddress,
         uint256 ethNonce
     ) {
-        bytes memory pattern = "Intent to change ETH Address and bond with Epervier Fingerprint ";
+        bytes memory pattern = "Intent to change ETH Address and bind with Epervier Fingerprint ";
         
         uint256 manualPatternIndex = type(uint256).max;
         for (uint i = 0; i <= message.length - pattern.length; i++) {
@@ -852,8 +852,8 @@ contract MessageParserContract is IMessageParser {
     
     /**
      * @dev Extract ETH nonce from a message according to schema
-     * For intent messages: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ... + ethNonce (last 32 bytes)
-     * For confirmation messages: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + ... + ethNonce (last 32 bytes)
+     * For intent messages: DOMAIN_SEPARATOR + "Intent to bind Epervier Key" + ... + ethNonce (last 32 bytes)
+     * For confirmation messages: DOMAIN_SEPARATOR + "Confirm binding to Epervier Fingerprint " + ... + ethNonce (last 32 bytes)
      * @param message The message to extract nonce from
      * @param messageType 0 for intent message, 1 for confirmation message
      */
@@ -1200,7 +1200,7 @@ contract MessageParserContract is IMessageParser {
     
     /**
      * @dev Parse a ETHChangeETHAddressIntentMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function parseETHChangeETHAddressIntentMessage(bytes memory message) external pure returns (
         uint256 ethNonce,
@@ -1210,7 +1210,7 @@ contract MessageParserContract is IMessageParser {
         uint256 hint,
         bytes memory basePQMessage
     ) {
-        bytes memory pattern = "Intent to change ETH Address and bond with Epervier Fingerprint ";
+        bytes memory pattern = "Intent to change ETH Address and bind with Epervier Fingerprint ";
         uint256[] memory fieldOffsets = new uint256[](7);
         uint256[] memory fieldLengths = new uint256[](7);
         string[] memory fieldTypes = new string[](7);
@@ -1285,8 +1285,8 @@ contract MessageParserContract is IMessageParser {
      * @dev Extract PQ nonce from message
      * @param message The message to extract nonce from
      * @param messageType 0 for intent message, 1 for confirmation message
-     * Intent format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce
-     * Confirmation format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce + ethSignature + ETH_message
+     * Intent format: DOMAIN_SEPARATOR + "Intent to bind ETH Address " + address + pqNonce
+     * Confirmation format: DOMAIN_SEPARATOR + "Intent to bind ETH Address " + address + pqNonce + ethSignature + ETH_message
      */
     function extractPQNonce(bytes memory message, uint8 messageType) external pure returns (uint256 pqNonce) {
         if (messageType == 0) {
@@ -1393,37 +1393,37 @@ contract MessageParserContract is IMessageParser {
 
     /**
      * @dev Validate that ETH message contains intent text for registration
-     * Expected format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Intent to bind Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function validateETHRegistrationIntentMessage(bytes memory message) external pure returns (bool) {
-        bytes memory pattern = "Intent to pair Epervier Key";
+        bytes memory pattern = "Intent to bind Epervier Key";
         return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
      * @dev Validate that PQ message contains intent text for registration
-     * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + ethAddress + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Intent to bind ETH Address " + ethAddress + pqNonce
      */
     function validatePQRegistrationIntentMessage(bytes memory message) external pure returns (bool) {
-        bytes memory pattern = "Intent to pair ETH Address ";
+        bytes memory pattern = "Intent to bind ETH Address ";
         return findPattern(message, pattern, true) != type(uint).max;
     }
 
     /**
      * @dev Validate that ETH message contains confirmation text for registration
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm binding to Epervier Fingerprint " + pqFingerprint + ethNonce
      */
     function validateETHRegistrationConfirmationMessage(bytes memory message) external pure returns (bool) {
-        bytes memory pattern = "Confirm bonding to Epervier Fingerprint ";
+        bytes memory pattern = "Confirm binding to Epervier Fingerprint ";
         return findPattern(message, pattern, false) != type(uint).max;
     }
 
     /**
      * @dev Validate that PQ message contains confirmation text for registration
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm binding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
      */
     function validatePQRegistrationConfirmationMessage(bytes memory message) external pure returns (bool) {
-        bytes memory pattern = "Confirm bonding to ETH Address ";
+        bytes memory pattern = "Confirm binding to ETH Address ";
         return findPattern(message, pattern, true) != type(uint).max;
     }
 
@@ -1438,11 +1438,11 @@ contract MessageParserContract is IMessageParser {
 
     /**
      * @dev Validate that ETH message contains intent text for change ETH Address
-     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
-     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
      */
     function validateETHChangeETHAddressIntentMessage(bytes memory message) external pure returns (bool) {
-        bytes memory pattern = "Intent to change ETH Address and bond with Epervier Fingerprint ";
+        bytes memory pattern = "Intent to change ETH Address and bind with Epervier Fingerprint ";
         return findPattern(message, pattern, false) != type(uint).max;
     }
 
@@ -1742,7 +1742,7 @@ contract MessageParserContract is IMessageParser {
      */
     function extractBasePQMessage(bytes memory message, uint8 messageType) external pure returns (bytes memory basePQMessage) {
         if (messageType == 0) {
-            // Registration: "Intent to pair Epervier Key" (27 bytes)
+            // Registration: "Intent to bind Epervier Key" (27 bytes)
             // Format: pattern + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
             uint256 patternLength = 27;
             uint256 baseMessageStart = patternLength; // pattern
@@ -1796,19 +1796,19 @@ contract MessageParserContract is IMessageParser {
     
     /**
      * @dev Validate that base ETH message contains confirmation text for registration
-     * Expected format: "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+     * Expected format: "Confirm binding to Epervier Fingerprint " + pqFingerprint + ethNonce
      */
     function validateBaseETHRegistrationConfirmationMessage(bytes memory message) external pure returns (bool) {
-        bytes memory pattern = "Confirm bonding to Epervier Fingerprint ";
+        bytes memory pattern = "Confirm binding to Epervier Fingerprint ";
         return findPattern(message, pattern, false) != type(uint).max;
     }
     
     /**
      * @dev Validate that base ETH message contains intent text for change ETH address
-     * Expected format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+     * Expected format: "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
      */
     function validateBaseETHChangeETHAddressIntentMessage(bytes memory message) external pure returns (bool) {
-        bytes memory pattern = "Intent to change ETH Address and bond with Epervier Fingerprint ";
+        bytes memory pattern = "Intent to change ETH Address and bind with Epervier Fingerprint ";
         return findPattern(message, pattern, false) != type(uint).max;
     }
     

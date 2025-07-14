@@ -30,7 +30,7 @@ contract TestRegistrationIntents is Script {
         
         console.log("=== TESTING REGISTRATION INTENTS ===");
         console.log("Registry address:", address(registry));
-        console.log("Domain separator:", vm.toString(registry.getDomainSeparator()));
+        console.log("Domain separator:", vm.toString(registry.DOMAIN_SEPARATOR()));
         console.log("");
         
         // Start broadcasting transactions

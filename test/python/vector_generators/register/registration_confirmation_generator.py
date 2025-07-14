@@ -49,10 +49,10 @@ def get_actor_config():
 def create_base_eth_message(pq_fingerprint, eth_nonce):
     """
     Create base ETH message for registration confirmation
-    Format: "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    Format: "Confirm binding to Epervier Fingerprint " + pqFingerprint + ethNonce
     This is signed by the ETH Address (no domain separator in content)
     """
-    base_eth_pattern = "Confirm bonding to Epervier Fingerprint "
+    base_eth_pattern = "Confirm binding to Epervier Fingerprint "
     message = (
         base_eth_pattern.encode() +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
@@ -88,7 +88,7 @@ def generate_registration_confirmation_vector(actor_name):
     eth_nonce = 1
     
     # Construct the BaseETHRegistrationConfirmationMessage according to schema
-    # "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    # "Confirm binding to Epervier Fingerprint " + pqFingerprint + ethNonce
     base_eth_message = create_base_eth_message(actor["pq_fingerprint"], eth_nonce)
     
     print(f"Generated base ETH message: {base_eth_message.hex()}")
@@ -136,8 +136,8 @@ def generate_registration_confirmation_vector(actor_name):
     pq_nonce = 1
     
     # Construct the PQRegistrationConfirmationMessage according to schema
-    # DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
-    pattern = "Confirm bonding to ETH Address "
+    # DOMAIN_SEPARATOR + "Confirm binding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+    pattern = "Confirm binding to ETH Address "
     eth_address_bytes = bytes.fromhex(actor["eth_address"][2:])  # Remove 0x prefix
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
     

@@ -58,9 +58,9 @@ def load_actors_config():
 
 
 def build_base_pq_message(domain_separator, eth_address, pq_nonce):
-    # DOMAIN_SEPARATOR (32) + "Intent to pair ETH Address " (27) + ethAddress (20) + pqNonce (32) = 111 bytes
+    # DOMAIN_SEPARATOR (32) + "Intent to bind ETH Address " (27) + ethAddress (20) + pqNonce (32) = 111 bytes
     # This matches BasePQRegistrationIntentMessage in schema
-    pattern = b"Intent to pair ETH Address "
+    pattern = b"Intent to bind ETH Address "
     # Convert domain_separator from hex string to bytes
     domain_separator_bytes = bytes.fromhex(domain_separator[2:])  # Remove '0x' prefix
     return domain_separator_bytes + pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
@@ -113,9 +113,9 @@ def sign_with_pq_key(base_pq_message, pq_private_key_file):
 
 
 def build_eth_intent_message(domain_separator, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
-    # "Intent to pair Epervier Key" + basePQMessage (with domain separator) + salt + cs1 + cs2 + hint + ethNonce
+    # "Intent to bind Epervier Key" + basePQMessage (with domain separator) + salt + cs1 + cs2 + hint + ethNonce
     # The ETH message contains the complete BasePQRegistrationIntentMessage as per schema
-    pattern = b"Intent to pair Epervier Key"
+    pattern = b"Intent to bind Epervier Key"
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     

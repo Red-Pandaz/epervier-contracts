@@ -29,7 +29,7 @@ def get_actor_config():
         return config["actors"]
 
 def create_base_eth_change_eth_address_intent_message(domain_separator, pq_fingerprint, new_eth_address, eth_nonce):
-    pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
+    pattern = b"Intent to change ETH Address and bind with Epervier Fingerprint "
     message = (
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +

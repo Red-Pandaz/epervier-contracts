@@ -122,6 +122,11 @@ contract RegistrationLogicContract {
         // STEP 1: Verify the PQ signature and recover the fingerprint
         address recoveredFingerprint = storage_s.epervierVerifier.recover(pqMessage, salt, cs1, cs2, hint);
         console.log("DEBUG: Recovered fingerprint:", recoveredFingerprint);
+        console.log("DEBUG: PQ Message length:", pqMessage.length);
+        console.log("DEBUG: Salt length:", salt.length);
+        console.log("DEBUG: CS1 length:", cs1.length);
+        console.log("DEBUG: CS2 length:", cs2.length);
+        console.log("DEBUG: Hint:", hint);
         
         // STEP 2: Validate the PQ registration confirmation message format
         bool valid = storage_s.messageParser.validatePQRegistrationConfirmationMessage(pqMessage);

@@ -96,7 +96,7 @@ contract DeployDevnetComplete is Script {
         console.log("=== DEPLOYMENT COMPLETE ===");
         console.log("RPC URL: http://localhost:8545");
         console.log("CHAIN ID: 31337");
-        console.log("Domain separator:", vm.toString(registry.getDomainSeparator()));
+        console.log("Domain separator:", vm.toString(registry.DOMAIN_SEPARATOR()));
         console.log("");
         console.log("Contract Addresses:");
         console.log("ZKNOX_epervier:", address(epervierVerifier));

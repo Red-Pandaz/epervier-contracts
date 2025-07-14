@@ -156,8 +156,8 @@ def create_epervier_signature(message, pq_private_key_file):
         print(f"Error in PQ signing: {e}")
         return None
 
-def create_epervier_keypair():
-    """Placeholder for create_epervier_keypair - not used in this generator"""
+def create_epervier_keybind():
+    """Placeholder for create_epervier_keybind - not used in this generator"""
     pass
 
 def generate_eth_removal_revert_vectors() -> List[Dict[str, Any]]:

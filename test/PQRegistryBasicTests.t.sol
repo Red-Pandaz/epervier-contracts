@@ -269,7 +269,7 @@ contract PQRegistryBasicTests is PQRegistryTestSetup {
             // Mock the Epervier verifier to return the correct fingerprint
             // vm.mockCall(
             //     address(epervierVerifier),
-            //     abi.encodeWithSelector(epervierVerifier.recover.selector, basePQMessage, pqSignatureSalt, pqSignatureCs1, pqSignatureCs2, pqSignatureHint),
+            //     abi.encodeWithSelector(epervierVerifier.recover.selector),
             //     abi.encode(actor.pqFingerprint)
             // );
             
@@ -393,10 +393,31 @@ contract PQRegistryBasicTests is PQRegistryTestSetup {
             // Load the real PQ confirmation message from test vector
             bytes memory pqConfirmationMessage = vm.parseBytes(vm.parseJsonString(jsonData, string.concat(confirmationVectorPath, ".pq_message")));
             
+            // Debug: Print the PQ message and signature components
+            console.log("=== DEBUG PQ RECOVERY ===");
+            console.log("PQ Message length:", pqConfirmationMessage.length);
+            // Extract first 64 bytes manually
+            bytes memory first64Bytes = new bytes(64);
+            for (uint i = 0; i < 64 && i < pqConfirmationMessage.length; i++) {
+                first64Bytes[i] = pqConfirmationMessage[i];
+            }
+            console.log("PQ Message (first 64 bytes):", string(abi.encodePacked(first64Bytes)));
+            console.log("Salt length:", confirmationSalt.length);
+            console.log("Salt (hex):", vm.toString(confirmationSalt));
+            console.log("CS1[0]:", confirmationCs1[0]);
+            console.log("CS2[0]:", confirmationCs2[0]);
+            console.log("Hint:", confirmationHint);
+            console.log("Expected fingerprint:", actor.pqFingerprint);
+            
             // Confirm registration
             registry.confirmRegistration(pqConfirmationMessage, confirmationSalt, confirmationCs1, confirmationCs2, confirmationHint);
             // vm.clearMockedCalls();
-            
+
+            // Debug output: print expected and actual PQ fingerprint
+            address actualPQFingerprint = registry.addressToEpervierKey(actor.ethAddress);
+            console.log("Expected PQ fingerprint:", actor.pqFingerprint);
+            console.log("Recovered PQ fingerprint:", actualPQFingerprint);
+
             // Verify registration was completed
             assertEq(registry.epervierKeyToAddress(actor.pqFingerprint), actor.ethAddress, string.concat("Registration should be complete for ", actorName));
             assertEq(registry.addressToEpervierKey(actor.ethAddress), actor.pqFingerprint, string.concat("Registration should be complete for ", actorName));

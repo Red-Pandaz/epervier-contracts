@@ -119,10 +119,10 @@ def parse_signature_file(sig_file_path):
 def create_base_eth_message(pq_fingerprint, eth_nonce):
     """
     Create base ETH message for registration confirmation
-    Format: "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    Format: "Confirm binding to Epervier Fingerprint " + pqFingerprint + ethNonce
     This is signed by the ETH Address (no domain separator in content)
     """
-    base_eth_pattern = "Confirm bonding to Epervier Fingerprint "
+    base_eth_pattern = "Confirm binding to Epervier Fingerprint "
     message = (
         base_eth_pattern.encode() +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
@@ -218,7 +218,7 @@ def generate_confirm_revert_vectors():
     # Convert DOMAIN_SEPARATOR from hex string to bytes
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
     
-    # Use the first key pair for all tests
+    # Use the first key bind for all tests
     eth_priv_key = ETH_PRIVATE_KEYS[0]
     account = Account.from_key(eth_priv_key)
     eth_address = account.address
@@ -237,7 +237,7 @@ def generate_confirm_revert_vectors():
     
     eth_sig = generate_eip712_signature(pq_fingerprint, 1, eth_priv_key, DOMAIN_SEPARATOR)
     # Create PQRegistrationConfirmationMessage exactly as per schema (272 bytes)
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     no_intent_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes
@@ -276,7 +276,7 @@ def generate_confirm_revert_vectors():
     
     eth_sig = generate_eip712_signature(pq_fingerprint, 1, eth_priv_key, DOMAIN_SEPARATOR)
     # Create PQRegistrationConfirmationMessage with wrong PQ nonce
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     wrong_nonce_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes
@@ -316,7 +316,7 @@ def generate_confirm_revert_vectors():
     
     eth_sig = generate_eip712_signature(pq_fingerprint, 1, eth_priv_key, DOMAIN_SEPARATOR)
     # Create PQRegistrationConfirmationMessage with wrong domain separator
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     pq_message = (
         wrong_domain +                                 # 32 bytes (wrong domain)
         pattern.encode() +                             # 31 bytes
@@ -394,7 +394,7 @@ def generate_confirm_revert_vectors():
     
     eth_sig = generate_eip712_signature(pq_fingerprint, 1, eth_priv_key, DOMAIN_SEPARATOR)
     # Create PQRegistrationConfirmationMessage with corrupted ETH signature
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     pq_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes
@@ -436,7 +436,7 @@ def generate_confirm_revert_vectors():
     eth_sig = generate_eip712_signature(pq_fingerprint, 1, bob_eth_priv_key, DOMAIN_SEPARATOR)
     
     # Create PQRegistrationConfirmationMessage with wrong ETH signer
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     pq_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes
@@ -475,7 +475,7 @@ def generate_confirm_revert_vectors():
     
     eth_sig = generate_eip712_signature(pq_fingerprint, 1, eth_priv_key, DOMAIN_SEPARATOR)
     # Create PQRegistrationConfirmationMessage with Alice's data
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     pq_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes
@@ -514,7 +514,7 @@ def generate_confirm_revert_vectors():
     eth_confirm_message = create_base_eth_message(pq_fingerprint, 5)
     
     eth_sig = generate_eip712_signature(pq_fingerprint, 5, eth_priv_key, DOMAIN_SEPARATOR)
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     pq_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes
@@ -557,7 +557,7 @@ def generate_confirm_revert_vectors():
     
     # Create message with Alice's address but Bob's signature
     # This should cause ETH address mismatch: message contains Alice's address, signature recovers Bob's address
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     pq_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes
@@ -597,7 +597,7 @@ def generate_confirm_revert_vectors():
     eth_sig = generate_eip712_signature(pq_fingerprint, 0, eth_priv_key, DOMAIN_SEPARATOR)
     
     # Create PQRegistrationConfirmationMessage with Alice's data but signed by Charlie
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     pq_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes
@@ -690,7 +690,7 @@ def generate_simple_eth_address_mismatch_test():
     eth_sig = generate_eip712_signature(pq_fingerprint, 1, bob_eth_priv_key, DOMAIN_SEPARATOR)
     
     # Create PQRegistrationConfirmationMessage with Alice's ETH address but Bob's signature
-    pattern = "Confirm bonding to ETH Address "
+    pattern = "Confirm binding to ETH Address "
     pq_message = (
         domain_separator_bytes +                       # 32 bytes
         pattern.encode() +                             # 31 bytes

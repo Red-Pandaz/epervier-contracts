@@ -26,7 +26,7 @@ contract PQERC721 is ERC721, Ownable {
     /**
      * @dev Compute the EIP-712 domain separator for this contract
      */
-    function getPQTransferDomainSeparator() public view returns (bytes32) {
+    function DOMAIN_SEPARATOR() public view returns (bytes32) {
         return keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
@@ -49,6 +49,9 @@ contract PQERC721 is ERC721, Ownable {
 
     // Mapping from PQ fingerprint to nonce (for replay protection)
     mapping(address => uint256) public pqFingerprintNonces;
+
+    // Total supply counter for Etherscan compatibility
+    uint256 private _totalSupply;
 
     // Events
     event TokenMinted(
@@ -110,6 +113,9 @@ contract PQERC721 is ERC721, Ownable {
         // Initialize the nonce for this fingerprint
         pqFingerprintNonces[pqFingerprint] = 0;
 
+        // Increment total supply for Etherscan compatibility
+        _totalSupply++;
+
         emit TokenMinted(tokenId, ethAddress, pqFingerprint);
     }
 
@@ -165,7 +171,7 @@ contract PQERC721 is ERC721, Ownable {
 
         // Validate domain separator in the PQ message
         PQTransferMessage memory msgStruct = parsePQTransferMessage(pqMessage);
-        bytes32 expectedDomainSeparator = getPQTransferDomainSeparator();
+        bytes32 expectedDomainSeparator = DOMAIN_SEPARATOR();
         console.logBytes32(msgStruct.domainSeparator);
         console.logBytes32(expectedDomainSeparator);
         require(
@@ -300,7 +306,7 @@ contract PQERC721 is ERC721, Ownable {
         bytes memory pqMessage
     ) internal view returns (bool) {
         PQTransferMessage memory message = parsePQTransferMessage(pqMessage);
-        return message.domainSeparator == getPQTransferDomainSeparator();
+        return message.domainSeparator == DOMAIN_SEPARATOR();
     }
 
 
@@ -337,6 +343,15 @@ contract PQERC721 is ERC721, Ownable {
         address pqFingerprint
     ) external view returns (uint256) {
         return originalFingerprintToToken[pqFingerprint];
+    }
+
+    /**
+     * @dev Returns the total number of tokens in existence
+     * This is required by Etherscan to display token holders
+     * @return The total number of tokens
+     */
+    function totalSupply() external view returns (uint256) {
+        return _totalSupply;
     }
 
     /**

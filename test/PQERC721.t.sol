@@ -184,7 +184,7 @@ contract PQERC721Tests is Test {
         nft.mint(aliceFingerprint, alice);
         
         // Check that the token was minted correctly with deterministic ID
-        assertEq(nft.ownerOf(expectedTokenId), alice);
+        assertEq(nft.ownerOf(expectedTokenId), aliceFingerprint);
         assertEq(nft.getTokenPQFingerprint(expectedTokenId), aliceFingerprint);
         assertEq(nft.getTokenByPQFingerprint(aliceFingerprint), expectedTokenId);
     }
@@ -225,8 +225,8 @@ contract PQERC721Tests is Test {
         // Verify deterministic token IDs
         assertEq(tokenId1, uint256(keccak256(abi.encodePacked("PQ_TOKEN", aliceFingerprint))));
         assertEq(tokenId2, uint256(keccak256(abi.encodePacked("PQ_TOKEN", bobFingerprint))));
-        assertEq(nft.ownerOf(tokenId1), alice);
-        assertEq(nft.ownerOf(tokenId2), bob);
+        assertEq(nft.ownerOf(tokenId1), aliceFingerprint);
+        assertEq(nft.ownerOf(tokenId2), bobFingerprint);
         
         // Verify that the same fingerprint always produces the same token ID
         assertEq(nft.getTokenByPQFingerprint(aliceFingerprint), tokenId1);
@@ -296,7 +296,7 @@ contract PQERC721Tests is Test {
         nft.pqTransferFrom(tokenId, bob, pqMessage, salt, cs1, cs2, hint);
         
         // Token should still be owned by Alice
-        assertEq(nft.ownerOf(tokenId), alice);
+        assertEq(nft.ownerOf(tokenId), aliceFingerprint);
     }
     
     function testMultiHopTransfers() public {
@@ -370,7 +370,7 @@ contract PQERC721Tests is Test {
         // Step 1: Register and mint
         vm.prank(address(registry));
         nft.mint(aliceFingerprint, alice);
-        assertEq(nft.ownerOf(tokenId), alice);
+        assertEq(nft.ownerOf(tokenId), aliceFingerprint);
         
         // Step 2: Transfer token away (simulating unregistration)
         string memory jsonData = vm.readFile("test/test_vectors/transfer/pq_transfer_vectors.json");
@@ -405,10 +405,10 @@ contract PQERC721Tests is Test {
         nft.mint(aliceFingerprint, alice);
         
         // Alice should be the owner
-        assertTrue(nft.isTokenOwner(tokenId, alice));
+        assertTrue(nft.isTokenOwner(tokenId, aliceFingerprint));
         
         // Bob should not be the owner
-        assertFalse(nft.isTokenOwner(tokenId, bob));
+        assertFalse(nft.isTokenOwner(tokenId, bobFingerprint));
         
         // Transfer to Bob using real PQ signature
         string memory jsonData = vm.readFile("test/test_vectors/transfer/pq_transfer_vectors.json");

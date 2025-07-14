@@ -99,7 +99,7 @@ def create_base_pq_registration_intent_message(eth_address: str, pq_nonce: int) 
     eth_address_bytes = bytes.fromhex(eth_address[2:])  # Remove 0x prefix
     return abi_encode_packed(
         DOMAIN_SEPARATOR,
-        "Intent to pair ETH Address ",
+        "Intent to bind ETH Address ",
         eth_address_bytes,
         pq_nonce.to_bytes(32, 'big')
     )
@@ -108,7 +108,7 @@ def create_eth_registration_intent_message(base_pq_message: bytes, salt: str, cs
     """Create ETH registration intent message"""
     return abi_encode_packed(
         DOMAIN_SEPARATOR,
-        "Intent to pair Epervier Key",
+        "Intent to bind Epervier Key",
         base_pq_message,
         bytes.fromhex(salt[2:]) if isinstance(salt, str) else salt,
         pack_uint256_array(cs1),
@@ -122,7 +122,7 @@ def create_base_eth_registration_confirmation_message(pq_fingerprint: str, eth_n
     pq_fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])  # Remove 0x prefix
     return abi_encode_packed(
         DOMAIN_SEPARATOR,
-        "Confirm bonding to Epervier Fingerprint ",
+        "Confirm binding to Epervier Fingerprint ",
         pq_fingerprint_bytes,
         eth_nonce.to_bytes(32, 'big')
     )
@@ -132,7 +132,7 @@ def create_pq_registration_confirmation_message(eth_address: str, base_eth_messa
     eth_address_bytes = bytes.fromhex(eth_address[2:])  # Remove 0x prefix
     return abi_encode_packed(
         DOMAIN_SEPARATOR,
-        "Confirm bonding to ETH Address ",
+        "Confirm binding to ETH Address ",
         eth_address_bytes,
         base_eth_message,
         v.to_bytes(1, 'big'),
@@ -142,30 +142,30 @@ def create_pq_registration_confirmation_message(eth_address: str, base_eth_messa
     )
 
 def build_base_pq_message(domain_separator, eth_address, pq_nonce):
-    # DOMAIN_SEPARATOR (32) + "Intent to pair ETH Address " (27) + ethAddress (20) + pqNonce (32) = 111 bytes
+    # DOMAIN_SEPARATOR (32) + "Intent to bind ETH Address " (27) + ethAddress (20) + pqNonce (32) = 111 bytes
     # This matches BasePQRegistrationIntentMessage in schema
-    pattern = b"Intent to pair ETH Address "
+    pattern = b"Intent to bind ETH Address "
     return domain_separator + pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
 
 def build_base_eth_confirmation_message(domain_separator, pq_fingerprint, eth_nonce):
-    # DOMAIN_SEPARATOR (32) + "Confirm bonding to Epervier Fingerprint " (40) + pqFingerprint (20) + ethNonce (32) = 124 bytes
+    # DOMAIN_SEPARATOR (32) + "Confirm binding to Epervier Fingerprint " (40) + pqFingerprint (20) + ethNonce (32) = 124 bytes
     # This matches BaseETHRegistrationConfirmationMessage in schema
-    pattern = b"Confirm bonding to Epervier Fingerprint "
+    pattern = b"Confirm binding to Epervier Fingerprint "
     return domain_separator + pattern + bytes.fromhex(pq_fingerprint[2:]) + int_to_bytes32(eth_nonce)
 
 def build_pq_confirmation_message(domain_separator, eth_address, base_eth_message, v, r, s, pq_nonce):
-    # DOMAIN_SEPARATOR (32) + "Confirm bonding to ETH Address " (31) + ethAddress (20) + baseETHMessage (124) + v (1) + r (32) + s (32) + pqNonce (32) = 304 bytes
+    # DOMAIN_SEPARATOR (32) + "Confirm binding to ETH Address " (31) + ethAddress (20) + baseETHMessage (124) + v (1) + r (32) + s (32) + pqNonce (32) = 304 bytes
     # This matches PQRegistrationConfirmationMessage in schema
-    pattern = b"Confirm bonding to ETH Address "
+    pattern = b"Confirm binding to ETH Address "
     return (
         domain_separator + pattern + bytes.fromhex(eth_address[2:]) + base_eth_message +
         v.to_bytes(1, 'big') + r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + int_to_bytes32(pq_nonce)
     )
 
 def build_eth_intent_message(domain_separator, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
-    # DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    # DOMAIN_SEPARATOR + "Intent to bind Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
     # This matches ETHRegistrationIntentMessage in schema
-    pattern = b"Intent to pair Epervier Key"
+    pattern = b"Intent to bind Epervier Key"
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     return (
@@ -450,7 +450,7 @@ def create_base_eth_change_eth_address_message(pq_fingerprint, new_eth_address, 
     new_addr_bytes = bytes.fromhex(new_eth_address[2:])
     
     # Create message: domain_separator + intent_text + fingerprint + " to " + new_address + eth_nonce
-    intent_text = "Intent to change ETH Address and bond with Epervier Fingerprint "
+    intent_text = "Intent to change ETH Address and bind with Epervier Fingerprint "
     message = DOMAIN_SEPARATOR + intent_text.encode() + fingerprint_bytes + " to ".encode() + new_addr_bytes
     
     # Add ETH nonce
@@ -660,7 +660,7 @@ def generate_change_eth_address_confirmation_vectors():
 def create_base_eth_message(domain_separator, pq_fingerprint, new_eth_address, eth_nonce):
     """Create BaseETHChangeETHAddressIntentMessage (172 bytes)"""
     # DOMAIN_SEPARATOR (32) + pattern (64) + pqFingerprint (20) + pattern2 (4) + newEthAddress (20) + ethNonce (32) = 172 bytes
-    pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
+    pattern = b"Intent to change ETH Address and bind with Epervier Fingerprint "
     pattern2 = b" to "
     message = (
         domain_separator +
@@ -808,7 +808,7 @@ def create_nested_change_eth_address_message(old_eth_address, new_eth_address, p
     old_addr_bytes = bytes.fromhex(old_eth_address[2:])
     new_addr_bytes = bytes.fromhex(new_eth_address[2:])
     fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])
-    intent_text = "Intent to change ETH Address and bond with Epervier Fingerprint "
+    intent_text = "Intent to change ETH Address and bind with Epervier Fingerprint "
     salt_bytes = bytes.fromhex(pq_signature["salt"])
     hint_bytes = pq_signature["hint"].to_bytes(32, 'big')
     cs1_bytes = b''.join([_cs_to_bytes(cs) for cs in pq_signature["cs1"]])

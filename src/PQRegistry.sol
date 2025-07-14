@@ -90,14 +90,6 @@ contract PQRegistry {
         }
     }
     
-    /**
-     * @dev Returns the EIP-712 domain separator
-     */
-    function getDomainSeparator() external view returns (bytes32) {
-        RegistryStorage.Layout storage s = RegistryStorage.layout();
-        return s.DOMAIN_SEPARATOR;
-    }
-    
     // --- Main functions ---
     function submitRegistrationIntent(
         bytes calldata ethMessage,
@@ -531,7 +523,7 @@ contract PQRegistry {
     }
     
     /**
-     * @dev Mint an NFT when a fingerprint is paired
+     * @dev Mint an NFT when a fingerprint is bound
      * This function is called by the NFT contract when a fingerprint is registered
      * @param pqFingerprint The PQ fingerprint
      * @param ethAddress The ETH address associated with the fingerprint

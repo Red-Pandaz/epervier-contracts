@@ -14,7 +14,7 @@ from eth_hash.auto import keccak
 SCRIPT_DIR = Path(__file__).parent
 OP_SEPOLIA_RPC = "https://sepolia.optimism.io"
 CONTRACT_ADDRESS = "0x5ab1d6db02f48bad63cbef5d51c534A76aEB824B"
-ACTORS_CONFIG_FILE = SCRIPT_DIR / "test_keys" / "actors_config.json"
+ACTORS_CONFIG_FILE = SCRIPT_DIR.parent / "test_keys" / "actors_config.json"
 
 def load_actors_config():
     """Load the actors configuration file"""
@@ -39,10 +39,10 @@ def generate_epervier_signature(message, pq_private_key_file):
         # Call the Python CLI to sign the message
         cmd = [
             sys.executable, 
-            str(SCRIPT_DIR.parent / "ETHFALCON/python-ref/sign_cli.py"), 
+            str(SCRIPT_DIR.parent.parent / "ETHFALCON/python-ref/sign_cli.py"), 
             "sign",
             "--version", "epervier",
-            "--privkey", str(SCRIPT_DIR / "test_keys" / pq_private_key_file),
+            "--privkey", str(SCRIPT_DIR.parent / "test_keys" / pq_private_key_file),
             "--data", message_hex
         ]
         
@@ -77,11 +77,11 @@ def call_recover_onchain(message, signature_file, pubkey_file, contract_address,
         # Use sign_cli.py to call recoveronchain
         cmd = [
             sys.executable,
-            str(SCRIPT_DIR.parent / "ETHFALCON/python-ref/sign_cli.py"),
+            str(SCRIPT_DIR.parent.parent / "ETHFALCON/python-ref/sign_cli.py"),
             "recoveronchain",
             "--version", "epervier",
             "--data", message_hex,
-            "--pubkey", str(SCRIPT_DIR / "test_keys" / pubkey_file),
+            "--pubkey", str(SCRIPT_DIR.parent / "test_keys" / pubkey_file),
             "--signature", str(signature_file),
             "--contractaddress", contract_address,
             "--rpc", rpc_url
@@ -195,7 +195,7 @@ def validate_fingerprints():
     print(f"Updated {ACTORS_CONFIG_FILE}")
     
     # Also save detailed validation results
-    validation_file = SCRIPT_DIR / "test_keys" / "fingerprint_validation_results.json"
+    validation_file = SCRIPT_DIR.parent / "test_keys" / "fingerprint_validation_results.json"
     validation_results = {
         "contract_address": CONTRACT_ADDRESS,
         "rpc_url": OP_SEPOLIA_RPC,

@@ -2,7 +2,7 @@
   "remove_intent": [
     {
       "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb",
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb",
       "pq_remove_unregistration_intent": {
         "signature": {
           "salt": "5fa9486fd840ff4a72139d1192e35fd9fe12d4891a0d12255c0cea4af8e8bae6142b626a0e6f0fec",

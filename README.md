@@ -50,6 +50,10 @@ The **PQRegistry** is the core contract that manages post-quantum cryptographic 
 
 #### Key Features:
 - **Post-Quantum Address Fingerprints**: Epervier signatures use a recovery function that consistently derives deterministic Ethereum-style addresses from PQ signatures, creating unique 20-byte fingerprints for post-quantum keys. While these fingerprint addresses cannot natively control ETH or ECDSA-based tokens, they can own PQ-compatible assets and potentially back smart contract wallets that bridge post-quantum security to traditional Ethereum assets.
+  > **⚠️ WARNING ABOUT USAGE OF FINGERPRINTS ⚠️**
+  > 
+  > As specified above, **Epervier fingerprints are not regular Ethereum addresses**. Do not **under any circumstance** send ETH or regular ERC20/ERC721 tokens to a fingerprint, **permanent loss of funds WILL occur**!
+  > 
 - **Hybrid Key Registration**: Users register Epervier public keys linked to their Ethereum addresses, creating a bridge between classical and post-quantum cryptographic systems.
 - **Intent-Based Operations**: Supports registration, unregistration, and address change intents with cryptographic proofs and optional revocation.
 - **Dual Signature Validation**: Requires both Epervier (post-quantum) and ECDSA (Ethereum) signatures for critical operations, ensuring security in both classical and quantum threat models.

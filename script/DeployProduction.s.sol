@@ -97,8 +97,8 @@ contract DeployProduction is Script {
         console.log("=== PRODUCTION DEPLOYMENT COMPLETE ===");
         console.log("Registry address:", address(registry));
         console.log("NFT contract address:", address(nftContract));
-        console.log("Domain separator:", vm.toString(registry.getDomainSeparator()));
-        console.log("PQERC721 domain separator:", vm.toString(nftContract.getPQTransferDomainSeparator()));
+        console.log("Domain separator:", vm.toString(registry.DOMAIN_SEPARATOR()));
+        console.log("PQERC721 domain separator:", vm.toString(nftContract.DOMAIN_SEPARATOR()));
         console.log("");
         console.log("Use these addresses for vector generation!");
     }

@@ -53,7 +53,7 @@ contract SignatureExtractorContract is ISignatureExtractor {
             // Registration: "Intent to pair Epervier Key" (27 bytes)
             patternLength = 27;
         } else if (messageType == 1) {
-            // ChangeETHAddress: "Intent to change ETH Address and bond with Epervier Fingerprint " (64 bytes)
+            // ChangeETHAddress: "Intent to change ETH Address and bind with Epervier Fingerprint " (64 bytes)
             patternLength = 64;
         } else if (messageType == 2) {
             // Unregistration: "Confirm unregistration from Epervier Fingerprint " (49 bytes)
@@ -302,13 +302,13 @@ contract SignatureExtractorContract is ISignatureExtractor {
 
     /**
      * @dev Extract fingerprint from ETH message
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + fingerprint + ethNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm binding to Epervier Fingerprint " + fingerprint + ethNonce
      */
     function extractFingerprintFromETHMessage(bytes memory message) internal pure returns (address fingerprint) {
         require(message.length >= 32 + 40 + 20 + 32, "Message too short for fingerprint from ETH message");
         bytes memory fingerprintBytes = new bytes(20);
         for (uint j = 0; j < 20; j++) {
-            fingerprintBytes[j] = message[32 + 40 + j]; // DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + offset
+            fingerprintBytes[j] = message[32 + 40 + j]; // DOMAIN_SEPARATOR + "Confirm binding to Epervier Fingerprint " + offset
         }
         
         // Convert the extracted bytes to address manually to ensure correct byte order
@@ -322,7 +322,7 @@ contract SignatureExtractorContract is ISignatureExtractor {
     /**
      * @dev Extract ETH nonce from a message according to schema
      * For intent messages: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ... + ethNonce (last 32 bytes)
-     * For confirmation messages: DOMAIN_SEPARATOR + "Confirm bonding to Epervier Fingerprint " + ... + ethNonce (last 32 bytes)
+     * For confirmation messages: DOMAIN_SEPARATOR + "Confirm binding to Epervier Fingerprint " + ... + ethNonce (last 32 bytes)
      * @param message The message to extract nonce from
      * @param messageType 0 for intent message, 1 for confirmation message
      */

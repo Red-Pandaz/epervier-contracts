@@ -24,6 +24,28 @@ from eip712_helpers import (
     sign_eip712_message,
 )
 
+def sign_registration_confirmation_eip712(pq_fingerprint: str, eth_nonce: int, private_key: str) -> Dict[str, Any]:
+    """Sign registration confirmation using EIP-712 - matching advanced generator format"""
+    from eth_abi import encode
+    
+    # Create the struct hash for the message components using abi.encode (not encode_packed)
+    struct_hash = keccak(encode([
+        'bytes32', 'address', 'uint256'
+    ], [
+        keccak(b"RegistrationConfirmation(address pqFingerprint,uint256 ethNonce)"),
+        pq_fingerprint,  # eth_abi.encode will handle the address properly
+        eth_nonce
+    ]))
+    
+    # Create EIP712 digest with domain separator
+    domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Remove '0x' prefix
+    digest = keccak(encode_packed(b'\x19\x01', domain_separator_bytes, struct_hash))
+    
+    # Sign the digest
+    account = Account.from_key(private_key)
+    sig = Account._sign_hash(digest, private_key=account.key)
+    return {"v": sig.v, "r": sig.r, "s": sig.s}
+
 # Get the project root directory
 PROJECT_ROOT = Path(__file__).resolve().parents[4]  # epervier-registry
 ACTORS_CONFIG_PATH = PROJECT_ROOT / "test" / "test_keys" / "actors_config.json"
@@ -50,7 +72,7 @@ def load_actors_config():
         return json.load(f)["actors"]
 
 def build_base_pq_message(domain_separator, eth_address, pq_nonce):
-    pattern = b"Intent to pair ETH Address "
+    pattern = b"Intent to bind ETH Address "
     domain_separator_bytes = bytes.fromhex(domain_separator[2:])
     msg = domain_separator_bytes + pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
     print(f"[DEBUG] base_pq_message length: {len(msg)} (should be 111)")
@@ -116,6 +138,8 @@ def build_eth_intent_message(pattern, base_pq_message, salt, cs1, cs2, hint, eth
         pattern = pattern.encode()
     if isinstance(hint, str):
         hint = hint.encode()
+    elif isinstance(hint, int):
+        hint = hint.to_bytes(32, 'big')
     if isinstance(eth_nonce, int):
         eth_nonce = eth_nonce.to_bytes(32, 'big')
     if isinstance(pq_fingerprint, str):
@@ -124,9 +148,27 @@ def build_eth_intent_message(pattern, base_pq_message, salt, cs1, cs2, hint, eth
     cs2_bytes = pack_uint256_array(cs2) if isinstance(cs2, list) else cs2
     if isinstance(salt, int):
         salt = salt.to_bytes(32, 'big')
+    if isinstance(base_pq_message, str):
+        if base_pq_message.startswith('0x'):
+            base_pq_message = bytes.fromhex(base_pq_message[2:])
+        else:
+            base_pq_message = base_pq_message.encode()
     if isinstance(base_pq_message, int):
         base_pq_message = base_pq_message.to_bytes(32, 'big')
-    # base_pq_message, salt are now ensured to be bytes
+
+    # For change intent, cs1/cs2 may be v/r/s, which are ints
+    # If cs1/cs2 are ints, convert to bytes (v: 1 byte, r/s: 32 bytes)
+    if isinstance(cs1, int):
+        cs1_bytes = cs1.to_bytes(1, 'big')
+    if isinstance(cs2, int):
+        cs2_bytes = cs2.to_bytes(32, 'big')
+    # If salt is int, already handled above
+    # If hint is int, already handled above
+    # If eth_nonce is int, already handled above
+    # If pq_fingerprint is int, convert to 32 bytes
+    if isinstance(pq_fingerprint, int):
+        pq_fingerprint = pq_fingerprint.to_bytes(32, 'big')
+
     return pattern + base_pq_message + salt + cs1_bytes + cs2_bytes + hint + eth_nonce + pq_fingerprint
 
 def sign_with_eth_key(eth_intent_message, eth_private_key, salt, cs1, cs2, hint, eth_nonce, base_pq_message):
@@ -145,10 +187,24 @@ def sign_with_eth_key(eth_intent_message, eth_private_key, salt, cs1, cs2, hint,
     sig = Account._sign_hash(digest, private_key=account.key)
     return {"v": sig.v, "r": sig.r, "s": sig.s}
 
-def create_pq_confirmation_message(eth_address, pq_nonce):
+def create_pq_confirmation_message(eth_address, pq_nonce, base_eth_message, eth_signature):
     # Create PQ confirmation message
-    pattern = b"Confirm registration with ETH Address "
-    return pattern + bytes.fromhex(eth_address[2:]) + int_to_bytes32(pq_nonce)
+    # Expected format: DOMAIN_SEPARATOR (32) + "Confirm binding to ETH Address " (31) + ethAddress (20) + baseETHMessage (92) + v (1) + r (32) + s (32) + pqNonce (32) = 272 bytes
+    pattern = b"Confirm binding to ETH Address "
+    
+    # Build the complete message
+    message = (
+        bytes.fromhex(DOMAIN_SEPARATOR[2:]) +  # DOMAIN_SEPARATOR (32 bytes)
+        pattern +                               # "Confirm binding to ETH Address " (31 bytes)
+        bytes.fromhex(eth_address[2:]) +       # ethAddress (20 bytes)
+        base_eth_message +                      # baseETHMessage (92 bytes)
+        bytes([eth_signature["v"]]) +          # v (1 byte)
+        eth_signature["r"].to_bytes(32, 'big') +  # r (32 bytes)
+        eth_signature["s"].to_bytes(32, 'big') +  # s (32 bytes)
+        int_to_bytes32(pq_nonce)               # pqNonce (32 bytes)
+    )
+    
+    return message
 
 class RevertVectorGenerator:
     def __init__(self):
@@ -183,7 +239,7 @@ class RevertVectorGenerator:
         # 3. Build ETH intent message
         print("Building ETH intent message...")
         eth_intent_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce, pq_fingerprint
+            b"Intent to bind Epervier Key", base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], eth_nonce, pq_fingerprint
         )
         print(f"ETH intent message length: {len(eth_intent_message)} bytes")
         
@@ -236,7 +292,7 @@ class RevertVectorGenerator:
         pq_signature = sign_with_pq_key(base_pq_message, alice["pq_private_key_file"])
         
         eth_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message, pq_signature["salt"], pq_signature["cs1"], pq_signature["cs2"], pq_signature["hint"], eth_nonce, alice["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message, pq_signature["salt"], pq_signature["cs1"], pq_signature["cs2"], pq_signature["hint"], eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature = sign_with_eth_key(eth_message, alice["eth_private_key"], pq_signature["salt"], pq_signature["cs1"], pq_signature["cs2"], pq_signature["hint"], eth_nonce, base_pq_message)
         
@@ -278,7 +334,7 @@ class RevertVectorGenerator:
         pq_signature_bob = sign_with_pq_key(base_pq_message_bob, bob["pq_private_key_file"])
         
         eth_message_bob = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_bob, pq_signature_bob["salt"], pq_signature_bob["cs1"], pq_signature_bob["cs2"], pq_signature_bob["hint"], eth_nonce_bob, bob["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message_bob, pq_signature_bob["salt"], pq_signature_bob["cs1"], pq_signature_bob["cs2"], pq_signature_bob["hint"], eth_nonce_bob, bob["pq_fingerprint"]
         )
         eth_signature_bob = sign_with_eth_key(eth_message_bob, bob["eth_private_key"], pq_signature_bob["salt"], pq_signature_bob["cs1"], pq_signature_bob["cs2"], pq_signature_bob["hint"], eth_nonce_bob, base_pq_message_bob)
         
@@ -342,7 +398,7 @@ class RevertVectorGenerator:
         pq_signature_wrong_nonce = sign_with_pq_key(base_pq_message_wrong_nonce, alice["pq_private_key_file"])
         
         eth_message_wrong_nonce = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_wrong_nonce, pq_signature_wrong_nonce["salt"], pq_signature_wrong_nonce["cs1"], pq_signature_wrong_nonce["cs2"], pq_signature_wrong_nonce["hint"], wrong_eth_nonce, alice["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message_wrong_nonce, pq_signature_wrong_nonce["salt"], pq_signature_wrong_nonce["cs1"], pq_signature_wrong_nonce["cs2"], pq_signature_wrong_nonce["hint"], wrong_eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature_wrong_nonce = sign_with_eth_key(eth_message_wrong_nonce, alice["eth_private_key"], pq_signature_wrong_nonce["salt"], pq_signature_wrong_nonce["cs1"], pq_signature_wrong_nonce["cs2"], pq_signature_wrong_nonce["hint"], wrong_eth_nonce, base_pq_message_wrong_nonce)
         
@@ -380,7 +436,7 @@ class RevertVectorGenerator:
         pq_signature_wrong_pq_nonce = sign_with_pq_key(base_pq_message_wrong_pq_nonce, alice["pq_private_key_file"])
         
         eth_message_wrong_pq_nonce = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_wrong_pq_nonce, pq_signature_wrong_pq_nonce["salt"], pq_signature_wrong_pq_nonce["cs1"], pq_signature_wrong_pq_nonce["cs2"], pq_signature_wrong_pq_nonce["hint"], eth_nonce, alice["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message_wrong_pq_nonce, pq_signature_wrong_pq_nonce["salt"], pq_signature_wrong_pq_nonce["cs1"], pq_signature_wrong_pq_nonce["cs2"], pq_signature_wrong_pq_nonce["hint"], eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature_wrong_pq_nonce = sign_with_eth_key(eth_message_wrong_pq_nonce, alice["eth_private_key"], pq_signature_wrong_pq_nonce["salt"], pq_signature_wrong_pq_nonce["cs1"], pq_signature_wrong_pq_nonce["cs2"], pq_signature_wrong_pq_nonce["hint"], eth_nonce, base_pq_message_wrong_pq_nonce)
         
@@ -418,7 +474,7 @@ class RevertVectorGenerator:
         pq_signature_alice_pq_bob_eth = sign_with_pq_key(base_pq_message_alice_pq_bob_eth, alice["pq_private_key_file"])
         
         eth_message_alice_pq_bob_eth = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_alice_pq_bob_eth, pq_signature_alice_pq_bob_eth["salt"], pq_signature_alice_pq_bob_eth["cs1"], pq_signature_alice_pq_bob_eth["cs2"], pq_signature_alice_pq_bob_eth["hint"], bob_eth_nonce, alice["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message_alice_pq_bob_eth, pq_signature_alice_pq_bob_eth["salt"], pq_signature_alice_pq_bob_eth["cs1"], pq_signature_alice_pq_bob_eth["cs2"], pq_signature_alice_pq_bob_eth["hint"], bob_eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature_alice_pq_bob_eth = sign_with_eth_key(eth_message_alice_pq_bob_eth, bob["eth_private_key"], pq_signature_alice_pq_bob_eth["salt"], pq_signature_alice_pq_bob_eth["cs1"], pq_signature_alice_pq_bob_eth["cs2"], pq_signature_alice_pq_bob_eth["hint"], bob_eth_nonce, base_pq_message_alice_pq_bob_eth)
         
@@ -470,7 +526,7 @@ class RevertVectorGenerator:
         pq_signature_alice_eth_alice_pq_2 = sign_with_pq_key(base_pq_message_alice_eth_alice_pq_2, alice["pq_private_key_file"])
         
         eth_message_alice_eth_alice_pq_2 = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_alice_eth_alice_pq_2, pq_signature_alice_eth_alice_pq_2["salt"], pq_signature_alice_eth_alice_pq_2["cs1"], pq_signature_alice_eth_alice_pq_2["cs2"], pq_signature_alice_eth_alice_pq_2["hint"], alice_eth_nonce_2, alice["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message_alice_eth_alice_pq_2, pq_signature_alice_eth_alice_pq_2["salt"], pq_signature_alice_eth_alice_pq_2["cs1"], pq_signature_alice_eth_alice_pq_2["cs2"], pq_signature_alice_eth_alice_pq_2["hint"], alice_eth_nonce_2, alice["pq_fingerprint"]
         )
         eth_signature_alice_eth_alice_pq_2 = sign_with_eth_key(eth_message_alice_eth_alice_pq_2, alice["eth_private_key"], pq_signature_alice_eth_alice_pq_2["salt"], pq_signature_alice_eth_alice_pq_2["cs1"], pq_signature_alice_eth_alice_pq_2["cs2"], pq_signature_alice_eth_alice_pq_2["hint"], alice_eth_nonce_2, base_pq_message_alice_eth_alice_pq_2)
         
@@ -509,7 +565,7 @@ class RevertVectorGenerator:
         pq_signature_wrong_ds = sign_with_pq_key(base_pq_message_wrong_ds, alice["pq_private_key_file"])
         
         eth_message_wrong_ds = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_wrong_ds, pq_signature_wrong_ds["salt"], pq_signature_wrong_ds["cs1"], pq_signature_wrong_ds["cs2"], pq_signature_wrong_ds["hint"], eth_nonce, alice["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message_wrong_ds, pq_signature_wrong_ds["salt"], pq_signature_wrong_ds["cs1"], pq_signature_wrong_ds["cs2"], pq_signature_wrong_ds["hint"], eth_nonce, alice["pq_fingerprint"]
         )
         eth_signature_wrong_ds = sign_with_eth_key(eth_message_wrong_ds, alice["eth_private_key"], pq_signature_wrong_ds["salt"], pq_signature_wrong_ds["cs1"], pq_signature_wrong_ds["cs2"], pq_signature_wrong_ds["hint"], eth_nonce, base_pq_message_wrong_ds)
         
@@ -544,7 +600,7 @@ class RevertVectorGenerator:
         
         # Create ETH message with correct PQ message but sign with wrong domain separator
         eth_message_correct_pq = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message_correct, pq_signature_correct["salt"], pq_signature_correct["cs1"], pq_signature_correct["cs2"], pq_signature_correct["hint"], eth_nonce, alice["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message_correct, pq_signature_correct["salt"], pq_signature_correct["cs1"], pq_signature_correct["cs2"], pq_signature_correct["hint"], eth_nonce, alice["pq_fingerprint"]
         )
         
         # Sign with wrong domain separator
@@ -598,7 +654,17 @@ class RevertVectorGenerator:
         
         # Test 1: No pending intent
         print("Test 1: No pending intent")
-        pq_confirm_message = create_pq_confirmation_message(alice["eth_address"], pq_nonce)
+        
+        # Build baseETHMessage (92 bytes)
+        base_pattern = b"Confirm binding to Epervier Fingerprint "
+        pq_fingerprint_bytes = bytes.fromhex(alice["pq_fingerprint"][2:])
+        eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
+        base_eth_message = base_pattern + pq_fingerprint_bytes + eth_nonce_bytes
+        
+        # Sign baseETHMessage with Alice's ETH key using EIP-712 format
+        eth_sig = sign_registration_confirmation_eip712(alice["pq_fingerprint"], eth_nonce, alice["eth_private_key"])
+        
+        pq_confirm_message = create_pq_confirmation_message(alice["eth_address"], pq_nonce, base_eth_message, eth_sig)
         pq_confirm_signature = sign_with_pq_key(pq_confirm_message, alice["pq_private_key_file"])
         
         vectors["confirm_registration_reverts"].append({
@@ -624,7 +690,17 @@ class RevertVectorGenerator:
         # Test 2: Wrong PQ nonce
         print("Test 2: Wrong PQ nonce")
         wrong_pq_nonce = 5
-        pq_confirm_message_wrong_nonce = create_pq_confirmation_message(alice["eth_address"], wrong_pq_nonce)
+        
+        # Build baseETHMessage (92 bytes) with wrong nonce
+        base_pattern = b"Confirm binding to Epervier Fingerprint "
+        pq_fingerprint_bytes = bytes.fromhex(alice["pq_fingerprint"][2:])
+        eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')  # Use correct ETH nonce
+        base_eth_message_wrong_nonce = base_pattern + pq_fingerprint_bytes + eth_nonce_bytes
+        
+        # Sign baseETHMessage with Alice's ETH key using EIP-712 format
+        eth_sig_wrong_nonce = sign_registration_confirmation_eip712(alice["pq_fingerprint"], eth_nonce, alice["eth_private_key"])
+        
+        pq_confirm_message_wrong_nonce = create_pq_confirmation_message(alice["eth_address"], wrong_pq_nonce, base_eth_message_wrong_nonce, eth_sig_wrong_nonce)
         pq_confirm_signature_wrong_nonce = sign_with_pq_key(pq_confirm_message_wrong_nonce, alice["pq_private_key_file"])
         
         vectors["confirm_registration_reverts"].append({
@@ -647,10 +723,33 @@ class RevertVectorGenerator:
         print("Test 3: Wrong domain separator in PQ confirmation message")
         wrong_domain_separator = "0x1234567890123456789012345678901234567890123456789012345678901234"  # Wrong DS
         
+        # Build baseETHMessage (92 bytes)
+        base_pattern = b"Confirm binding to Epervier Fingerprint "
+        pq_fingerprint_bytes = bytes.fromhex(alice["pq_fingerprint"][2:])
+        eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
+        base_eth_message_wrong_ds = base_pattern + pq_fingerprint_bytes + eth_nonce_bytes
+        
+        # Sign baseETHMessage with Alice's ETH key using EIP-712 format
+        eth_sig_wrong_ds = sign_registration_confirmation_eip712(alice["pq_fingerprint"], eth_nonce, alice["eth_private_key"])
+        
         # Create PQ confirmation message with wrong domain separator
-        # The confirmation message doesn't include domain separator directly, but we can test
-        # by creating a malformed message that would fail validation
-        pq_confirm_message_wrong_ds = create_pq_confirmation_message(alice["eth_address"], wrong_pq_nonce)
+        # We'll create a message with the wrong domain separator at the beginning
+        wrong_ds_bytes = bytes.fromhex(wrong_domain_separator[2:])
+        pattern = b"Confirm binding to ETH Address "
+        eth_address_bytes = bytes.fromhex(alice["eth_address"][2:])
+        
+        # Build the complete message with wrong domain separator
+        pq_confirm_message_wrong_ds = (
+            wrong_ds_bytes +           # 32 bytes (wrong domain separator)
+            pattern +                  # 31 bytes
+            eth_address_bytes +        # 20 bytes
+            base_eth_message_wrong_ds + # 92 bytes
+            eth_sig_wrong_ds["v"].to_bytes(1, 'big') +  # 1 byte
+            eth_sig_wrong_ds["r"].to_bytes(32, 'big') +  # 32 bytes
+            eth_sig_wrong_ds["s"].to_bytes(32, 'big') +  # 32 bytes
+            wrong_pq_nonce.to_bytes(32, 'big')  # 32 bytes
+        )
+        
         pq_confirm_signature_wrong_ds = sign_with_pq_key(pq_confirm_message_wrong_ds, alice["pq_private_key_file"])
         
         vectors["confirm_registration_reverts"].append({
@@ -677,27 +776,22 @@ class RevertVectorGenerator:
         pq_nonce = 0   # Bob's PQ nonce is 0 (not Alice's)
         
         # Create PQ confirmation message with Bob's key (wrong fingerprint)
-        pq_confirm_message_mismatch = create_pq_confirmation_message(alice["eth_address"], pq_nonce)
+        # The base ETH message and signature are already built above, so we can reuse them
+        pq_confirm_message_mismatch = create_pq_confirmation_message(alice["eth_address"], pq_nonce, base_eth_message, eth_sig)
         pq_confirm_signature_mismatch = sign_with_pq_key(pq_confirm_message_mismatch, bob["pq_private_key_file"])
         
         # Build baseETHMessage (92 bytes)
-        base_pattern = b"Confirm bonding to Epervier Fingerprint "
+        base_pattern = b"Confirm binding to Epervier Fingerprint "
         pq_fingerprint_bytes = bytes.fromhex(bob["pq_fingerprint"][2:])  # Bob's fingerprint (wrong)
         eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
         base_eth_message = base_pattern + pq_fingerprint_bytes + eth_nonce_bytes
         
-        # Sign baseETHMessage with Alice's ETH key (correct signer, but wrong fingerprint in message)
-        eth_sig = sign_with_eth_key(base_eth_message, alice["eth_private_key"], 
-                                   pq_confirm_signature_mismatch["salt"], 
-                                   pq_confirm_signature_mismatch["cs1"], 
-                                   pq_confirm_signature_mismatch["cs2"], 
-                                   pq_confirm_signature_mismatch["hint"], 
-                                   eth_nonce, 
-                                   pq_confirm_message_mismatch)
+        # Sign baseETHMessage with Alice's ETH key using EIP-712 format (correct signer, but wrong fingerprint in message)
+        eth_sig = sign_registration_confirmation_eip712(bob["pq_fingerprint"], eth_nonce, alice["eth_private_key"])
         
         # Construct the complete PQRegistrationConfirmationMessage (272 bytes)
         DOMAIN_SEPARATOR_BYTES = bytes.fromhex(DOMAIN_SEPARATOR[2:])
-        pattern = b"Confirm bonding to ETH Address "
+        pattern = b"Confirm binding to ETH Address "
         eth_address_bytes = bytes.fromhex(alice["eth_address"][2:])
         
         # Build the complete message: DOMAIN_SEPARATOR(32) + pattern(31) + ethAddress(20) + baseETHMessage(92) + v(1) + r(32) + s(32) + pqNonce(32) = 272 bytes
@@ -731,6 +825,41 @@ class RevertVectorGenerator:
                 "hint": pq_confirm_signature_mismatch["hint"]
             }
         })
+        
+        # Test 5: Malformed pattern (correct domain separator, one character changed in pattern)
+        print("Test 5: Malformed pattern in PQ confirmation message")
+        malformed_pattern = b"Confirm binding to ETH Addrtss "  # 'Address' -> 'Addrtss'
+        eth_address_bytes = bytes.fromhex(alice["eth_address"][2:])
+        pq_fingerprint_bytes = bytes.fromhex(alice["pq_fingerprint"][2:])
+        eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
+        base_eth_message = b"Confirm binding to Epervier Fingerprint " + pq_fingerprint_bytes + eth_nonce_bytes
+        eth_sig = sign_registration_confirmation_eip712(alice["pq_fingerprint"], eth_nonce, alice["eth_private_key"])
+        pq_confirm_message_malformed_pattern = (
+            bytes.fromhex(DOMAIN_SEPARATOR[2:]) +  # Correct domain separator
+            malformed_pattern +                    # Malformed pattern (31 bytes)
+            eth_address_bytes +                    # 20 bytes
+            base_eth_message +                     # 92 bytes
+            eth_sig["v"].to_bytes(1, 'big') +     # 1 byte
+            eth_sig["r"].to_bytes(32, 'big') +    # 32 bytes
+            eth_sig["s"].to_bytes(32, 'big') +    # 32 bytes
+            pq_nonce.to_bytes(32, 'big')           # 32 bytes
+        )
+        pq_confirm_signature_malformed_pattern = sign_with_pq_key(pq_confirm_message_malformed_pattern, alice["pq_private_key_file"])
+        vectors["confirm_registration_reverts"].append({
+            "test_name": "malformed_pattern",
+            "description": "Test revert when PQ confirmation message has correct domain separator but malformed pattern (one character changed)",
+            "eth_address": alice["eth_address"],
+            "pq_fingerprint": alice["pq_fingerprint"],
+            "pq_nonce": pq_nonce,
+            "pq_message": pq_confirm_message_malformed_pattern.hex(),
+            "pq_signature": {
+                "salt": pq_confirm_signature_malformed_pattern["salt"].hex(),
+                "cs1": [hex(x) for x in pq_confirm_signature_malformed_pattern["cs1"]],
+                "cs2": [hex(x) for x in pq_confirm_signature_malformed_pattern["cs2"]],
+                "hint": pq_confirm_signature_malformed_pattern["hint"]
+            }
+        })
+        print("  [OK] Vector: malformed_pattern")
         
         return vectors
 
@@ -1176,6 +1305,9 @@ class RevertVectorGenerator:
         alice = self.actors["alice"]
         bob = self.actors["bob"]
         
+        # Initialize test_vectors dictionary
+        test_vectors = {}
+        
         # Step 1: Alice's registration (AliceETH and AlicePQ)
         print("Step 1: Generating Alice's registration vectors...")
         alice_eth_nonce = 0
@@ -1185,20 +1317,20 @@ class RevertVectorGenerator:
         base_pq_message = build_base_pq_message(DOMAIN_SEPARATOR, alice["eth_address"], alice_pq_nonce)
         pq_sig = sign_with_pq_key(base_pq_message, alice["pq_private_key_file"])
         eth_intent_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce, alice["pq_fingerprint"]
+            b"Intent to bind Epervier Key", base_pq_message, pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce, alice["pq_fingerprint"]
         )
         eth_sig = sign_with_eth_key(eth_intent_message, alice["eth_private_key"], pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce, base_pq_message)
         
         # Generate Alice's registration confirmation
         # Create BaseETHRegistrationConfirmationMessage (92 bytes)
-        base_eth_confirm_message = b"Confirm bonding to Epervier Fingerprint " + bytes.fromhex(alice["pq_fingerprint"][2:]) + int_to_bytes32(alice_eth_nonce)
+        base_eth_confirm_message = b"Confirm binding to Epervier Fingerprint " + bytes.fromhex(alice["pq_fingerprint"][2:]) + int_to_bytes32(alice_eth_nonce)
         
         # Sign the base ETH message with Alice's ETH key
         eth_confirm_sig = sign_with_eth_key(base_eth_confirm_message, alice["eth_private_key"], pq_sig["salt"], pq_sig["cs1"], pq_sig["cs2"], pq_sig["hint"], alice_eth_nonce, base_pq_message)
         
         # Create PQRegistrationConfirmationMessage (272 bytes total)
         domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])
-        pattern = b"Confirm bonding to ETH Address "
+        pattern = b"Confirm binding to ETH Address "
         eth_address_bytes = bytes.fromhex(alice["eth_address"][2:])
         
         pq_confirm_message = (
@@ -1228,7 +1360,7 @@ class RevertVectorGenerator:
         
         # Create ETH intent message for change
         change_eth_intent_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR, change_base_pq_message, change_pq_sig["salt"], change_pq_sig["cs1"], change_pq_sig["cs2"], change_pq_sig["hint"], alice_change_eth_nonce, bob["pq_fingerprint"]
+            b"Intent to bind Epervier Key", change_base_pq_message, change_pq_sig["salt"], change_pq_sig["cs1"], change_pq_sig["cs2"], change_pq_sig["hint"], alice_change_eth_nonce, bob["pq_fingerprint"]
         )
         change_eth_sig = sign_with_eth_key(change_eth_intent_message, alice["eth_private_key"], change_pq_sig["salt"], change_pq_sig["cs1"], change_pq_sig["cs2"], change_pq_sig["hint"], alice_change_eth_nonce, change_base_pq_message)
         
@@ -1246,7 +1378,7 @@ class RevertVectorGenerator:
         
         # Build ETH intent message (contains nested PQ signature and base PQ message)
         bob_eth_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR,
+            b"Intent to bind Epervier Key",
             bob_base_pq_message,
             bob_pq_sig["salt"],
             bob_pq_sig["cs1"],
@@ -1270,7 +1402,7 @@ class RevertVectorGenerator:
         
         # Build the final PQ message (contains nested ETH signature and ETH message)
         bob_pq_message = build_eth_intent_message(
-            DOMAIN_SEPARATOR,
+            b"Intent to bind Epervier Key",
             bob["eth_address"],
             bob_eth_message,
             bob_eth_sig["v"],
@@ -1284,7 +1416,7 @@ class RevertVectorGenerator:
         bob_final_pq_sig = sign_with_pq_key(bob_pq_message, bob["pq_private_key_file"])
         
         # Store Bob's registration attempt
-        change_intent_blocking_registration_vectors["bob_registration_attempt"] = {
+        test_vectors["bob_registration_attempt"] = {
             "eth_message": bob_eth_message.hex(),
             "pq_message": bob_pq_message.hex(),
             "eth_signature": {
@@ -1363,10 +1495,10 @@ class RevertVectorGenerator:
     def create_base_eth_message(self, pq_fingerprint, new_eth_address, eth_nonce):
         """
         Create base ETH message for change ETH Address intent
-        Format: "Intent to change ETH Address and bond with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
+        Format: "Intent to change ETH Address and bind with Epervier Fingerprint " + pqFingerprint + " to " + newEthAddress + ethNonce
         This is signed by Charlie (new ETH Address) (no domain separator in content)
         """
-        pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
+        pattern = b"Intent to change ETH Address and bind with Epervier Fingerprint "
         message = (
             pattern +
             bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix

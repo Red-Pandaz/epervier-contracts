@@ -25,7 +25,7 @@ library MessageParser {
         }
         require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
         
-        bytes memory pattern = "Intent to pair ETH Address ";
+        bytes memory pattern = "Intent to bind ETH Address ";
         uint256[] memory fieldOffsets = new uint256[](2);
         uint256[] memory fieldLengths = new uint256[](2);
         string[] memory fieldTypes = new string[](2);
@@ -64,7 +64,7 @@ library MessageParser {
         uint256 hint,
         bytes memory basePQMessage
     ) {
-        bytes memory pattern = "Intent to pair Epervier Key";
+        bytes memory pattern = "Intent to bind Epervier Key";
         uint256[] memory fieldOffsets = new uint256[](6);
         uint256[] memory fieldLengths = new uint256[](6);
         string[] memory fieldTypes = new string[](6);
@@ -165,7 +165,7 @@ library MessageParser {
     
     /**
      * @dev Parse a PQRegistrationConfirmationMessage according to our schema
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm binding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
      */
     function parsePQRegistrationConfirmationMessage(bytes memory message, bytes32 domainSeparator) public pure returns (
         address ethAddress,
@@ -182,9 +182,10 @@ library MessageParser {
             messageDomainSeparator := mload(add(message, 32))
         }
         require(messageDomainSeparator == domainSeparator, "Invalid domain separator in PQ message");
+        
         // According to schema:
         // DOMAIN_SEPARATOR (32) + pattern (31) + ethAddress (20) + baseETHMessage (92) + v (1) + r (32) + s (32) + pqNonce (32)
-        bytes memory pattern = "Confirm bonding to ETH Address ";
+        bytes memory pattern = "Confirm binding to ETH Address ";
         uint256 patternOffset = 32; // DOMAIN_SEPARATOR is 32 bytes
         uint256 ethAddressOffset = patternOffset + pattern.length;
         uint256 baseETHMessageOffset = ethAddressOffset + 20;
@@ -1443,7 +1444,7 @@ library MessageParser {
      * Expected format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
      */
     function validateETHRegistrationIntentMessage(bytes memory message) internal pure returns (bool) {
-        bytes memory pattern = "Intent to pair Epervier Key";
+        bytes memory pattern = "Intent to bind Epervier Key";
         return findPattern(message, pattern, false) != type(uint).max;
     }
 
@@ -1452,7 +1453,7 @@ library MessageParser {
      * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + ethAddress + pqNonce
      */
     function validatePQRegistrationIntentMessage(bytes memory message) internal pure returns (bool) {
-        bytes memory pattern = "Intent to pair ETH Address ";
+        bytes memory pattern = "Intent to bind ETH Address ";
         return findPattern(message, pattern, true) != type(uint).max;
     }
 
@@ -1467,10 +1468,10 @@ library MessageParser {
 
     /**
      * @dev Validate that PQ message contains confirmation text for registration
-     * Expected format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+     * Expected format: DOMAIN_SEPARATOR + "Confirm binding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
      */
     function validatePQRegistrationConfirmationMessage(bytes memory message) internal pure returns (bool) {
-        bytes memory pattern = "Confirm bonding to ETH Address ";
+        bytes memory pattern = "Confirm binding to ETH Address ";
         return findPattern(message, pattern, true) != type(uint).max;
     }
 

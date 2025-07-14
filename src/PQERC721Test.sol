@@ -35,6 +35,9 @@ contract PQERC721Test is ERC721, Ownable {
     // Mapping from PQ fingerprint to nonce (for replay protection)
     mapping(address => uint256) public pqFingerprintNonces;
 
+    // Total supply counter for Etherscan compatibility
+    uint256 private _totalSupply;
+
     // Events
     event TokenMinted(
         uint256 indexed tokenId,
@@ -94,6 +97,9 @@ contract PQERC721Test is ERC721, Ownable {
 
         // Initialize the nonce for this fingerprint
         pqFingerprintNonces[pqFingerprint] = 0;
+
+        // Increment total supply for Etherscan compatibility
+        _totalSupply++;
 
         emit TokenMinted(tokenId, ethAddress, pqFingerprint);
     }
@@ -323,6 +329,15 @@ contract PQERC721Test is ERC721, Ownable {
         address pqFingerprint
     ) external view returns (uint256) {
         return originalFingerprintToToken[pqFingerprint];
+    }
+
+    /**
+     * @dev Returns the total number of tokens in existence
+     * This is required by Etherscan to display token holders
+     * @return The total number of tokens
+     */
+    function totalSupply() external view returns (uint256) {
+        return _totalSupply;
     }
 
     /**

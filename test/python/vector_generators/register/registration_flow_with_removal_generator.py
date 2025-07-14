@@ -35,9 +35,9 @@ def get_actor_config():
 def create_base_pq_registration_intent_message(domain_separator, eth_address, pq_nonce):
     """
     Create base PQ message for registration intent
-    Format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + ethAddress + pqNonce
+    Format: DOMAIN_SEPARATOR + "Intent to bind ETH Address " + ethAddress + pqNonce
     """
-    pattern = b"Intent to pair ETH Address "
+    pattern = b"Intent to bind ETH Address "
     message = (
         domain_separator +
         pattern +
@@ -49,10 +49,10 @@ def create_base_pq_registration_intent_message(domain_separator, eth_address, pq
 def create_eth_registration_intent_message(domain_separator, base_pq_message, salt, cs1, cs2, hint, eth_nonce):
     """
     Create ETH message for registration intent
-    Format: "Intent to pair Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
+    Format: "Intent to bind Epervier Key" + basePQMessage + salt + cs1 + cs2 + hint + ethNonce
     (no domain separator in content for EIP712)
     """
-    pattern = b"Intent to pair Epervier Key"
+    pattern = b"Intent to bind Epervier Key"
     def pack_uint256_array(arr):
         return b"".join(x.to_bytes(32, 'big') for x in arr)
     
@@ -84,10 +84,10 @@ def create_pq_remove_registration_intent_message(domain_separator, eth_address, 
 def create_base_eth_registration_confirmation_message(domain_separator, pq_fingerprint, eth_nonce):
     """
     Create base ETH message for registration confirmation
-    Format: "Confirm bonding to Epervier Fingerprint " + pqFingerprint + ethNonce
+    Format: "Confirm binding to Epervier Fingerprint " + pqFingerprint + ethNonce
     (no domain separator in content for EIP712)
     """
-    pattern = b"Confirm bonding to Epervier Fingerprint "
+    pattern = b"Confirm binding to Epervier Fingerprint "
     message = (
         pattern +
         bytes.fromhex(pq_fingerprint[2:]) +  # Remove "0x" prefix
@@ -98,9 +98,9 @@ def create_base_eth_registration_confirmation_message(domain_separator, pq_finge
 def create_pq_registration_confirmation_message(domain_separator, eth_address, base_eth_message, v, r, s, pq_nonce):
     """
     Create PQ message for registration confirmation
-    Format: DOMAIN_SEPARATOR + "Confirm bonding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
+    Format: DOMAIN_SEPARATOR + "Confirm binding to ETH Address " + ethAddress + baseETHMessage + v + r + s + pqNonce
     """
-    pattern = b"Confirm bonding to ETH Address "
+    pattern = b"Confirm binding to ETH Address "
     message = (
         domain_separator +
         pattern +

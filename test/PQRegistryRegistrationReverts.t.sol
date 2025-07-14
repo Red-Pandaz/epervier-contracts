@@ -462,15 +462,15 @@ contract PQRegistryRegistrationRevertsTest is PQRegistryTestSetup {
     }
     
     function testConfirmRegistration_RevertWhenMalformedMessage() public {
-        // Load revert test vector for malformed message
+        // Load revert test vector for malformed pattern (correct domain separator, wrong pattern)
         string memory jsonData = vm.readFile("test/test_vectors/revert/comprehensive_revert_vectors.json");
-        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_message"));
-        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_signature.salt"));
-        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[0].pq_signature.cs1");
-        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[0].pq_signature.cs2");
-        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[0].pq_signature.hint"));
+        bytes memory pqConfirmMessage = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[4].pq_message"));
+        bytes memory confirmSalt = vm.parseBytes(vm.parseJsonString(jsonData, ".confirm_registration_reverts[4].pq_signature.salt"));
+        uint256[] memory confirmCs1 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[4].pq_signature.cs1");
+        uint256[] memory confirmCs2 = vm.parseJsonUintArray(jsonData, ".confirm_registration_reverts[4].pq_signature.cs2");
+        uint256 confirmHint = vm.parseUint(vm.parseJsonString(jsonData, ".confirm_registration_reverts[4].pq_signature.hint"));
         
-        // This should revert because the message is malformed
+        // This should revert because the pattern is malformed (one character changed)
         vm.expectRevert("Invalid PQ registration confirmation message");
         registry.confirmRegistration(pqConfirmMessage, confirmSalt, confirmCs1, confirmCs2, confirmHint);
     }

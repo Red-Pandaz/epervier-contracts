@@ -5,7 +5,7 @@
       "description": "Test revert when no pending intent exists",
       "current_actor": "alice",
       "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb",
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb",
       "eth_nonce": 1,
       "eth_message": "52656d6f766520726567697374726174696f6e20696e74656e742066726f6d2045706572766965722046696e6765727072696e74207b317f4d231cbc63de7c6c690ef4ba9c653437fb0000000000000000000000000000000000000000000000000000000000000001",
       "eth_signature": {
@@ -20,7 +20,7 @@
       "description": "Test revert when domain separator is wrong",
       "current_actor": "alice",
       "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb",
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb",
       "eth_nonce": 1,
       "eth_message": "52656d6f766520726567697374726174696f6e20696e74656e742066726f6d2045706572766965722046696e6765727072696e74207b317f4d231cbc63de7c6c690ef4ba9c653437fb0000000000000000000000000000000000000000000000000000000000000001",
       "eth_signature": {
@@ -35,7 +35,7 @@
       "description": "Test revert when nonce is wrong",
       "current_actor": "alice",
       "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb",
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb",
       "eth_nonce": 2,
       "eth_message": "52656d6f766520726567697374726174696f6e20696e74656e742066726f6d2045706572766965722046696e6765727072696e74207b317f4d231cbc63de7c6c690ef4ba9c653437fb0000000000000000000000000000000000000000000000000000000000000002",
       "eth_signature": {
@@ -50,7 +50,7 @@
       "description": "Test revert when signature is from wrong address",
       "current_actor": "alice",
       "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb",
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb",
       "eth_nonce": 1,
       "eth_message": "52656d6f766520726567697374726174696f6e20696e74656e742066726f6d2045706572766965722046696e6765727072696e74207b317f4d231cbc63de7c6c690ef4ba9c653437fb0000000000000000000000000000000000000000000000000000000000000001",
       "eth_signature": {
@@ -65,7 +65,7 @@
       "description": "Test revert when message format is wrong",
       "current_actor": "alice",
       "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb",
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb",
       "eth_nonce": 1,
       "eth_message": "52656d6f766520726567697374726174696f6e20696e74656e742066726f6d2045706572766965722046696e6765727072696e7420",
       "eth_signature": {
@@ -80,7 +80,7 @@
       "description": "Test revert when signature is invalid",
       "current_actor": "alice",
       "eth_address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb",
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb",
       "eth_nonce": 1,
       "eth_message": "52656d6f766520726567697374726174696f6e20696e74656e742066726f6d2045706572766965722046696e6765727072696e74207b317f4d231cbc63de7c6c690ef4ba9c653437fb0000000000000000000000000000000000000000000000000000000000000001",
       "eth_signature": {
@@ -110,14 +110,14 @@
       "description": "Bob's ETH key tries to cancel Alice's registration intent (unauthorized third party)",
       "current_actor": "bob",
       "eth_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
-      "pq_fingerprint": "0x7B317F4D231CBc63dE7C6C690ef4Ba9C653437Fb",
+      "pq_fingerprint": "0x7b317f4d231cbc63de7c6c690ef4ba9c653437fb",
       "eth_nonce": 1,
       "eth_message": "52656d6f766520726567697374726174696f6e20696e74656e742066726f6d2045706572766965722046696e6765727072696e74207b317f4d231cbc63de7c6c690ef4ba9c653437fb0000000000000000000000000000000000000000000000000000000000000001",
       "eth_signature": {
         "v": 28,
-        "r": 103573303288344213329637956541505774895845400485558248906972445493324053596399,
-        "s": 14619139153644934435532084519984698630098434552951513217343444398936648246519,
-        "signature": "e5c8a8cf7966293977da1b6e6f50c5459d0e961a99748702dba7fdc56db05ff374fede4204e251a282b139ca9ecb9fb88a1baa8657bbe53880bece189f451b601c"
+        "r": 94765957156138945621116077496235602491407547267552468188980589880033830371324,
+        "s": 43552634975267065346045318204982767972848324676640341878211846734835885571712,
+        "signature": "d183a18797e3511b1f40c4871ece3372109266a2a0ce745260bd532d90ddfffc6049eaf749fefd860eb843202b7adb5df8ede01a3742eafa11fefe91cd147e801c"
       }
     }
   ]

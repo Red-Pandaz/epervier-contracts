@@ -97,6 +97,6 @@ contract DeployLocalComplete is Script {
         console.log("RPC URL: http://localhost:8545");
         console.log("CHAIN ID: 31337");
         console.log("All contract addresses printed above");
-        console.log("Domain separator:", vm.toString(registry.getDomainSeparator()));
+        console.log("Domain separator:", vm.toString(registry.DOMAIN_SEPARATOR()));
     }
 } 

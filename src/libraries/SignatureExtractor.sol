@@ -30,7 +30,7 @@ library SignatureExtractor {
     
     /**
      * @dev Extract ETH signature from PQ message
-     * Expected format: DOMAIN_SEPARATOR + "Intent to pair ETH Address " + address + pqNonce + ethSignature
+     * Expected format: DOMAIN_SEPARATOR + "Intent to bind ETH Address " + address + pqNonce + ethSignature
      */
     function extractETHSignature(bytes memory message) internal pure returns (bytes memory ethSignature) {
         // Check if message is long enough to contain the pattern + address + nonce + signature
@@ -47,7 +47,7 @@ library SignatureExtractor {
     /**
      * @dev Extract PQ signature salt from ETH message
      * @param messageType 0=Registration, 1=ChangeETHAddress, 2=Unregistration
-     * Registration format: DOMAIN_SEPARATOR + "Intent to pair Epervier Key" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
+     * Registration format: DOMAIN_SEPARATOR + "Intent to bind Epervier Key" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
      * ChangeETHAddress format: DOMAIN_SEPARATOR + "Confirm change ETH Address" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
      * Unregistration format: DOMAIN_SEPARATOR + "Confirm unregistration" + ethNonce + salt + cs1 + cs2 + hint + base_pq_message
      */

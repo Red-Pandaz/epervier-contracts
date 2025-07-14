@@ -3,8 +3,8 @@
     "description": "Base PQ message structure for registration intent that appears in nested ETH messages.",
     "fields": [
       {"name": "DOMAIN_SEPARATOR", "type": "bytes32", "length": 32},
-      {"name": "pattern", "type": "string", "length": 27, "value": "Intent to pair ETH Address "},
-      {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address that will be paired with the PQ key"},
+      {"name": "pattern", "type": "string", "length": 27, "value": "Intent to bind ETH Address "},
+      {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address that will be bound with the PQ key"},
       {"name": "pqNonce", "type": "uint256", "length": 32, "description": "PQ nonce to prevent replay attacks"}
     ],
     "total_length": 111
@@ -12,7 +12,7 @@
   "ETHRegistrationIntentMessage": {
     "description": "ETH message containing nested PQ signature components and base PQ message for registration intent.",
     "fields": [
-      {"name": "pattern", "type": "string", "length": 27, "value": "Intent to pair Epervier Key"},
+      {"name": "pattern", "type": "string", "length": 27, "value": "Intent to bind Epervier Key"},
       {"name": "basePQMessage", "type": "BasePQRegistrationIntentMessage", "length": 111, "description": "Base PQ message that was signed"},
       {"name": "salt", "type": "bytes", "length": 40, "description": "PQ signature salt component"},
       {"name": "cs1", "type": "uint256[32]", "length": 1024, "description": "PQ signature cs1 component"},
@@ -25,7 +25,7 @@
   "BaseETHRegistrationConfirmationMessage": {
     "description": "ETH message that gets signed and embedded in the PQ confirmation message.",
     "fields": [
-      {"name": "pattern", "type": "string", "length": 40, "value": "Confirm bonding to Epervier Fingerprint "},
+      {"name": "pattern", "type": "string", "length": 40, "value": "Confirm binding to Epervier Fingerprint "},
       {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint (derived from PQ public key)"},
       {"name": "ethNonce", "type": "uint256", "length": 32, "description": "ETH nonce to prevent replay attacks"}
     ],
@@ -35,7 +35,7 @@
     "description": "PQ-controlled confirmation of registration, with nested ETH signature and message.",
     "fields": [
       {"name": "DOMAIN_SEPARATOR", "type": "bytes32", "length": 32},
-      {"name": "pattern", "type": "string", "length": 31, "value": "Confirm bonding to ETH Address "},
+      {"name": "pattern", "type": "string", "length": 31, "value": "Confirm binding to ETH Address "},
       {"name": "ethAddress", "type": "address", "length": 20, "description": "ETH Address being bound to the PQ Fingerprint"},
       {"name": "baseETHMessage", "type": "BaseETHRegistrationConfirmationMessage", "length": 92, "description": "Base ETH message that was signed"},
       {"name": "v", "type": "uint8", "length": 1, "description": "ETH signature v component"},
@@ -67,7 +67,7 @@
   "BaseETHChangeETHAddressIntentMessage": {
     "description": "ETH message that gets signed and embedded in the PQ change address intent.",
     "fields": [
-      {"name": "pattern", "type": "string", "length": 64, "value": "Intent to change ETH Address and bond with Epervier Fingerprint "},
+      {"name": "pattern", "type": "string", "length": 64, "value": "Intent to change ETH Address and bind with Epervier Fingerprint "},
       {"name": "pqFingerprint", "type": "address", "length": 20, "description": "PQ Fingerprint to change ETH Address for"},
       {"name": "pattern2", "type": "string", "length": 4, "value": " to "},
       {"name": "newEthAddress", "type": "address", "length": 20, "description": "New ETH Address to bind to the PQ Fingerprint"},

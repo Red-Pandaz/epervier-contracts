@@ -338,14 +338,14 @@ def create_base_pq_registration_intent_message(eth_address: str, pq_nonce: int) 
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])  # Ensure 32 bytes
     return abi_encode_packed(
         domain_separator_bytes,
-        "Intent to pair ETH Address ",
+        "Intent to bind ETH Address ",
         eth_address_bytes,
         pq_nonce.to_bytes(32, 'big')
     )
 
 def create_eth_registration_intent_message(base_pq_message: bytes, salt: bytes, cs1: List[int], cs2: List[int], hint: int, eth_nonce: int) -> bytes:
     """Create ETH registration intent message"""
-    pattern = b"Intent to pair Epervier Key"
+    pattern = b"Intent to bind Epervier Key"
     return (
         pattern +
         base_pq_message +
@@ -359,7 +359,7 @@ def create_eth_registration_intent_message(base_pq_message: bytes, salt: bytes, 
 def create_base_eth_registration_confirmation_message(pq_fingerprint: str, eth_nonce: int) -> bytes:
     """Create base ETH registration confirmation message"""
     pq_fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])  # Remove 0x prefix
-    pattern = b"Confirm bonding to Epervier Fingerprint "
+    pattern = b"Confirm binding to Epervier Fingerprint "
     return (
         pattern +
         pq_fingerprint_bytes +
@@ -372,7 +372,7 @@ def create_pq_registration_confirmation_message(eth_address: str, base_eth_messa
     domain_separator_bytes = bytes.fromhex(DOMAIN_SEPARATOR[2:])
     return abi_encode_packed(
         domain_separator_bytes,
-        "Confirm bonding to ETH Address ",
+        "Confirm binding to ETH Address ",
         eth_address_bytes,
         base_eth_message,
         v.to_bytes(1, 'big'),
@@ -385,7 +385,7 @@ def create_base_eth_change_eth_address_intent_message(pq_fingerprint: str, new_e
     """Create base ETH change address intent message - matching working generator format"""
     pq_fingerprint_bytes = bytes.fromhex(pq_fingerprint[2:])  # Remove 0x prefix
     new_eth_address_bytes = bytes.fromhex(new_eth_address[2:])  # Remove 0x prefix
-    pattern = b"Intent to change ETH Address and bond with Epervier Fingerprint "
+    pattern = b"Intent to change ETH Address and bind with Epervier Fingerprint "
     pattern2 = b" to "
     return (
         pattern +
@@ -1545,7 +1545,7 @@ class AdvancedVectorGenerator:
         
         # Construct the base ETH message (no domain separator)
         base_eth_message = (
-            b"Confirm bonding to Epervier Fingerprint " +
+            b"Confirm binding to Epervier Fingerprint " +
             pq_fingerprint_bytes +
             eth_nonce.to_bytes(32, 'big')
         )
@@ -1559,7 +1559,7 @@ class AdvancedVectorGenerator:
 
         pq_message = (
             bytes.fromhex(DOMAIN_SEPARATOR[2:]) +
-            b"Confirm bonding to ETH Address " +
+            b"Confirm binding to ETH Address " +
             eth_address_bytes +
             base_eth_message +
             eth_signature["v"].to_bytes(1, 'big') +

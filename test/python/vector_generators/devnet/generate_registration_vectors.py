@@ -173,7 +173,7 @@ def generate_registration_intent_vector(config):
     
     # Create base PQ message for registration intent
     domain_separator = bytes.fromhex(DEVNET_CONFIG["domain_separator"][2:])
-    intent_text = "Intent to pair ETH Address "
+    intent_text = "Intent to bind ETH Address "
     eth_address_bytes = bytes.fromhex(config["eth_address"][2:])
     pq_nonce_bytes = pq_nonce.to_bytes(32, 'big')
     
@@ -184,7 +184,7 @@ def generate_registration_intent_vector(config):
     
     # Create ETH message for registration intent
     eth_message_parts = []
-    eth_message_parts.append("Intent to pair Epervier Key".encode())
+    eth_message_parts.append("Intent to bind Epervier Key".encode())
     eth_message_parts.append(base_pq_message)
     eth_message_parts.append(salt)
     
@@ -255,7 +255,7 @@ def generate_registration_confirmation_vector(intent_vector):
     
     # Create base ETH message for confirmation
     domain_separator = bytes.fromhex(DEVNET_CONFIG["domain_separator"][2:])
-    confirmation_text = "Confirm bonding to Epervier Fingerprint "
+    confirmation_text = "Confirm binding to Epervier Fingerprint "
     eth_nonce_bytes = eth_nonce.to_bytes(32, 'big')
     
     base_eth_message = domain_separator + confirmation_text.encode() + bytes.fromhex(pq_fingerprint[2:]) + eth_nonce_bytes
@@ -276,7 +276,7 @@ def generate_registration_confirmation_vector(intent_vector):
     # Create PQ message for confirmation
     pq_message = (
         domain_separator +
-        "Confirm bonding to ETH Address ".encode() +
+        "Confirm binding to ETH Address ".encode() +
         bytes.fromhex(intent_vector["eth_address"][2:]) +
         base_eth_message +
         bytes([eth_signature.v]) +  # Use v directly like working vectors

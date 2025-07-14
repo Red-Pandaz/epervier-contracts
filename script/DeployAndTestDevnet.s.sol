@@ -201,8 +201,8 @@ contract DeployAndTestDevnet is Script {
         
         // Convert string data to bytes/uint256
         bytes memory saltBytes = vm.parseBytes(salt);
-        uint256[32] memory cs1Array = vm.parseJsonUintArray(jsonData, string.concat(actorPath, ".cs1"));
-        uint256[32] memory cs2Array = vm.parseJsonUintArray(jsonData, string.concat(actorPath, ".cs2"));
+        uint256[] memory cs1Array = vm.parseJsonUintArray(jsonData, string.concat(actorPath, ".cs1"));
+        uint256[] memory cs2Array = vm.parseJsonUintArray(jsonData, string.concat(actorPath, ".cs2"));
         uint256 hintValue = vm.parseJsonUint(jsonData, string.concat(actorPath, ".hint"));
         bytes memory basePQMessageBytes = vm.parseBytes(basePQMessage);
         uint256 ethNonceValue = vm.parseJsonUint(jsonData, string.concat(actorPath, ".eth_nonce"));
@@ -211,18 +211,24 @@ contract DeployAndTestDevnet is Script {
         bytes32 rValue = bytes32(vm.parseJsonUint(jsonData, string.concat(actorPath, ".eth_signature.r")));
         bytes32 sValue = bytes32(vm.parseJsonUint(jsonData, string.concat(actorPath, ".eth_signature.s")));
         
-        // Create the ETH signature
-        bytes memory ethSignature = abi.encodePacked(rValue, sValue, vValue);
-        
-        // Submit registration intent
-        try registry.submitRegistrationIntent(
+        // Create the ETH message for registration intent
+        // The submitRegistrationIntent function expects an ETH message, not individual components
+        // We need to construct the ETH message from the individual components
+        bytes memory ethMessage = abi.encodePacked(
+            ethNonceValue,
             saltBytes,
             cs1Array,
             cs2Array,
             hintValue,
-            basePQMessageBytes,
-            ethNonceValue,
-            ethSignature
+            basePQMessageBytes
+        );
+        
+        // Submit registration intent
+        try registry.submitRegistrationIntent(
+            ethMessage,
+            vValue,
+            rValue,
+            sValue
         ) {
             console.log("OK", actorName, "registration intent submitted successfully");
         } catch Error(string memory reason) {
@@ -269,22 +275,20 @@ contract DeployAndTestDevnet is Script {
         uint256 nonceValue = vm.parseJsonUint(jsonData, string.concat(actorPath, ".nonce"));
         
         bytes memory saltBytes = vm.parseBytes(salt);
-        uint256[32] memory cs1Array = vm.parseJsonUintArray(jsonData, string.concat(actorPath, ".pq_signature.cs1"));
-        uint256[32] memory cs2Array = vm.parseJsonUintArray(jsonData, string.concat(actorPath, ".pq_signature.cs2"));
+        uint256[] memory cs1Array = vm.parseJsonUintArray(jsonData, string.concat(actorPath, ".pq_signature.cs1"));
+        uint256[] memory cs2Array = vm.parseJsonUintArray(jsonData, string.concat(actorPath, ".pq_signature.cs2"));
         uint256 hintValue = vm.parseJsonUint(jsonData, string.concat(actorPath, ".pq_signature.hint"));
         bytes memory basePQMessageBytes = vm.parseBytes(basePQMessage);
         
-        // Submit PQ transfer
+        // Submit PQ transfer - using the correct function signature
         try nftContract.pqTransferFrom(
-            fromFingerprintAddr,
-            toFingerprintAddr,
             tokenIdValue,
-            nonceValue,
+            toFingerprintAddr,
+            basePQMessageBytes,
             saltBytes,
             cs1Array,
             cs2Array,
-            hintValue,
-            basePQMessageBytes
+            hintValue
         ) {
             console.log("OK", actorName, "PQ transfer completed successfully");
         } catch Error(string memory reason) {
